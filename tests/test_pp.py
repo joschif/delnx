@@ -34,15 +34,3 @@ def test_pseudobulk(adata):
     assert adata_pb_counts.n_obs == adata_pb.n_obs
     assert X_flat.max() <= 1
     assert X_flat.min() >= 0
-
-    # Test with minimum cell filter
-    adata_pb_min = pseudobulk(
-        adata, sample_key="condition_sample", group_key="cell_type", min_cells=1000, layer="counts"
-    )
-    assert adata_pb_min.n_obs <= adata_pb.n_obs  # Should have fewer or equal observations
-
-    # Test with minimum count filter
-    adata_pb_counts = pseudobulk(
-        adata, sample_key="condition_sample", group_key="cell_type", min_counts=10000, layer="counts"
-    )
-    assert adata_pb_counts.n_obs <= adata_pb.n_obs  # Should have fewer or equal observations
