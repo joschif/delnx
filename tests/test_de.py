@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-from orchard.tl import de, grouped_de
+
+from delnx.tl import de, grouped_de
 
 
 @pytest.mark.parametrize(

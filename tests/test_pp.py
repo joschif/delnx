@@ -1,4 +1,4 @@
-from orchard.pp._pseudobulk import pseudobulk
+from delnx.pp._pseudobulk import pseudobulk
 
 
 def test_pseudobulk(adata):

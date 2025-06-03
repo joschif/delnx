@@ -17,7 +17,7 @@ def test_data():
 
 def test_infer_data_type(test_data):
     """Test data type inference."""
-    from orchard.tl._utils import _infer_data_type
+    from delnx.tl._utils import _infer_data_type
 
     # Test raw counts detection
     assert _infer_data_type(test_data["counts"]) == "counts"
@@ -32,7 +32,7 @@ def test_infer_data_type(test_data):
 @pytest.mark.parametrize("data_type", ["counts", "lognorm", "binary"])
 def test_log2fc(test_data, data_type):
     """Test log2fc calculation for different data types."""
-    from orchard.tl._effects import _log2fc
+    from delnx.tl._effects import _log2fc
 
     # Create reference mask (first half ref, second half test)
     ref_mask = np.array([True] * 5 + [False] * 5)
@@ -62,7 +62,7 @@ def test_log2fc(test_data, data_type):
 
 def test_auroc(test_data):
     """Test AUROC calculation."""
-    from orchard.tl._effects import _batched_auroc
+    from delnx.tl._effects import _batched_auroc
 
     data = test_data["counts"]
     labels = np.array([1] * 5 + [0] * 5)  # First half positive, second half negative
@@ -76,7 +76,7 @@ def test_auroc(test_data):
 
 def test_invalid_data_type():
     """Test error handling for invalid data type."""
-    from orchard.tl._effects import _log2fc
+    from delnx.tl._effects import _log2fc
 
     X = np.random.randn(10, 5)
     ref_mask = np.array([True] * 5 + [False] * 5)
@@ -95,7 +95,7 @@ def test_invalid_data_type():
 )
 def test_validate_conditions(conditions):
     """Test condition validation for different modes."""
-    from orchard.tl._utils import _validate_conditions
+    from delnx.tl._utils import _validate_conditions
 
     # Test all_vs_ref mode
     levels, comps = _validate_conditions(conditions, reference="A", mode="all_vs_ref")

@@ -1,7 +1,8 @@
 import anndata as ad
 import numpy as np
-import orchard as oc
 import pytest
+
+import delnx as dx
 
 
 @pytest.fixture
@@ -12,7 +13,7 @@ def adata():
     n_samples = 3
     n_genes = 100
 
-    adata1 = oc.ds.synthetic_adata(
+    adata1 = dx.ds.synthetic_adata(
         n_cells=n_cells,
         n_genes=n_genes,
         n_cell_types=3,
@@ -24,7 +25,7 @@ def adata():
         random_seed=42,
     )
 
-    adata2 = oc.ds.synthetic_adata(
+    adata2 = dx.ds.synthetic_adata(
         n_cells=n_cells,
         n_genes=n_genes,
         n_cell_types=3,
@@ -64,7 +65,7 @@ def adata_small():
     n_genes = 100
     n_samples = 2
 
-    adata = oc.ds.synthetic_adata(
+    adata = dx.ds.synthetic_adata(
         n_cells=n_cells,
         n_genes=n_genes,
         n_cell_types=3,
@@ -88,7 +89,7 @@ def adata_small():
 def adata_pb_counts(adata):
     """Create pseudobulk data for testing."""
     # Create pseudobulk data
-    adata_pb = oc.pp.pseudobulk(
+    adata_pb = dx.pp.pseudobulk(
         adata,
         sample_key="condition_sample",
         group_key="cell_type",
@@ -103,7 +104,7 @@ def adata_pb_counts(adata):
 def adata_pb_lognorm(adata):
     """Create pseudobulk data for testing."""
     # Create pseudobulk data
-    adata_pb = oc.pp.pseudobulk(
+    adata_pb = dx.pp.pseudobulk(
         adata,
         sample_key="condition_sample",
         group_key="cell_type",
