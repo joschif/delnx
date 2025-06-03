@@ -183,9 +183,8 @@ def _run_anova_test(
         pvals = stats.f.sf(f_stat, dfn, dfd)
 
     else:  # residual test
-        # Use survival function (1 - CDF) for p-value
         p_resid_cdf = stats.f.cdf(f_stat, dfn, dfd)
-        pvals = 1 - jnp.abs(0.5 - p_resid_cdf) * 2
+        pvals = 1 - np.abs(0.5 - p_resid_cdf) * 2
 
     return coefs, pvals
 
