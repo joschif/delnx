@@ -10,8 +10,6 @@ def pseudobulk(
     n_pseudoreps: int | None = None,
     layer: str | None = None,
     mode: str = "sum",
-    min_cells: int = 10,
-    min_counts: int = 1000,
     **kwargs,
 ) -> AnnData:
     """
@@ -32,12 +30,8 @@ def pseudobulk(
         Layer to use for pseudobulk data. If None, use `adata.X`
     mode : str, default="sum"
         Method to aggregate data
-    min_cells : int, default=10
-        Filter to remove samples by a minimum number of cells in a sample-group pair
-    min_counts : int, default=1000
-        Filter to remove samples by a minimum number of summed counts in a sample-group pair
     **kwargs
-        Additional arguments to pass to `decoupler.get_pseudobulk()`
+        Additional arguments to pass to `decoupler.pseudobulk()`
 
     Requires
     --------
@@ -65,7 +59,5 @@ def pseudobulk(
         groups_col=group_key,
         layer=layer,
         mode=mode,
-        min_cells=min_cells,
-        min_counts=min_counts,
         **kwargs,
     )
