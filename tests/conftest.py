@@ -42,6 +42,7 @@ def adata():
 
     # Concatenate the two datasets
     adata = ad.concat([adata1, adata2], axis=0)
+    adata.obs.index = "cell_" + np.arange(adata.n_obs).astype(str)
 
     # Add some additional metadata for testing
     adata.obs["continuous_covar"] = np.random.normal(size=adata.n_obs)
