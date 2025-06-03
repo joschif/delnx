@@ -64,7 +64,6 @@ def _log2fc(
 def logfc(
     adata: AnnData,
     condition_key: str,
-    group_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
@@ -80,8 +79,6 @@ def logfc(
         AnnData object
     condition_key
         Column in adata.obs containing condition values
-    group_key
-        Column in adata.obs for grouped fold change calculation
     reference
         Reference condition level or tuple (reference, comparison)
     mode
@@ -118,22 +115,6 @@ def logfc(
     # Validate inputs
     if condition_key not in adata.obs.columns:
         raise ValueError(f"Condition key '{condition_key}' not found in adata.obs")
-
-    # Check if grouping requested
-    if group_key is not None:
-        if group_key not in adata.obs.columns:
-            raise ValueError(f"Group by key '{group_key}' not found in adata.obs")
-        return grouped_fc(
-            adata=adata,
-            condition_key=condition_key,
-            group_key=group_key,
-            reference=reference,
-            mode=mode,
-            layer=layer,
-            data_type=data_type,
-            min_samples=min_samples,
-            verbose=verbose,
-        )
 
     # Get condition values
     condition_values = adata.obs[condition_key].values
@@ -192,223 +173,6 @@ def logfc(
 
     # Combine results
     return pd.concat(results, axis=0)
-
-
-def grouped_fc(
-    adata: AnnData,
-    condition_key: str,
-    group_key: str,
-    reference: str | tuple[str, str] | None = None,
-    mode: ComparisonMode = "all_vs_ref",
-    layer: str = None,
-    data_type: DataType = "auto",
-    min_samples: int = 2,
-    verbose: bool = False,
-) -> pd.DataFrame:
-    """Compute fold change within groups.
-
-    Parameters
-    ----------
-    adata
-        AnnData object
-    condition_key
-        Column in adata.obs containing condition values
-    group_key
-        Column in adata.obs for grouped fold change calculation
-    reference
-        Reference condition level or tuple (reference, comparison)
-    mode
-        How to perform comparisons. One of:
-        - all_vs_ref: Compare all levels to reference
-        - all_vs_all: Compare all pairs of levels
-        - 1_vs_1: Compare only two levels (reference and comparison group)
-    layer
-        Layer in adata to use
-    data_type
-        Type of data:
-        - counts: Raw count data
-        - lognorm: Log-normalized data (assumed to be log1p of normalized counts)
-        - binary: Binary data
-        - auto: Automatically infer data type
-    min_samples
-        Minimum number of samples per condition level
-    fun
-        Aggregation function, by default np.mean
-    verbose
-        Whether to print progress messages
-
-    Returns
-    -------
-    pandas.DataFrame
-        DataFrame containing log fold changes for each condition and group
-    """
-    # Import here to avoid circular imports
-    from orchard.tl._de import _infer_data_type, _validate_conditions
-
-    # Get expression matrix
-    X = _to_dense(_get_layer(adata, layer))
-
-    # Infer data type if auto
-    if data_type == "auto":
-        data_type = _infer_data_type(X)
-        if verbose:
-            print(f"Inferred data type: {data_type}")
-
-    # Get condition values
-    conditions = adata.obs[condition_key].astype("category")
-    # Get group values
-    groups = adata.obs[group_key].astype("category")
-    # Get comparisons based on the mode
-    _, comparisons = _validate_conditions(conditions, reference, mode)
-
-    # Process each group separately
-    results = []
-
-    for group_name in groups.cat.categories:
-        # Filter for cells in this group
-        group_mask = adata.obs[group_key] == group_name
-        if sum(group_mask) < min_samples:
-            if verbose:
-                print(f"Skipping group {group_name} with < {min_samples} samples")
-            continue
-
-        # Calculate log2fc for each comparison in this group
-        group_results = []
-
-        for test_cond, ref_cond in comparisons:
-            test_mask = (adata.obs[condition_key] == test_cond) & group_mask
-            ref_mask = (adata.obs[condition_key] == ref_cond) & group_mask
-
-            # Skip if not enough samples
-            if sum(test_mask) < min_samples or sum(ref_mask) < min_samples:
-                if verbose:
-                    print(
-                        f"Skipping comparison {test_cond} vs {ref_cond} in group {group_name} with < {min_samples} samples"
-                    )
-                continue
-
-            # Get combined data
-            all_mask = test_mask | ref_mask
-            data = X[all_mask]
-            condition_mask = adata.obs.loc[all_mask, condition_key].values == test_cond
-
-            # Calculate log2 fold change
-            log2fc_values = _log2fc(
-                X=data,
-                condition_mask=condition_mask,
-                data_type=data_type,
-            )
-
-            # Create results
-            result_df = pd.DataFrame(
-                {
-                    "feature": adata.var_names,
-                    "test_condition": test_cond,
-                    "ref_condition": ref_cond,
-                    "log2fc": log2fc_values,
-                    "group": group_name,
-                }
-            )
-
-            group_results.append(result_df)
-
-        if group_results:
-            results.extend(group_results)
-
-    if not results:
-        raise ValueError("No valid comparisons found for grouped fold change analysis")
-
-    # Combine all results
-    return pd.concat(results, axis=0)
-
-
-def fc_correlation(
-    adata: AnnData,
-    adata_pred: AnnData | None = None,
-    layer_gt: str | None = None,
-    layer_pred: str | None = None,
-    condition_key: str = "perturbation",
-    group_key: str = "cell_types",
-    reference: str = "Control (DMSO)",
-    fc_threshold: float = 0.2,
-) -> pd.DataFrame:
-    """Compute correlation between ground truth and predicted fold changes.
-
-    Parameters
-    ----------
-    adata : AnnData
-        Ground truth annotated data matrix.
-    adata_pred : AnnData, optional
-        Predicted data matrix, by default None
-    layer_gt : str
-        Layer containing ground truth data.
-    layer_pred : str
-        Layer containing predicted data.
-    condition_key : str, optional
-        Column in adata.obs containing condition labels, by default "perturbation"
-    group_key : str, optional
-        Column in adata.obs containing group labels, by default "cell_types"
-    reference : str, optional
-        Reference condition level, by default "Control (DMSO)"
-    fc_threshold : float, optional
-        Threshold for filtering fold changes, by default 0.2
-
-    Returns
-    -------
-    pandas.DataFrame
-        DataFrame containing correlations between ground truth and predicted
-        fold changes for each condition and group.
-    """
-    if adata_pred is None and (layer_gt is None and layer_pred is None):
-        raise ValueError("If `adata_pred` is None, either of `layer_gt` or `layer_pred` must be provided.")
-
-    adata_pred = adata if adata_pred is None else adata_pred
-
-    # Use the new logfc function with reference
-    group_fc_gt = logfc(
-        adata=adata,
-        condition_key=condition_key,
-        group_key=group_key,
-        reference=reference,
-        mode="all_vs_ref",
-        layer=layer_gt,
-        data_type="auto",
-        min_samples=1,
-        verbose=False,
-    )
-
-    group_fc_pred = logfc(
-        adata=adata_pred,
-        condition_key=condition_key,
-        group_key=group_key,
-        reference=reference,
-        mode="all_vs_ref",
-        layer=layer_pred,
-        data_type="auto",
-        min_samples=1,
-        verbose=False,
-    )
-
-    # Filter cases where fold change exceeds threshold
-    fc_plot_merged = group_fc_pred.merge(
-        group_fc_gt,
-        on=["feature", "group", "test_condition", "ref_condition"],
-        how="inner",
-        suffixes=["_pred", "_gt"],
-    )
-    keep = (np.abs(fc_plot_merged["log2fc_gt"]) > fc_threshold) | (np.abs(fc_plot_merged["log2fc_pred"]) > fc_threshold)
-
-    # Compute correlation for each cell type and perturbation
-    fc_plot_merged = fc_plot_merged.loc[keep, :]
-
-    group_fc_corr = (
-        fc_plot_merged.groupby(["test_condition", "group"])
-        .apply(lambda x: np.corrcoef(x["log2fc_gt"], x["log2fc_pred"])[0, 1])
-        .reset_index()
-        .rename(columns={0: "corr"})
-    )
-
-    return group_fc_corr
 
 
 @jax.jit
