@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from anndata import AnnData
-from orchard._typing import ComparisonMode, DataType, Method
-from orchard._utils import _get_layer
+
+from delnx._typing import ComparisonMode, DataType, Method
+from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
 from ._effects import _batched_auroc, _log2fc

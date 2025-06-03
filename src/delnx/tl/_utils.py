@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 from anndata import AnnData
-from orchard._typing import ComparisonMode, DataType
-from orchard._utils import _to_dense, _to_list
+
+from delnx._typing import ComparisonMode, DataType
+from delnx._utils import _to_dense, _to_list
 
 
 def _infer_data_type(X: np.ndarray) -> DataType:

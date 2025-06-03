@@ -9,12 +9,13 @@ import statsmodels.api as sm
 import tqdm
 from anndata import AnnData
 from joblib import Parallel, delayed
-from orchard._utils import _get_layer, _to_dense, suppress_output
 from pydeseq2.dds import DefaultInference, DeseqDataSet
 from pydeseq2.ds import DeseqStats
 from scipy import sparse, stats
 from sklearn.metrics import log_loss
 from statsmodels.stats.anova import anova_lm
+
+from delnx._utils import _get_layer, _to_dense, suppress_output
 
 
 def _run_lr_test(

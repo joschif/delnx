@@ -5,10 +5,11 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import tqdm
-from orchard._utils import _get_layer, _to_dense
-from orchard.models import LinearRegression
 from scipy import sparse
 from scipy.stats import gmean
+
+from delnx._utils import _get_layer, _to_dense
+from delnx.models import LinearRegression
 
 
 def _compute_library_size(adata, layer=None):

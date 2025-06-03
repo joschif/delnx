@@ -10,8 +10,9 @@ import pandas as pd
 import patsy
 import scipy.stats as stats
 import tqdm
-from orchard._utils import _to_dense
-from orchard.models import LinearRegression, LogisticRegression, NegativeBinomialRegression
+
+from delnx._utils import _to_dense
+from delnx.models import LinearRegression, LogisticRegression, NegativeBinomialRegression
 
 
 @partial(jax.jit, static_argnums=(3, 4))

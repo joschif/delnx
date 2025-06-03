@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 import tqdm
 from anndata import AnnData
-from orchard._typing import ComparisonMode, DataType
-from orchard._utils import _get_layer, _to_dense
+
+from delnx._typing import ComparisonMode, DataType
+from delnx._utils import _get_layer, _to_dense
 
 from ._utils import _validate_conditions
 
