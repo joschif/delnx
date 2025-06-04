@@ -8,7 +8,7 @@
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/joschif/delnx/test.yaml?branch=main
 [badge-docs]: https://img.shields.io/readthedocs/delnx
-[badge-coverage]: https://img.shields.io/codecov/c/github/joschif/delnx
+[badge-coverage]: https://codecov.io/gh/joschif/delnx/branch/main/graph/badge.svg
 [badge-pre-commit]: https://results.pre-commit.ci/badge/github/joschif/delnx/main.svg
 
 # delnx
