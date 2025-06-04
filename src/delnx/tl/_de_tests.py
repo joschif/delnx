@@ -265,12 +265,25 @@ def _run_lrt_cuml(
     return full_model.coef_.flatten()[1], pval
 
 
+METHODS = {
+    "cuml": {"lr": _run_lrt_cuml},
+    "statsmodels": {
+        "lr": _run_lr_test,
+        "negbinom": _run_negbinom,
+        "anova": _run_anova,
+        "anova_residual": partial(_run_anova, method="anova_residual"),
+        "binomial": _run_binomial,
+    },
+}
+
+
 def _run_de(
     X: np.ndarray | sparse.spmatrix,
     model_data: pd.DataFrame,
     feature_names: pd.Index,
-    method: str,
     condition_key: str,
+    method: str,
+    backend: str = "statsmodels",
     covariates: list[str] | None = None,
     n_jobs: int = 1,
     verbose: bool = False,
@@ -287,6 +300,8 @@ def _run_de(
         Names of features/genes
     method : str
         DE method to use: "lr", "negbinom", "anova", "binomial"
+    backend : str
+        Backend to use for testing. Currently supports "statsmodels" and "cuml".
     condition_key : str
         Name of condition column in model_data
     covariates : list[str]
@@ -297,18 +312,15 @@ def _run_de(
         Whether to show progress and warnings
     """
     # Choose test function for non-batched methods
-    if method == "lr":
-        test_func = _run_lr_test
-    elif method == "negbinom":
-        test_func = _run_negbinom
-    elif method == "anova" or method == "anova_residual":
-        test_func = partial(_run_anova, method=method)
-    elif method == "binomial":
-        test_func = _run_binomial
-    elif method == "lr_cuml":
-        test_func = _run_lrt_cuml
-    else:
-        raise ValueError(f"Unsupported method: {method}")
+    available_methods = METHODS.get(backend)
+    if available_methods is None:
+        raise ValueError(f"Backend '{backend}' not supported.")
+
+    test_func = available_methods.get(method)
+    if test_func is None:
+        raise ValueError(
+            f"Method '{method}' not supported for backend '{backend}'. Available methods: {list(available_methods.keys())}"
+        )
 
     def _process_feature(i: int) -> tuple[str, float, float] | tuple[str, None, None]:
         """Process a single feature and return results or None if failed."""

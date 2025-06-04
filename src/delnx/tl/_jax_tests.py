@@ -209,10 +209,10 @@ def _run_batched_de(
         model_data: DataFrame containing condition and covariate data
         feature_names: Names of features/genes
         method: Testing method to use:
-            - "lr_jax": Logistic regression with LR test
-            - "negbinom_jax": Negative binomial with Wald test
-            - "anova_jax": Linear model with ANOVA F-test
-            - "anova_residual_jax": Linear model with residual F-test
+            - "lr": Logistic regression with LR test
+            - "negbinom": Negative binomial with Wald test
+            - "anova": Linear model with ANOVA F-test
+            - "anova_residual": Linear model with residual F-test
         condition_key: Name of condition column in model_data
         covariates: Names of covariate columns in model_data
         batch_size: Number of features to process per batch
@@ -231,7 +231,7 @@ def _run_batched_de(
     }
 
     # Prepare data for logistic regression
-    if method == "lr_jax":
+    if method == "lr":
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
         covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
@@ -240,7 +240,7 @@ def _run_batched_de(
             return _run_lr_test(x, conditions, covars, optimizer=optimizer, maxiter=maxiter)
 
     # Prepare data for negative binomial regression
-    elif method == "negbinom_jax":
+    elif method == "negbinom":
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
         covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
@@ -249,11 +249,11 @@ def _run_batched_de(
             return _run_nb_test(x, conditions, covars, optimizer=optimizer, maxiter=maxiter)
 
     # Prepare data for ANOVA tests
-    elif method in ["anova_jax", "anova_residual_jax"]:
+    elif method in ["anova", "anova_residual"]:
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
         covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
-        anova_method = "anova" if method == "anova_jax" else "residual"
+        anova_method = "anova" if method == "anova" else "residual"
 
         def test_fn(x):
             return _run_anova_test(x, conditions, covars, anova_method, maxiter=maxiter)
