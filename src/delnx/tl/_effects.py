@@ -62,7 +62,7 @@ def _log2fc(
     return np.asarray(log2fc, dtype=np.float64).flatten()
 
 
-def logfc(
+def log2fc(
     adata: AnnData,
     condition_key: str,
     reference: str | tuple[str, str] | None = None,
@@ -70,7 +70,7 @@ def logfc(
     layer: str | None = None,
     data_type: DataType = "auto",
     min_samples: int = 2,
-    verbose: bool = False,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """Calculate log2 fold changes between condition levels.
 
@@ -227,7 +227,7 @@ _auroc_batch = jax.vmap(_auroc, in_axes=[1, None])
 def _batched_auroc(
     X: np.ndarray,
     groups: np.ndarray,
-    batch_size: int = 32,
+    batch_size: int = 1024,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """Run AUROC analysis in batches.
@@ -277,7 +277,7 @@ def auroc(
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     min_samples: int = 2,
-    batch_size: int = 32,
+    batch_size: int = 1024,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """Calculate Area Under the Receiver Operating Characteristic (AUROC) between condition levels.
@@ -343,23 +343,27 @@ def auroc(
         data = X[all_mask, :]
 
         # Create binary groups vector (1 for test group, 0 for reference group)
-        groups = np.zeros(np.sum(all_mask), dtype=np.int32)
-        groups[adata.obs.loc[all_mask, condition_key].values == group1] = 1
+        groups = (adata.obs.loc[all_mask, condition_key].values == group1).astype(np.int32)
 
         # Run batched AUROC calculation
-        auroc_results = _batched_auroc(
+        auroc_values = _batched_auroc(
             X=data,
             groups=groups,
-            feature_names=adata.var_names,
             batch_size=batch_size,
             verbose=verbose,
         )
 
-        # Add comparison information
-        auroc_results["test_condition"] = group1
-        auroc_results["ref_condition"] = group2
+        # Create results dataframe
+        result_df = pd.DataFrame(
+            {
+                "feature": adata.var_names,
+                "test_condition": group1,
+                "ref_condition": group2,
+                "auroc": auroc_values,
+            }
+        )
 
-        results.append(auroc_results)
+        results.append(result_df)
 
     if len(results) == 0:
         raise ValueError("No valid comparisons found for AUROC analysis")

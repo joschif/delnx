@@ -33,14 +33,14 @@ def de(
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
-    log2fc_threshold: float = 0.2,
+    log2fc_threshold: float = 0.0,
     min_samples: int = 2,
     multitest_method: str = "fdr_bh",
     n_jobs: int = 1,
-    batch_size: int = 32,
+    batch_size: int = 1024,
     optimizer: str = "BFGS",
     maxiter: int = 100,
-    verbose: bool = False,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """Run differential expression between condition levels.
 
@@ -213,11 +213,7 @@ def de(
         )
         condition_mask = model_data[condition_key].values == 1
 
-        log2fc = _log2fc(
-            X=data,
-            condition_mask=condition_mask,
-            data_type=data_type,
-        )
+        log2fc = _log2fc(X=data, condition_mask=condition_mask, data_type=data_type)
         # Apply log2fc threshold
         mask = np.abs(log2fc) > log2fc_threshold
         data = data[:, mask]
@@ -255,11 +251,7 @@ def de(
                 verbose=verbose,
             )
 
-        auroc = _batched_auroc(
-            X=data,
-            groups=model_data[condition_key].values,
-            batch_size=batch_size,
-        )
+        auroc = _batched_auroc(X=data, groups=model_data[condition_key].values, batch_size=batch_size)
         auroc_df = pd.DataFrame(
             {
                 "feature": feature_names,
@@ -326,14 +318,14 @@ def grouped_de(
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
-    log2fc_threshold: float = 0.2,
+    log2fc_threshold: float = 0.0,
     min_samples: int = 2,
     multitest_method: str = "fdr_bh",
     n_jobs: int = 1,
-    batch_size: int = 32,
+    batch_size: int = 1024,
     optimizer: str = "BFGS",
     maxiter: int = 100,
-    verbose: bool = False,
+    verbose: bool = True,
 ):
     """Run differential expression between condition levels grouped by cell type.
 
