@@ -1,4 +1,4 @@
-<img src="docs/_static/images/delnx.png" width="500" alt="delnx">
+<img src="docs/_static/images/delnx.png" width="300" alt="delnx">
 
 
 [![Tests][badge-tests]][tests]
