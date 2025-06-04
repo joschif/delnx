@@ -274,7 +274,7 @@ def auroc(
     adata: AnnData,
     condition_key: str,
     reference: str | tuple[str, str] | None = None,
-    mode: ComparisonMode = "all_vs_ref",
+    mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     min_samples: int = 2,
     batch_size: int = 32,
