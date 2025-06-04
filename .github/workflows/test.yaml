@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install tox
-          pip install ${{ matrix.pip-flags }} ".[optional-dependencies.dev,optional-dependencies.test,optional-dependencies.external,optional-dependencies.docs,optional-dependencies.embedding]"
+          pip install ${{ matrix.pip-flags }} ".[optional-dependencies.dev,optional-dependencies.test,optional-dependencies.docs]"
           pip install wandb omegaconf
       - name: Test
         run: |

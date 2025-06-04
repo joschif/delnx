@@ -104,13 +104,13 @@ def test_de_methods_sc(adata_small, method, layer):
         ("condition_float", 0.0, "all_vs_ref"),  # Test float categories
     ],
 )
-def test_de_condition_types(adata_pb_counts, condition_key, reference, mode):
+def test_de_condition_types(adata_pb_lognorm, condition_key, reference, mode):
     """Test DE analysis with different condition types and comparison modes."""
     # Print out the condition values for debugging
-    print("\nCondition values:\n", adata_pb_counts.obs[condition_key].value_counts())
+    print("\nCondition values:\n", adata_pb_lognorm.obs[condition_key].value_counts())
     # Run DE analysis
     de_results = de(
-        adata_pb_counts,
+        adata_pb_lognorm,
         condition_key=condition_key,
         method="lr",  # Use logistic regression as it works with all data types
         reference=reference,
@@ -130,7 +130,7 @@ def test_de_condition_types(adata_pb_counts, condition_key, reference, mode):
         assert (de_results["test_condition"] == reference[1]).all()
     elif mode == "all_vs_all":
         # For all_vs_all, should have all pairwise comparisons
-        n_levels = len(adata_pb_counts.obs[condition_key].unique())
+        n_levels = len(adata_pb_lognorm.obs[condition_key].unique())
         expected_comparisons = (n_levels * (n_levels - 1)) // 2
         assert (
             len(pd.unique(de_results[["ref_condition", "test_condition"]].apply(tuple, axis=1))) == expected_comparisons
@@ -138,7 +138,7 @@ def test_de_condition_types(adata_pb_counts, condition_key, reference, mode):
     elif mode == "all_vs_ref":
         # For vs_ref, should compare all other levels to reference
         assert all(de_results["ref_condition"] == reference)
-        other_levels = set(adata_pb_counts.obs[condition_key].unique()) - {reference}
+        other_levels = set(adata_pb_lognorm.obs[condition_key].unique()) - {reference}
         assert set(de_results["test_condition"].unique()) == other_levels
 
 

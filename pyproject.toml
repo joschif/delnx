@@ -55,16 +55,16 @@ optional-dependencies.doc = [
   "sphinxext-opengraph",
 ]
 optional-dependencies.test = [
-  "coverage>=7.8",
+  "coverage[toml]>=7",
   "hatch>=1.14.1",
   "pytest>=8.3.5",
   "pytest-cov>=6.1",
   "pytest-mock>=3.14",
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
-urls.Documentation = "https://orchard.readthedocs.io/"
-urls.Homepage = "https://github.com/joschif/orchard"
-urls.Source = "https://github.com/joschif/orchard"
+urls.Documentation = "https://delnx.readthedocs.io/"
+urls.Homepage = "https://github.com/joschif/delnx"
+urls.Source = "https://github.com/joschif/delnx"
 
 [tool.hatch.envs.default]
 installer = "uv"
@@ -144,7 +144,7 @@ addopts = [
 ]
 
 [tool.coverage.run]
-source = [ "orchard" ]
+source = [ "delnx" ]
 omit = [
   "**/test_*.py",
 ]
