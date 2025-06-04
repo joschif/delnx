@@ -10,7 +10,7 @@ from anndata import AnnData
 from delnx._typing import ComparisonMode, DataType
 from delnx._utils import _get_layer, _to_dense
 
-from ._utils import _validate_conditions
+from ._utils import _infer_data_type, _validate_conditions
 
 
 def _log2fc(
@@ -110,9 +110,6 @@ def logfc(
         - log2fc: Log2 fold change value
         - group: Cell group (if group_key is specified)
     """
-    # Import here to avoid circular imports
-    from orchard.tl._de import _infer_data_type, _validate_conditions
-
     # Validate inputs
     if condition_key not in adata.obs.columns:
         raise ValueError(f"Condition key '{condition_key}' not found in adata.obs")
