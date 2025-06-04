@@ -17,7 +17,7 @@
 
 # 🌳 delnx
 
-**delnx** (`/dɪˈlɒnɪks/`) is a python package for differential expression analysis of single-cell RNA sequencing data.
+**delnx** (`/dɪˈlɒnɪks/`) is a python package for differential expression analysis of single-cell genomics data.
 
 ## 🚀 Installation
 
