@@ -1,11 +1,11 @@
 <img src="docs/_static/images/delnx.png" width="300" alt="delnx">
 
 
+[![PyPI version][badge-pypi]][pypi]
 [![Tests][badge-tests]][tests]
 [![Codecov][badge-coverage]][codecov]
 [![pre-commit.ci status][badge-pre-commit]][pre-commit.ci]
 [![Documentation Status][badge-docs]][documentation]
-[![PyPI version][badge-pypi]][pypi]
 
 
 [badge-tests]: https://github.com/joschif/delnx/actions/workflows/test.yaml/badge.svg
