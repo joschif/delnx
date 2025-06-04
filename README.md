@@ -1,4 +1,4 @@
-<img src="docs/_static/images/delnx.png" width="500" alt="CellFlow">
+<img src="docs/_static/images/delnx.png" width="500" alt="delnx">
 
 
 [![Tests][badge-tests]][tests]
