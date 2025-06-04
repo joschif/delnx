@@ -47,7 +47,7 @@ results = dx.tl.de(
     mode="all_vs_ref",
     reference="control",
     method="negbinom",
-    backend="jax
+    backend="jax"
 )
 ```
 
