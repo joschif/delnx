@@ -227,7 +227,7 @@ _auroc_batch = jax.vmap(_auroc, in_axes=[1, None])
 def _batched_auroc(
     X: np.ndarray,
     groups: np.ndarray,
-    batch_size: int = 1024,
+    batch_size: int = 2048,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """Run AUROC analysis in batches.
@@ -277,7 +277,7 @@ def auroc(
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     min_samples: int = 2,
-    batch_size: int = 1024,
+    batch_size: int = 2048,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """Calculate Area Under the Receiver Operating Characteristic (AUROC) between condition levels.

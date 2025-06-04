@@ -37,7 +37,7 @@ def de(
     min_samples: int = 2,
     multitest_method: str = "fdr_bh",
     n_jobs: int = 1,
-    batch_size: int = 1024,
+    batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
     verbose: bool = True,
@@ -91,7 +91,7 @@ def de(
     n_jobs
         Number of parallel jobs
     batch_size
-        Number of features to process per batch
+        Number of features to process per batch. For very large datasets (>1M samples) or if you have memory issues, you can reduce this.
     optimizer
         Optimizer to use for certain JAX methods.
         - BFGS: BFGS optimizer throgh jax.scipy.optimize
@@ -322,7 +322,7 @@ def grouped_de(
     min_samples: int = 2,
     multitest_method: str = "fdr_bh",
     n_jobs: int = 1,
-    batch_size: int = 1024,
+    batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
     verbose: bool = True,
@@ -373,7 +373,7 @@ def grouped_de(
     n_jobs
         Number of parallel jobs
     batch_size
-        Number of features to process per batch
+        Number of features to process per batch. For very large datasets (>1M samples) or if you have memory issues, you can reduce this.
     optimizer
         Optimizer for model fitting (only used for certain JAX methods)
     maxiter
