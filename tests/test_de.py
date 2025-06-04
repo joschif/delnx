@@ -13,13 +13,14 @@ from delnx.tl import de, grouped_de
         ["negbinom", "jax"],
     ],
 )
-def test_de_methods_pb_counts(adata_pb_counts, method):
+def test_de_methods_pb_counts(adata_pb_counts, method, backend):
     """Test different DE methods with appropriate data types."""
     # Run DE analysis
     de_results = de(
         adata_pb_counts,
         condition_key="condition",
         method=method,
+        backend=backend,
         reference="control",
     )
 
@@ -33,8 +34,6 @@ def test_de_methods_pb_counts(adata_pb_counts, method):
 @pytest.mark.parametrize(
     "method,backend",
     [
-        ("negbinom", "statsmodels"),
-        ("negbinom", "jax"),
         ("lr", "statsmodels"),
         ("lr", "jax"),
         ("anova", "statsmodels"),
@@ -301,6 +300,7 @@ def test_grouped_de(adata_pb_lognorm, method, mode, reference):
         condition_key="condition_str",
         group_key="cell_type",
         method=method,
+        backend="statsmodels",
         mode=mode,
         reference=reference,
     )
