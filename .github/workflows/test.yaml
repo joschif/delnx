@@ -61,6 +61,12 @@ jobs:
         env:
           PYTEST_ADDOPTS: -vv -n 2
 
+      - name: Run tests and collect coverage
+        run: |
+          pip install pytest coverage
+          coverage run -m pytest
+          coverage xml
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:

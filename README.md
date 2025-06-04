@@ -2,10 +2,12 @@
 
 
 [![Tests][badge-tests]][tests]
-[![Documentation][badge-docs]][documentation]
+<!-- [![Documentation][badge-docs]][documentation] -->
+[![Codecov][badge-coverage]][codecov]
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/joschif/delnx/test.yaml?branch=main
 [badge-docs]: https://img.shields.io/readthedocs/delnx
+[badge-coverage]: https://img.shields.io/codecov/c/github/joschif/delnx/
 
 # delnx
 
@@ -28,3 +30,4 @@ pip install git+https://github.com/joschif/delnx.git@main
 [changelog]: https://delnx.readthedocs.io/en/latest/changelog.html
 [api documentation]: https://delnx.readthedocs.io/en/latest/api.html
 [pypi]: https://pypi.org/project/delnx
+[codecov]: https://codecov.io/gh/joschif/delnx
