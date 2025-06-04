@@ -2,7 +2,6 @@
 
 
 [![Tests][badge-tests]][tests]
-<!-- [![Documentation][badge-docs]][documentation] -->
 [![Codecov][badge-coverage]][codecov]
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/joschif/delnx/test.yaml?branch=main
