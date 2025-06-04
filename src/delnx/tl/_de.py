@@ -26,7 +26,7 @@ def de(
     group_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
-    backend: str = "jax",
+    backend: str = "statsmodels",
     covariates: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
@@ -126,6 +126,7 @@ def de(
             reference=reference,
             group_key=group_key,
             method=method,
+            backend=backend,
             covariates=covariates,
             mode=mode,
             layer=layer,
@@ -318,6 +319,7 @@ def grouped_de(
     group_key: str,
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
+    backend: str = "statsmodels",
     covariates: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
@@ -346,16 +348,16 @@ def grouped_de(
     method
         Testing method to use. One of:
         - deseq2: DESeq2 for count data
-        - negbinom: Negative binomial GLM
-        - negbinom_jax: JAX-accelerated negative binomial GLM
-        - lr: Logistic regression
-        - lr_jax: JAX-accelerated logistic regression
-        - lr_cuml: Logistic regression with cuml
-        - anova: Analysis of variance
-        - anova_jax: JAX-accelerated ANOVA
+        - negbinom: Negative binomial GLM and wald test
+        - lr: Logistic regression and likelihood ratio test
+        - anova: ANOVA based on a linear model
         - anova_residual: Linear model with residual F-test
-        - anova_residual_jax: JAX-accelerated linear model with residual F-test
         - binomial: Binomial GLM
+    backend
+        Backend to use for linear model-based DE methods.
+        - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
+        - statsmodels: Use linear models from statsmodels
+        - cuml: Use cuML for GPU-accelerated logistic regression
     covariates
         Columns in adata.obs to include as covariates
     mode
