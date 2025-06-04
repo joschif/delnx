@@ -19,16 +19,42 @@
 
 **delnx** (`/dɪˈlɒnɪks/`) is a python package for differential expression analysis of single-cell RNA sequencing data.
 
-## Getting started
-
-Please refer to the [documentation][],
-in particular, the [API documentation][].
-
 ## Installation
+
+### PyPI
+
+```
+pip install delnx
+```
+
+### Development version
 
 ```bash
 pip install git+https://github.com/joschif/delnx.git@main
 ```
+
+
+# Quickstart
+
+```python
+import delnx as dx
+
+# Run differential expression analysis
+results = dx.tl.de(
+    adata,)
+    condition_key="condition",
+    group_key="cell_type",
+    mode="all_vs_ref",
+    reference="control",
+    method="negbinom",
+    backend="jax
+)
+```
+
+## Documentation
+
+For more information, check out the [documentation][documentation] and the [API reference][api documentation].
+
 
 [issue tracker]: https://github.com/joschif/delnx/issues
 [tests]: https://github.com/joschif/delnx/actions/workflows/test.yaml
