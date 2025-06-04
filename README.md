@@ -6,7 +6,7 @@
 [![pre-commit.ci status][badge-pre-commit]][pre-commit.ci]
 
 
-[badge-tests]: https://img.shields.io/github/actions/workflow/status/joschif/delnx/test.yaml?branch=main
+[badge-tests]: https://github.com/joschif/delnx/actions/workflows/test.yaml/badge.svg
 [badge-docs]: https://img.shields.io/readthedocs/delnx
 [badge-coverage]: https://codecov.io/gh/joschif/delnx/branch/main/graph/badge.svg
 [badge-pre-commit]: https://results.pre-commit.ci/badge/github/joschif/delnx/main.svg
