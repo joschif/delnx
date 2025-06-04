@@ -250,10 +250,7 @@ def test_de_data_type_validation(adata_pb_counts):
 
 @pytest.mark.parametrize(
     "method",
-    [
-        # "deseq2",
-        "lr"
-    ],
+    ["lr"],
 )
 @pytest.mark.parametrize(
     "mode,reference",
@@ -266,11 +263,11 @@ def test_de_data_type_validation(adata_pb_counts):
         ("1_vs_1", ("control", "treat_a")),
     ],
 )
-def test_grouped_de(adata_pb_counts, method, mode, reference):
+def test_grouped_de(adata_pb_lognorm, method, mode, reference):
     """Test grouped DE analysis."""
     # Run DE analysis with grouping
     de_results = grouped_de(
-        adata_pb_counts,
+        adata_pb_lognorm,
         condition_key="condition_str",
         group_key="cell_type",
         method=method,
@@ -288,7 +285,7 @@ def test_grouped_de(adata_pb_counts, method, mode, reference):
 
     # Run DE analysis with grouping
     de_results = de(
-        adata_pb_counts,
+        adata_pb_lognorm,
         condition_key="condition_str",
         group_key="cell_type",
         method=method,
