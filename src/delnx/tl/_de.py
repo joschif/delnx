@@ -7,7 +7,7 @@ import pandas as pd
 import statsmodels.api as sm
 from anndata import AnnData
 
-from delnx._typing import ComparisonMode, DataType, Method
+from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
@@ -19,6 +19,8 @@ from ._utils import (
     _validate_conditions,
 )
 
+SUPPORTED_BACKENDS = ["jax", "statsmodels", "cuml"]
+
 
 def de(
     adata: AnnData,
@@ -26,7 +28,7 @@ def de(
     group_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
-    backend: str | None = None,
+    backend: Backends = "statsmodels",
     covariates: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
@@ -54,7 +56,7 @@ def de(
         Column in adata.obs for grouped DE testing
     method
         Testing method to use. One of:
-        - deseq2: DESeq2 for count data
+        - deseq2: DESeq2 for count data (with pydeseq2 backend)
         - negbinom: Negative binomial GLM and wald test (backends: jax, statsmodels)
         - lr: Logistic regression and likelihood ratio test (backends: jax, statsmodels, cuml)
         - anova: ANOVA based on a linear model (backends: jax, statsmodels)
@@ -152,6 +154,18 @@ def de(
     elif verbose:
         print(f"Using specified data type: {data_type}")
 
+    if method == "deseq2":
+        # Run DESeq2
+        return _run_deseq2(
+            adata=adata,
+            condition_key=condition_key,
+            comparisons=comparisons,
+            covariates=covariates,
+            layer=layer,
+            n_cpus=n_jobs,
+            verbose=verbose,
+        )
+
     # Validate method and data type combinations
     if method == "deseq2" and data_type != "counts":
         raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
@@ -172,20 +186,8 @@ def de(
             stacklevel=2,
         )
 
-    if backend not in ["jax", "statsmodels", "cuml"]:
+    if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
-
-    if method == "deseq2":
-        # Run DESeq2
-        return _run_deseq2(
-            adata=adata,
-            condition_key=condition_key,
-            comparisons=comparisons,
-            covariates=covariates,
-            layer=layer,
-            n_cpus=n_jobs,
-            verbose=verbose,
-        )
 
     # Run tests for each comparison
     results = []
@@ -319,7 +321,7 @@ def grouped_de(
     group_key: str,
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
-    backend: str | None = None,
+    backend: Backends = "statsmodels",
     covariates: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,

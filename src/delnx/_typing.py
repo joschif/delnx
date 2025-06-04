@@ -16,3 +16,4 @@ Method = Literal[
 Mode = Literal["sum", "mean", "median"]
 DataType = Literal["counts", "lognorm", "binary", "auto"]
 ComparisonMode = Literal["all_vs_ref", "all_vs_all", "1_vs_1"]
+Backends = Literal["jax", "cuml", "statsmodels"]
