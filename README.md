@@ -4,12 +4,16 @@
 [![Tests][badge-tests]][tests]
 [![Codecov][badge-coverage]][codecov]
 [![pre-commit.ci status][badge-pre-commit]][pre-commit.ci]
+[![Documentation Status][badge-docs]][documentation]
+[![PyPI version][badge-pypi]][pypi]
 
 
 [badge-tests]: https://github.com/joschif/delnx/actions/workflows/test.yaml/badge.svg
 [badge-docs]: https://img.shields.io/readthedocs/delnx
 [badge-coverage]: https://codecov.io/gh/joschif/delnx/branch/main/graph/badge.svg
 [badge-pre-commit]: https://results.pre-commit.ci/badge/github/joschif/delnx/main.svg
+[badge-pypi]: https://img.shields.io/pypi/v/delnx.svg?color=blue
+
 
 # delnx
 
