@@ -26,7 +26,7 @@ def de(
     group_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
-    backend: str = "statsmodels",
+    backend: str | None = None,
     covariates: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
@@ -55,11 +55,11 @@ def de(
     method
         Testing method to use. One of:
         - deseq2: DESeq2 for count data
-        - negbinom: Negative binomial GLM and wald test
-        - lr: Logistic regression and likelihood ratio test
-        - anova: ANOVA based on a linear model
-        - anova_residual: Linear model with residual F-test
-        - binomial: Binomial GLM
+        - negbinom: Negative binomial GLM and wald test (backends: jax, statsmodels)
+        - lr: Logistic regression and likelihood ratio test (backends: jax, statsmodels, cuml)
+        - anova: ANOVA based on a linear model (backends: jax, statsmodels)
+        - anova_residual: Linear model with residual F-test (backends: jax, statsmodels)
+        - binomial: Binomial GLM (backends: statsmodels)
     backend
         Backend to use for linear mdoel-based DE methods.
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
@@ -319,7 +319,7 @@ def grouped_de(
     group_key: str,
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
-    backend: str = "statsmodels",
+    backend: str | None = None,
     covariates: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
@@ -348,11 +348,11 @@ def grouped_de(
     method
         Testing method to use. One of:
         - deseq2: DESeq2 for count data
-        - negbinom: Negative binomial GLM and wald test
-        - lr: Logistic regression and likelihood ratio test
-        - anova: ANOVA based on a linear model
-        - anova_residual: Linear model with residual F-test
-        - binomial: Binomial GLM
+        - negbinom: Negative binomial GLM and wald test (backends: jax, statsmodels)
+        - lr: Logistic regression and likelihood ratio test (backends: jax, statsmodels, cuml)
+        - anova: ANOVA based on a linear model (backends: jax, statsmodels)
+        - anova_residual: Linear model with residual F-test (backends: jax, statsmodels)
+        - binomial: Binomial GLM (backends: statsmodels)
     backend
         Backend to use for linear model-based DE methods.
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
@@ -407,6 +407,7 @@ def grouped_de(
             reference=reference,
             group_key=None,
             method=method,
+            backend=backend,
             covariates=covariates,
             mode=mode,
             layer=layer,
