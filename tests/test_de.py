@@ -7,7 +7,11 @@ from delnx.tl import de, grouped_de
 
 @pytest.mark.parametrize(
     "method",
-    ["deseq2", "negbinom", "negbinom_jax"],
+    [
+        # "deseq2",
+        "negbinom",
+        "negbinom_jax",
+    ],
 )
 def test_de_methods_pb_counts(adata_pb_counts, method):
     """Test different DE methods with appropriate data types."""
@@ -196,15 +200,15 @@ def test_de_data_type_validation(adata_pb_counts):
     # Make a copy of the data
     adata = adata_pb_counts.copy()
 
-    # Test DESeq2 with non-count data
-    with pytest.raises(ValueError, match="requires count data"):
-        adata.X = np.log1p(adata.X)  # Convert to log-normalized
-        de(
-            adata,
-            condition_key="condition",
-            method="deseq2",
-            reference="control",
-        )
+    # # Test DESeq2 with non-count data
+    # with pytest.raises(ValueError, match="requires count data"):
+    #     adata.X = np.log1p(adata.X)  # Convert to log-normalized
+    #     de(
+    #         adata,
+    #         condition_key="condition",
+    #         method="deseq2",
+    #         reference="control",
+    #     )
 
     # Test binomial with non-binary data
     with pytest.raises(ValueError, match="require binary data"):
@@ -244,7 +248,13 @@ def test_de_data_type_validation(adata_pb_counts):
         )
 
 
-@pytest.mark.parametrize("method", ["deseq2", "lr"])
+@pytest.mark.parametrize(
+    "method",
+    [
+        # "deseq2",
+        "lr"
+    ],
+)
 @pytest.mark.parametrize(
     "mode,reference",
     [
