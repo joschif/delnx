@@ -6,11 +6,11 @@ from delnx.tl import de, grouped_de
 
 
 @pytest.mark.parametrize(
-    "method",
+    "method,backend",
     [
         # "deseq2",
-        "negbinom",
-        "negbinom_jax",
+        ["negbinom", "statsmodels"],
+        ["negbinom", "jax"],
     ],
 )
 def test_de_methods_pb_counts(adata_pb_counts, method):
@@ -31,16 +31,26 @@ def test_de_methods_pb_counts(adata_pb_counts, method):
 
 
 @pytest.mark.parametrize(
-    "method",
-    ["lr", "lr_jax", "anova", "anova_jax", "anova_residual", "anova_residual_jax"],
+    "method,backend",
+    [
+        ("negbinom", "statsmodels"),
+        ("negbinom", "jax"),
+        ("lr", "statsmodels"),
+        ("lr", "jax"),
+        ("anova", "statsmodels"),
+        ("anova", "jax"),
+        ("anova_residual", "statsmodels"),
+        ("anova_residual", "jax"),
+    ],
 )
-def test_de_methods_pb_lognorm(adata_pb_lognorm, method):
+def test_de_methods_pb_lognorm(adata_pb_lognorm, method, backend):
     """Test different DE methods with appropriate data types."""
     # Run DE analysis
     de_results = de(
         adata_pb_lognorm,
         condition_key="condition",
         method=method,
+        backend=backend,
         reference="control",
     )
 
@@ -52,26 +62,27 @@ def test_de_methods_pb_lognorm(adata_pb_lognorm, method):
 
 
 @pytest.mark.parametrize(
-    "method,layer",
+    "method,backend,layer",
     [
-        ("negbinom", "counts"),
-        ("negbinom_jax", "counts"),
-        ("lr", None),
-        ("lr_jax", None),
-        ("anova", None),
-        ("anova_jax", None),
-        ("anova_residual", None),
-        ("anova_residual_jax", None),
-        ("binomial", "binary"),
+        ("negbinom", "statsmodels", "counts"),
+        ("negbinom", "jax", "counts"),
+        ("lr", "statsmodels", None),
+        ("lr", "jax", None),
+        ("anova", "statsmodels", None),
+        ("anova", "jax", None),
+        ("anova_residual", "statsmodels", None),
+        ("anova_residual", "jax", None),
+        ("binomial", "statsmodels", "binary"),
     ],
 )
-def test_de_methods_sc(adata_small, method, layer):
+def test_de_methods_sc(adata_small, method, backend, layer):
     """Test different DE methods with appropriate data types."""
     # Run DE analysis
     de_results = de(
         adata_small,
         condition_key="condition",
         method=method,
+        backend=backend,
         reference="control",
         layer=layer,
     )
@@ -271,6 +282,7 @@ def test_grouped_de(adata_pb_lognorm, method, mode, reference):
         condition_key="condition_str",
         group_key="cell_type",
         method=method,
+        backend="statsmodels",
         mode=mode,
         reference=reference,
     )
@@ -304,7 +316,7 @@ def test_grouped_de(adata_pb_lognorm, method, mode, reference):
 
 @pytest.mark.parametrize(
     "method",
-    ["lr_jax", "negbinom_jax"],
+    ["lr", "negbinom"],
 )
 @pytest.mark.parametrize(
     "optimizer",
@@ -312,13 +324,14 @@ def test_grouped_de(adata_pb_lognorm, method, mode, reference):
 )
 def test_jax_optimizers(adata_pb_lognorm, adata_pb_counts, method, optimizer):
     """Test different optimizers for DE analysis."""
-    adata = adata_pb_lognorm if method == "lr_jax" else adata_pb_counts
+    adata = adata_pb_lognorm if method == "lr" else adata_pb_counts
 
     # Test with BFGS optimizer
     de_results_bfgs = de(
         adata,
         condition_key="condition_str",
         method=method,
+        backend="jax",
         optimizer=optimizer,
         reference="control",
     )
