@@ -4,7 +4,6 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-import jax.scipy as jsp
 import numpy as np
 import pandas as pd
 import patsy
@@ -65,7 +64,7 @@ def _run_lr_test(
 
     # Vectorized computation of test statistics
     lr_stats = 2 * (ll_full - ll_null)
-    pvals = jax.vmap(jsp.stats.chi2.sf, in_axes=(0, None))(lr_stats, 1)
+    pvals = stats.chi2.sf(lr_stats, 1)
 
     # Extract coefficients (second parameter is the feature coefficient)
     coefs = coefs_full[:, -1]
