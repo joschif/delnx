@@ -17,6 +17,7 @@ def _log2fc(
     X: np.ndarray,
     condition_mask: np.ndarray,
     data_type: DataType,
+    size_factors: np.ndarray | None = None,
     eps: float = 1e-8,
 ) -> np.ndarray:
     """Calculate log2 fold changes between two conditions.
@@ -32,6 +33,8 @@ def _log2fc(
         - counts: Raw count data
         - lognorm: Log-normalized data (assumed to be log1p of normalized counts)
         - binary: Binary data
+    size_factors
+        Size factors for normalization (optional, used for count data)
     eps
         Small constant to add for numerical stability with raw counts
 
@@ -40,6 +43,9 @@ def _log2fc(
     np.ndarray
         Log2 fold changes
     """
+    if data_type not in ["counts", "lognorm", "binary"]:
+        raise ValueError(f"Unsupported data type: {data_type}")
+
     # Extract test and reference data once
     ref_data = X[~condition_mask]
     test_data = X[condition_mask]
@@ -50,11 +56,11 @@ def _log2fc(
         # compute means, then take log2 ratio
         ref_data = np.expm1(ref_data.astype(np.float64))
         test_data = np.expm1(test_data.astype(np.float64))
-    elif data_type in ["counts", "binary"]:
-        # For raw counts or binary, calculate ratio of means directly
-        pass
-    else:
-        raise ValueError(f"Unsupported data type: {data_type}")
+
+    elif data_type == "counts" & size_factors is not None:
+        # Normalize by size factors if provided
+        ref_data = ref_data / size_factors[~condition_mask][:, np.newaxis]
+        test_data = test_data / size_factors[condition_mask][:, np.newaxis]
 
     ref_means = ref_data.mean(axis=0) + eps
     test_means = test_data.mean(axis=0) + eps
@@ -65,6 +71,7 @@ def _log2fc(
 def log2fc(
     adata: AnnData,
     condition_key: str,
+    size_factor_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
@@ -80,6 +87,8 @@ def log2fc(
         AnnData object
     condition_key
         Column in adata.obs containing condition values
+    size_factor_key
+        Column in adata.obs containing size factors (optional, used for count data)
     reference
         Reference condition level or tuple (reference, comparison)
     mode
@@ -118,8 +127,9 @@ def log2fc(
     condition_values = adata.obs[condition_key].values
     levels, comparisons = _validate_conditions(condition_values, reference, mode)
 
-    # Get expression matrix
+    # Get expression matrix and size factors
     X = _get_layer(adata, layer)
+    size_factors = None if size_factor_key is None else adata.obs[size_factor_key].values
 
     # Infer data type if auto
     if data_type == "auto":
@@ -144,13 +154,15 @@ def log2fc(
         all_mask = mask1 | mask2
 
         # Get data for calculations
-        data = X[all_mask, :]
+        group_data = X[all_mask, :]
+        group_sf = size_factors[all_mask] if size_factors is not None else None
         condition_mask = adata.obs.loc[all_mask, condition_key].values == group1
 
         # Calculate log2 fold change
         log2fc_values = _log2fc(
-            X=data,
+            X=group_data,
             condition_mask=condition_mask,
+            size_factors=group_sf,
             data_type=data_type,
         )
 
