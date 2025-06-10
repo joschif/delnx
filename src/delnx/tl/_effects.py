@@ -57,7 +57,7 @@ def _log2fc(
         ref_data = np.expm1(ref_data.astype(np.float64))
         test_data = np.expm1(test_data.astype(np.float64))
 
-    elif data_type == "counts" & size_factors is not None:
+    elif (data_type == "counts") & (size_factors is not None):
         # Normalize by size factors if provided
         ref_data = ref_data / size_factors[~condition_mask][:, np.newaxis]
         test_data = test_data / size_factors[condition_mask][:, np.newaxis]
