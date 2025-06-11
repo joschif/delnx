@@ -1,1 +1,1 @@
-from ._models import LinearRegression, LogisticRegression, NegativeBinomialRegression
+from ._models import DispersionEstimator, LinearRegression, LogisticRegression, NegativeBinomialRegression
