@@ -5,7 +5,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
-from jax.scipy import optimize as jsp_optimize
+from jax.scipy import optimize
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class Regression:
 
     def _fit_bfgs(self, neg_ll_fn: Callable, init_params: jnp.ndarray, **kwargs) -> jnp.ndarray:
         """Fit using BFGS optimizer."""
-        result = jsp_optimize.minimize(neg_ll_fn, init_params, method="BFGS", options={"maxiter": self.maxiter})
+        result = optimize.minimize(neg_ll_fn, init_params, method="BFGS", options={"maxiter": self.maxiter})
         return result.x
 
     def _fit_irls(
@@ -310,7 +310,7 @@ class DispersionEstimator:
         elif method == "mle":
             return self._estimate_dispersion_mle(x)
         else:
-            raise ValueError(f"Unknown method: {self.method}")
+            raise ValueError(f"Unknown method for dispersion estimation: {method}")
 
     def estimate_dispersion(
         self,
@@ -334,14 +334,14 @@ class DispersionEstimator:
             Estimated dispersion parameters for each gene.
         """
         if method == "moments":
-            return jax.vmap(self._estimate_dispersion_moments, in_axes=(1,))(X)
+            return jax.vmap(lambda x: self._estimate_dispersion_moments(x)[0], in_axes=(1,))(X)
         elif method == "mle":
             return jax.vmap(self._estimate_dispersion_mle, in_axes=(1,))(X)
         else:
-            raise ValueError(f"Unknown method: {method}")
+            raise ValueError(f"Unknown method for dispersion estimation: {method}")
 
     @partial(jax.jit, static_argnums=(0,))
-    def _estimate_dispersion_moments(self, x: jnp.ndarray) -> float:
+    def _estimate_dispersion_moments(self, x: jnp.ndarray) -> tuple[float, float, float]:
         """Estimate moments and dispersion parameter for a single gene using method of moments."""
         mu = jnp.clip(jnp.mean(x), 1e-6)
         var = jnp.clip(jnp.var(x, ddof=1), 1e-6)
@@ -371,7 +371,7 @@ class DispersionEstimator:
 
         # Optimize log(dispersion)
         log_dispersion_init = jnp.log(jnp.array([dispersion_init]))
-        result = jax.scipy.optimize.minimize(neg_ll, log_dispersion_init, method="BFGS")
+        result = optimize.minimize(neg_ll, log_dispersion_init, method="BFGS")
         return jnp.clip(jnp.exp(result.x[0]), self.dispersion_range[0], self.dispersion_range[1])
 
     def shrink_dispersions(self, dispersions: jnp.ndarray, mu: jnp.ndarray, method: str = "deseq2") -> jnp.ndarray:
@@ -401,7 +401,7 @@ class DispersionEstimator:
             disp_trend = self._fit_trend_parametric(dispersions, mu)
             return self._dispersion_shrinkage(dispersions, disp_trend, method="bayesian")
         else:
-            raise ValueError(f"Unknown shrinkage method: {method}")
+            raise ValueError(f"Unknown method for dispersion shrinkage: {method}")
 
     @partial(jax.jit, static_argnums=(0,))
     def _fit_trend_linear(self, dispersions: jnp.ndarray, mu: jnp.ndarray) -> jnp.ndarray:
@@ -455,7 +455,7 @@ class DispersionEstimator:
         mean_mu = jnp.mean(valid_mu)
         initial_params = jnp.array([mean_disp * mean_mu, mean_disp * 0.1])
 
-        result = jsp_optimize.minimize(loss_fn, initial_params, method="BFGS")
+        result = optimize.minimize(loss_fn, initial_params, method="BFGS")
         trend = gamma_trend(result.x, mu)
 
         return jnp.clip(trend, self.dispersion_range[0], self.dispersion_range[1])
