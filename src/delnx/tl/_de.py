@@ -55,7 +55,7 @@ def de(
     group_key
         Column in adata.obs for grouped DE testing
     method
-        Testing method to use. One of:
+        Testing method to use.
         - deseq2: DESeq2 for count data (with pydeseq2 backend)
         - negbinom: Negative binomial GLM and wald test (backends: jax, statsmodels)
         - lr: Logistic regression and likelihood ratio test (backends: jax, statsmodels, cuml)
@@ -70,7 +70,7 @@ def de(
     covariates
         Columns in adata.obs to include as covariates
     mode
-        How to perform comparisons. One of:
+        How to perform comparisons.
         - all_vs_ref: Compare all levels to reference
         - all_vs_all: Compare all pairs of levels
         - 1_vs_1: Compare only two levels (reference and comparison group)

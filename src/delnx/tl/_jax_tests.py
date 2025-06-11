@@ -203,7 +203,8 @@ def _run_batched_de(
 ) -> pd.DataFrame:
     """Run differential expression analysis in batches.
 
-    Args:
+    Parameters
+    ----------
         X: Expression data matrix, shape (n_cells, n_features)
         model_data: DataFrame containing condition and covariate data
         feature_names: Names of features/genes
