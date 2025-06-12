@@ -73,7 +73,7 @@ def _run_lr_test(
     return coefs, pvals
 
 
-@partial(jax.jit, static_argnums=(3, 4))
+@partial(jax.jit, static_argnums=(4, 5))
 def _fit_nb(x, y, covars, disp, optimizer="BFGS", maxiter=100):
     """Fit single negative binomial regression model with JAX."""
     model = NegativeBinomialRegression(dispersion=disp, optimizer=optimizer, maxiter=maxiter)
@@ -237,7 +237,7 @@ def _estimate_dispersion_batched(
         return init_dispersions
 
     # Shrinkage of dispersion towards trend
-    mean_counts = jnp.mean(X, axis=0)
+    mean_counts = jnp.array(X.mean(axis=0)).flatten()
     dispersions = estimator.shrink_dispersion(
         dispersions=init_dispersions,
         mu=mean_counts,
