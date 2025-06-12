@@ -196,7 +196,7 @@ def _compute_quantile_regression(
     adata.obs["size_factor_qreg"] = size_factors
 
 
-def size_factors(adata, method="median_ratio", layer=None, **kwargs):
+def size_factors(adata, method="library_size", layer=None, **kwargs):
     """Compute size factors for normalization.
 
     Parameters
