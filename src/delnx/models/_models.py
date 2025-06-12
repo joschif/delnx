@@ -1,3 +1,5 @@
+"""Regression models in JAX."""
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -62,7 +64,7 @@ class Regression:
             i, converged, _ = state
             return jnp.logical_and(i < self.maxiter, ~converged)
 
-        # Inizialize intercept with log(mean(y))
+        # Inizialize intercept with log(mean(y)))
         beta_init = jnp.zeros(p)
         beta_init = beta_init.at[0].set(jnp.log(jnp.mean(y) + 1e-8))
         state = (0, False, beta_init)

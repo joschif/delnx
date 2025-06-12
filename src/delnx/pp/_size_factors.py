@@ -1,3 +1,5 @@
+"""Size factor computation for (single-cell) RNA-seq data."""
+
 from functools import partial
 
 import jax

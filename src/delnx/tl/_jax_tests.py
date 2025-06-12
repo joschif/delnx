@@ -1,4 +1,4 @@
-"""JAX-accelerated differential expression test functions."""
+"""Batched differential expression test functions in JAX."""
 
 from functools import partial
 
@@ -12,7 +12,7 @@ import tqdm
 from scipy import sparse
 
 from delnx._utils import _to_dense
-from delnx.models import DispersionEstimator, LinearRegression, LogisticRegression, NegativeBinomialRegression
+from delnx.models import LinearRegression, LogisticRegression, NegativeBinomialRegression
 
 
 @partial(jax.jit, static_argnums=(3, 4))
@@ -194,65 +194,13 @@ def _run_anova_test(
     return coefs, pvals
 
 
-def _estimate_dispersion_batched(
-    X: jnp.ndarray,
-    method: str = "deseq2",
-    batch_size: int = 2048,
-    verbose: bool = True,
-    **kwargs,
-) -> jnp.ndarray:
-    """Estimate dispersion for negative binomial regression.
-
-    Parameters
-    ----------
-        X: Expression data matrix, shape (n_cells, n_features)
-        method: Dispersion estimation method:
-            - "deseq2": DESeq2-inspired dispersion estimation with bayesian shrinkage towards a parametric trend based on a gamma distribution.
-            - "edger": EdgeR-inspired dispersion estimation with empirical Bayes shrinkage towards a log-linear trend.
-            - "mle": Maximum likelihood estimation of dispersion.
-            - "moments": Simple method of moments dispersion estimation.
-        batch_size: Number of features to process per batch.
-
-
-    Returns
-    -------
-        Dispersion estimates for each feature
-    """
-    n_features = X.shape[1]
-    estimator = DispersionEstimator(**kwargs)
-    estimation_method = "mle" if method in ["mle", "deseq2"] else "moments"
-
-    # Batched estimation of initial dispersion
-    init_dispersions = []
-    for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
-        batch = slice(i, min(i + batch_size, n_features))
-        X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
-        dispersion = estimator.estimate_dispersion(X_batch, method=estimation_method)
-        init_dispersions.append(dispersion)
-
-    init_dispersions = jnp.concatenate(init_dispersions, axis=0)
-
-    if method in ["mle", "moments"]:
-        # If using MLE or moments, return initial estimates directly
-        return init_dispersions
-
-    # Shrinkage of dispersion towards trend
-    mean_counts = jnp.array(X.mean(axis=0)).flatten()
-    dispersions = estimator.shrink_dispersion(
-        dispersions=init_dispersions,
-        mu=mean_counts,
-        method=method,
-    )
-
-    return dispersions
-
-
 def _run_batched_de(
     X: np.ndarray | sparse.spmatrix,
     model_data: pd.DataFrame,
     feature_names: pd.Index,
     method: str,
     condition_key: str,
+    dispersions: np.ndarray | None = None,
     size_factors: np.ndarray | None = None,
     covariates: list[str] | None = None,
     dispersion_method: str = "deseq2",
@@ -274,6 +222,7 @@ def _run_batched_de(
             - "anova": Linear model with ANOVA F-test
             - "anova_residual": Linear model with residual F-test
         condition_key: Name of condition column in model_data
+        dispersions: Dispersion estimates for negative binomial regression, shape (n_features,)
         size_factors: Size factors for normalization, shape (n_cells,)
         covariates: Names of covariate columns in model_data
         batch_size: Number of features to process per batch
@@ -301,14 +250,6 @@ def _run_batched_de(
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
         covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
-
-        # Estimate dispersion for negative binomial regression
-        dispersions = _estimate_dispersion_batched(
-            X,
-            method=dispersion_method,
-            batch_size=batch_size,
-            verbose=verbose,
-        )
 
         def test_fn(x, disp):
             return _run_nb_test(x, conditions, covars, disp, optimizer=optimizer, maxiter=maxiter)
