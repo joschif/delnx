@@ -283,7 +283,7 @@ class NegativeBinomialRegression(Regression):
 class DispersionEstimator:
     """Estimate dispersion parameter for Negative Binomial regression."""
 
-    dispersion_range: tuple[float, float] = (1e-6, 10.0)
+    dispersion_range: tuple[float, float] = (1e-4, 10.0)
     shrinkage_weight_range: tuple[float, float] = (0.05, 0.95)
     prior_variance: float = 0.25
     prior_df: float = 10.0
@@ -372,7 +372,7 @@ class DispersionEstimator:
         result = optimize.minimize(neg_ll, log_dispersion_init, method="BFGS")
         return jnp.clip(jnp.exp(result.x[0]), self.dispersion_range[0], self.dispersion_range[1])
 
-    def shrink_dispersions(self, dispersions: jnp.ndarray, mu: jnp.ndarray, method: str = "deseq2") -> jnp.ndarray:
+    def shrink_dispersion(self, dispersions: jnp.ndarray, mu: jnp.ndarray, method: str = "deseq2") -> jnp.ndarray:
         """Fit a trend to the dispersion-mean relationship.
 
         Parameters

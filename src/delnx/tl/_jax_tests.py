@@ -9,9 +9,10 @@ import pandas as pd
 import patsy
 import scipy.stats as stats
 import tqdm
+from scipy import sparse
 
 from delnx._utils import _to_dense
-from delnx.models import LinearRegression, LogisticRegression, NegativeBinomialRegression
+from delnx.models import DispersionEstimator, LinearRegression, LogisticRegression, NegativeBinomialRegression
 
 
 @partial(jax.jit, static_argnums=(3, 4))
@@ -73,9 +74,9 @@ def _run_lr_test(
 
 
 @partial(jax.jit, static_argnums=(3, 4))
-def _fit_nb(x, y, covars, optimizer="BFGS", maxiter=100):
+def _fit_nb(x, y, covars, disp, optimizer="BFGS", maxiter=100):
     """Fit single negative binomial regression model with JAX."""
-    model = NegativeBinomialRegression(estimation_method="intercept", optimizer=optimizer, maxiter=maxiter)
+    model = NegativeBinomialRegression(dispersion=disp, optimizer=optimizer, maxiter=maxiter)
 
     # Covars should already include intercept
     X = jnp.column_stack([covars, x])
@@ -87,13 +88,14 @@ def _fit_nb(x, y, covars, optimizer="BFGS", maxiter=100):
     return coefs, pvals
 
 
-_fit_nb_batch = jax.vmap(_fit_nb, in_axes=(None, 1, None, None, None), out_axes=(0, 0))
+_fit_nb_batch = jax.vmap(_fit_nb, in_axes=(None, 1, None, 0, None, None), out_axes=(0, 0))
 
 
 def _run_nb_test(
     X: jnp.ndarray,
     cond: jnp.ndarray,
     covars: jnp.ndarray,
+    disp: jnp.ndarray,
     optimizer: str = "BFGS",
     maxiter: int = 100,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -103,6 +105,7 @@ def _run_nb_test(
         X: Expression data for current batch, shape (n_cells, batch_size)
         cond: Binary condition labels, shape (n_cells,)
         covars: Covariate data with intercept, shape (n_cells, n_covariates)
+        disp: Dispersion parameters for each feature, shape (batch_size,)
         optimizer: Optimization algorithm to use
         maxiter: Maximum number of iterations for optimization
 
@@ -110,7 +113,9 @@ def _run_nb_test(
     -------
         Tuple of coefficients and p-values for the batch
     """
-    coefs, pvals = _fit_nb_batch(cond, X, covars, optimizer, maxiter)
+    if disp.ndim == 1:
+        disp = disp.reshape(-1, 1)  # Ensure dispersion is 2D for vmap
+    coefs, pvals = _fit_nb_batch(cond, X, covars, disp, optimizer, maxiter)
     return coefs[:, -1], pvals[:, -1]
 
 
@@ -189,17 +194,67 @@ def _run_anova_test(
     return coefs, pvals
 
 
+def _estimate_dispersion_batched(
+    X: jnp.ndarray,
+    method: str = "deseq2",
+    batch_size: int = 2048,
+    verbose: bool = True,
+    **kwargs,
+) -> jnp.ndarray:
+    """Estimate dispersion for negative binomial regression.
+
+    Parameters
+    ----------
+        X: Expression data matrix, shape (n_cells, n_features)
+        method: Dispersion estimation method:
+            - "deseq2": DESeq2-inspired dispersion estimation with bayesian shrinkage towards a parametric trend based on a gamma distribution.
+            - "edger": EdgeR-inspired dispersion estimation with empirical Bayes shrinkage towards a log-linear trend.
+            - "mle": Maximum likelihood estimation of dispersion.
+            - "moments": Simple method of moments dispersion estimation.
+        batch_size: Number of features to process per batch.
+
+
+    Returns
+    -------
+        Dispersion estimates for each feature
+    """
+    n_features = X.shape[1]
+    estimator = DispersionEstimator(**kwargs)
+
+    # Batched estimation of initial dispersion
+    init_dispersions = []
+    for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
+        batch = slice(i, min(i + batch_size, n_features))
+        X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
+        dispersion = estimator.estimate_dispersion(X_batch, method=method)
+        init_dispersions.append(dispersion)
+
+    init_dispersions = jnp.concatenate(init_dispersions, axis=0)
+    mean_counts = jnp.mean(X, axis=0)
+
+    # Shrinkage of dispersion towards trend
+    dispersions = estimator.shrink_dispersion(
+        dispersions=init_dispersions,
+        mu=mean_counts,
+        method=method,
+    )
+
+    return dispersions
+
+
 def _run_batched_de(
-    X: np.ndarray,
+    X: np.ndarray | sparse.spmatrix,
     model_data: pd.DataFrame,
     feature_names: pd.Index,
     method: str,
     condition_key: str,
+    size_factors: np.ndarray | None = None,
     covariates: list[str] | None = None,
+    dispersion_method: str = "deseq2",
     batch_size: int = 32,
     optimizer: str = "BFGS",
     maxiter: int = 100,
-    verbose: bool = False,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """Run differential expression analysis in batches.
 
@@ -214,6 +269,7 @@ def _run_batched_de(
             - "anova": Linear model with ANOVA F-test
             - "anova_residual": Linear model with residual F-test
         condition_key: Name of condition column in model_data
+        size_factors: Size factors for normalization, shape (n_cells,)
         covariates: Names of covariate columns in model_data
         batch_size: Number of features to process per batch
         verbose: Whether to show progress bar
@@ -222,13 +278,9 @@ def _run_batched_de(
     -------
         DataFrame with test results for each feature
     """
-    # Process in batches
-    n_features = X.shape[1]
-    results = {
-        "feature": [],
-        "coef": [],
-        "pval": [],
-    }
+    # If size factors are provided, normalize the data
+    if size_factors is not None:
+        X /= size_factors[:, np.newaxis]
 
     # Prepare data for logistic regression
     if method == "lr":
@@ -245,8 +297,16 @@ def _run_batched_de(
         covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
 
-        def test_fn(x):
-            return _run_nb_test(x, conditions, covars, optimizer=optimizer, maxiter=maxiter)
+        # Estimate dispersion for negative binomial regression
+        dispersions = _estimate_dispersion_batched(
+            X,
+            method=dispersion_method,
+            batch_size=batch_size,
+            verbose=verbose,
+        )
+
+        def test_fn(x, disp):
+            return _run_nb_test(x, conditions, covars, disp, optimizer=optimizer, maxiter=maxiter)
 
     # Prepare data for ANOVA tests
     elif method in ["anova", "anova_residual"]:
@@ -261,11 +321,22 @@ def _run_batched_de(
     else:
         raise ValueError(f"Unsupported method: {method}")
 
-    # Process all batches
+    # Process run DE tests in batches
+    n_features = X.shape[1]
+    results = {
+        "feature": [],
+        "coef": [],
+        "pval": [],
+    }
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
         batch = slice(i, min(i + batch_size, n_features))
         X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
-        coefs, pvals = test_fn(X_batch)
+
+        if method == "negbinom":
+            disp_batch = jnp.asarray(dispersions[batch], dtype=jnp.float32)
+            coefs, pvals = test_fn(X_batch, disp_batch)
+        else:
+            coefs, pvals = test_fn(X_batch)
 
         results["feature"].extend(feature_names[batch].tolist())
         results["coef"].extend(coefs.tolist())
