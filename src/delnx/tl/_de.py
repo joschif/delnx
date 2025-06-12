@@ -154,18 +154,6 @@ def de(
     elif verbose:
         print(f"Using specified data type: {data_type}")
 
-    if method == "deseq2":
-        # Run DESeq2
-        return _run_deseq2(
-            adata=adata,
-            condition_key=condition_key,
-            comparisons=comparisons,
-            covariates=covariates,
-            layer=layer,
-            n_cpus=n_jobs,
-            verbose=verbose,
-        )
-
     # Validate method and data type combinations
     if method == "deseq2" and data_type != "counts":
         raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
@@ -188,6 +176,18 @@ def de(
 
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
+
+    if method == "deseq2":
+        # Run DESeq2
+        return _run_deseq2(
+            adata=adata,
+            condition_key=condition_key,
+            comparisons=comparisons,
+            covariates=covariates,
+            layer=layer,
+            n_cpus=n_jobs,
+            verbose=verbose,
+        )
 
     # Run tests for each comparison
     results = []
