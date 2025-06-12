@@ -250,7 +250,7 @@ class NegativeBinomialRegression(Regression):
         if self.dispersion is not None:
             dispersion = jnp.clip(self.dispersion, self.dispersion_range[0], self.dispersion_range[1])
         else:
-            dispersion = DispersionEstimator.estimate_dispersion_single_gene(y, self.estimation_method)
+            dispersion = DispersionEstimator().estimate_dispersion_single_gene(y, self.estimation_method)
 
         # Fit model
         if self.optimizer == "BFGS":
