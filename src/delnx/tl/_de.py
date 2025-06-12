@@ -178,7 +178,7 @@ def de(
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
 
     if method == "deseq2":
-        # Run DESeq2
+        # Run PyDESeq2
         return _run_deseq2(
             adata=adata,
             condition_key=condition_key,

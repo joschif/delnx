@@ -73,8 +73,8 @@ def _run_lr_test(
     return coefs, pvals
 
 
-@partial(jax.jit, static_argnums=(4, 5))
-def _fit_nb(x, y, covars, disp, optimizer="BFGS", maxiter=100):
+@partial(jax.jit, static_argnums=(4, 5, 6))
+def _fit_nb(x, y, covars, disp, optimizer="BFGS", maxiter=100, dispersion_method="mle"):
     """Fit single negative binomial regression model with JAX."""
     model = NegativeBinomialRegression(dispersion=disp, optimizer=optimizer, maxiter=maxiter)
 
@@ -88,14 +88,11 @@ def _fit_nb(x, y, covars, disp, optimizer="BFGS", maxiter=100):
     return coefs, pvals
 
 
-_fit_nb_batch = jax.vmap(_fit_nb, in_axes=(None, 1, None, 0, None, None), out_axes=(0, 0))
-
-
 def _run_nb_test(
     X: jnp.ndarray,
     cond: jnp.ndarray,
     covars: jnp.ndarray,
-    disp: jnp.ndarray,
+    disp: jnp.ndarray | None = None,
     optimizer: str = "BFGS",
     maxiter: int = 100,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -113,9 +110,17 @@ def _run_nb_test(
     -------
         Tuple of coefficients and p-values for the batch
     """
-    if disp.ndim == 1:
-        disp = disp.reshape(-1, 1)  # Ensure dispersion is 2D for vmap
-    coefs, pvals = _fit_nb_batch(cond, X, covars, disp, optimizer, maxiter)
+
+    def fit_nb(x, disp):
+        return _fit_nb(x, cond, covars, disp, optimizer=optimizer, maxiter=maxiter)
+
+    if disp is None:
+        fit_nb_batch = jax.vmap(fit_nb, in_axes=(1, None), out_axes=(0, 0))
+    else:
+        fit_nb_batch = jax.vmap(fit_nb, in_axes=(1, 0), out_axes=(0, 0))
+        disp = disp.reshape(-1, 1) if disp.ndim == 1 else disp
+
+    coefs, pvals = fit_nb_batch(cond, X, covars, disp, optimizer, maxiter)
     return coefs[:, -1], pvals[:, -1]
 
 
@@ -203,7 +208,7 @@ def _run_batched_de(
     dispersions: np.ndarray | None = None,
     size_factors: np.ndarray | None = None,
     covariates: list[str] | None = None,
-    dispersion_method: str = "deseq2",
+    dispersion_method: str = "mle",
     batch_size: int = 32,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -222,7 +227,12 @@ def _run_batched_de(
             - "anova": Linear model with ANOVA F-test
             - "anova_residual": Linear model with residual F-test
         condition_key: Name of condition column in model_data
+        optimizer: Optimization algorithm to use
+        maxiter: Maximum number of iterations for optimization
         dispersions: Dispersion estimates for negative binomial regression, shape (n_features,)
+        dispersion_method: Method to estimate gene-wise dispersions if not provided
+            - "mle": Maximum likelihood estimation
+            - "moments": Method of moments
         size_factors: Size factors for normalization, shape (n_cells,)
         covariates: Names of covariate columns in model_data
         batch_size: Number of features to process per batch
@@ -252,7 +262,15 @@ def _run_batched_de(
         covars = jnp.asarray(covars, dtype=jnp.float32)
 
         def test_fn(x, disp):
-            return _run_nb_test(x, conditions, covars, disp, optimizer=optimizer, maxiter=maxiter)
+            return _run_nb_test(
+                x,
+                conditions,
+                covars,
+                disp,
+                optimizer=optimizer,
+                maxiter=maxiter,
+                dispersion_method=dispersion_method,
+            )
 
     # Prepare data for ANOVA tests
     elif method in ["anova", "anova_residual"]:
