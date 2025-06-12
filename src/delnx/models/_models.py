@@ -306,7 +306,7 @@ class DispersionEstimator:
             Estimated dispersion parameter.
         """
         if method == "moments":
-            return self._estimate_dispersion_moments(x)
+            return self._estimate_dispersion_moments(x)[0]
         elif method == "mle":
             return self._estimate_dispersion_mle(x)
         else:
@@ -333,12 +333,10 @@ class DispersionEstimator:
         jnp.ndarray
             Estimated dispersion parameters for each gene.
         """
-        if method == "moments":
-            return jax.vmap(lambda x: self._estimate_dispersion_moments(x)[0], in_axes=(1,))(X)
-        elif method == "mle":
-            return jax.vmap(self._estimate_dispersion_mle, in_axes=(1,))(X)
-        else:
-            raise ValueError(f"Unknown method for dispersion estimation: {method}")
+        return jax.vmap(
+            self.estimate_dispersion_single_gene,
+            in_axes=(1, None),
+        )(X, method)
 
     @partial(jax.jit, static_argnums=(0,))
     def _estimate_dispersion_moments(self, x: jnp.ndarray) -> tuple[float, float, float]:
@@ -385,7 +383,7 @@ class DispersionEstimator:
             Mean expression values for each gene.
         method : str, optional
             Shrinkage method to use:
-            - "edger": Empirical Bayes shrinkage towards a linear trend. Inspired by edgeR.
+            - "edger": Empirical Bayes shrinkage towards a log-linear trend. Inspired by edgeR.
             - "deseq2": Bayesian shrinkage towards a parametric trend based on a gamma distribution. Inspired by DESeq2.
 
         Returns
@@ -403,7 +401,7 @@ class DispersionEstimator:
         else:
             raise ValueError(f"Unknown method for dispersion shrinkage: {method}")
 
-    @partial(jax.jit, static_argnums=(0,))
+    # @partial(jax.jit, static_argnums=(0,))
     def _fit_trend_linear(self, dispersions: jnp.ndarray, mu: jnp.ndarray) -> jnp.ndarray:
         """Fit smooth trend to dispersions using local regression."""
         # Filter out extreme values for trend fitting
@@ -430,7 +428,7 @@ class DispersionEstimator:
 
         return jnp.clip(trend, self.dispersion_range[0], self.dispersion_range[1])
 
-    @partial(jax.jit, static_argnums=(0,))
+    # @partial(jax.jit, static_argnums=(0,))
     def _fit_trend_parametric(self, dispersions: jnp.ndarray, mu: jnp.ndarray) -> jnp.ndarray:
         """Fit parametric curve to dispersion-mean relationship."""
         # Filter out extreme values for trend fitting
