@@ -12,7 +12,7 @@ from jax.scipy import optimize
 
 @dataclass(frozen=True)
 class Regression:
-    """Base class for regression models with offset support."""
+    """Base class for regression models."""
 
     maxiter: int = 100
     tol: float = 1e-6
@@ -30,6 +30,7 @@ class Regression:
         y: jnp.ndarray,
         weight_fn: Callable,
         working_resid_fn: Callable,
+        init_params: jnp.ndarray,
         offset: jnp.ndarray | None = None,
         **kwargs,
     ) -> jnp.ndarray:
@@ -68,14 +69,8 @@ class Regression:
             i, converged, _ = state
             return jnp.logical_and(i < self.maxiter, ~converged)
 
-        # Initialize intercept with log(mean(y)) - mean(offset) for GLMs
-        beta_init = jnp.zeros(p)
-        if jnp.any(offset != 0):  # If we have offsets, adjust initialization
-            beta_init = beta_init.at[0].set(jnp.log(jnp.mean(y) + 1e-8) - jnp.mean(offset))
-        else:
-            beta_init = beta_init.at[0].set(jnp.log(jnp.mean(y) + 1e-8))
-
-        state = (0, False, beta_init)
+        # Initialize state
+        state = (0, False, init_params)
         final_state = jax.lax.while_loop(irls_cond, irls_step, state)
         _, _, beta_final = final_state
         return beta_final
@@ -99,32 +94,22 @@ class Regression:
         return se, stat, pval
 
     def _exact_solution(self, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Compute exact OLS solution with offset support."""
+        """Compute exact OLS solution with offset."""
         if offset is not None:
-            # For linear models with offsets: y - offset = Xβ
-            y_adjusted = y - offset
+            # Adjust y by subtracting offset for linear regression
+            y_adj = y - offset
         else:
-            y_adjusted = y
+            y_adj = y
 
         XtX = X.T @ X
-        Xty = X.T @ y_adjusted
+        Xty = X.T @ y_adj
         params = jax.scipy.linalg.solve(XtX, Xty, assume_a="pos")
         return params
 
-    def get_llf(
-        self,
-        X: jnp.ndarray,
-        y: jnp.ndarray,
-        params: jnp.ndarray,
-        offset: jnp.ndarray | None = None,
-    ) -> float:
+    def get_llf(self, X: jnp.ndarray, y: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> float:
         """Get log-likelihood at fitted parameters."""
-        nll = self._negative_log_likelihood(params, X, y, offset=offset)
-        return -nll
-
-    def predict(self, X: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Make predictions with the fitted model."""
-        raise NotImplementedError("Subclasses must implement predict method")
+        nll = self._negative_log_likelihood(params, X, y, offset)
+        return -nll  # Convert negative log-likelihood to log-likelihood
 
 
 @dataclass(frozen=True)
@@ -132,11 +117,7 @@ class LinearRegression(Regression):
     """Linear regression with OLS and offset support."""
 
     def _negative_log_likelihood(
-        self,
-        params: jnp.ndarray,
-        X: jnp.ndarray,
-        y: jnp.ndarray,
-        offset: jnp.ndarray | None = None,
+        self, params: jnp.ndarray, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None
     ) -> float:
         """Compute negative log likelihood (assuming Gaussian noise) with offset."""
         pred = jnp.dot(X, params)
@@ -146,13 +127,9 @@ class LinearRegression(Regression):
         return 0.5 * jnp.sum(residuals**2)
 
     def _compute_cov_matrix(
-        self,
-        X: jnp.ndarray,
-        params: jnp.ndarray,
-        y: jnp.ndarray,
-        offset: jnp.ndarray | None = None,
+        self, X: jnp.ndarray, params: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None
     ) -> jnp.ndarray:
-        """Compute covariance matrix for parameters."""
+        """Compute covariance matrix for parameters with offset."""
         n = X.shape[0]
         pred = X @ params
         if offset is not None:
@@ -161,15 +138,8 @@ class LinearRegression(Regression):
         sigma2 = jnp.sum(residuals**2) / (n - len(params))
         return sigma2 * jnp.linalg.pinv(X.T @ X)
 
-    def predict(self, X: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Make predictions with the linear model."""
-        pred = X @ params
-        if offset is not None:
-            pred = pred + offset
-        return pred
-
     def fit(self, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None) -> dict:
-        """Fit linear regression model with optional offset."""
+        """Fit linear regression model with optional offset and ANOVA analysis."""
         # Fit model
         params = self._exact_solution(X, y, offset)
 
@@ -192,11 +162,7 @@ class LogisticRegression(Regression):
     """Logistic regression with JAX and offset support."""
 
     def _negative_log_likelihood(
-        self,
-        params: jnp.ndarray,
-        X: jnp.ndarray,
-        y: jnp.ndarray,
-        offset: jnp.ndarray | None = None,
+        self, params: jnp.ndarray, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None
     ) -> float:
         """Compute negative log likelihood with offset."""
         logits = jnp.dot(X, params)
@@ -206,7 +172,7 @@ class LogisticRegression(Regression):
         return nll
 
     def _weight_fn(self, X: jnp.ndarray, beta: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Compute weights for IRLS."""
+        """Compute weights for IRLS with offset."""
         eta = X @ beta
         if offset is not None:
             eta = eta + offset
@@ -215,13 +181,9 @@ class LogisticRegression(Regression):
         return p * (1 - p)
 
     def _working_resid_fn(
-        self,
-        X: jnp.ndarray,
-        y: jnp.ndarray,
-        beta: jnp.ndarray,
-        offset: jnp.ndarray | None = None,
+        self, X: jnp.ndarray, y: jnp.ndarray, beta: jnp.ndarray, offset: jnp.ndarray | None = None
     ) -> jnp.ndarray:
-        """Compute working residuals for IRLS."""
+        """Compute working residuals for IRLS with offset."""
         eta = X @ beta
         if offset is not None:
             eta = eta + offset
@@ -229,104 +191,20 @@ class LogisticRegression(Regression):
         p = jax.nn.sigmoid(eta)
         return eta + (y - p) / jnp.clip(p * (1 - p), 1e-6)
 
-    def predict(self, X: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Make predictions with the logistic model (returns probabilities)."""
-        logits = X @ params
-        if offset is not None:
-            logits = logits + offset
-        return jax.nn.sigmoid(logits)
-
-    def fit(self, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None) -> dict:
-        """Fit logistic regression model with optional offset."""
-        # Fit model
-        if self.optimizer == "BFGS":
-            nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset)
-            params = self._fit_bfgs(nll, jnp.zeros(X.shape[1]))
-        elif self.optimizer == "IRLS":
-            params = self._fit_irls(X, y, self._weight_fn, self._working_resid_fn, offset=offset)
-        else:
-            raise ValueError(f"Unsupported optimizer: {self.optimizer}")
-
-        # Get log-likelihood
-        llf = self.get_llf(X, y, params, offset)
-
-        # Compute test statistics if requested
-        se = stat = pval = None
-        if not self.skip_wald:
-            nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset)
-            se, stat, pval = self._compute_wald_test(nll, params)
-
-        return {
-            "coef": params,
-            "llf": llf,
-            "se": se,
-            "stat": stat,
-            "pval": pval,
-        }
-
-
-@dataclass(frozen=True)
-class PoissonRegression(Regression):
-    """Poisson regression with JAX and offset support (useful for count data)."""
-
-    def _negative_log_likelihood(
-        self,
-        params: jnp.ndarray,
-        X: jnp.ndarray,
-        y: jnp.ndarray,
-        offset: jnp.ndarray | None = None,
-    ) -> float:
-        """Compute negative log likelihood with offset."""
-        eta = X @ params
-        if offset is not None:
-            eta = eta + offset
-        eta = jnp.clip(eta, -50, 50)  # Prevent overflow
-        mu = jnp.exp(eta)
-
-        # Poisson log-likelihood: log P(y|μ) = y*log(μ) - μ - log(y!)
-        # We drop the log(y!) term as it doesn't affect optimization
-        ll = jnp.sum(y * jnp.log(mu + 1e-8) - mu)
-        return -ll
-
-    def _weight_fn(self, X: jnp.ndarray, beta: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Compute weights for IRLS."""
-        eta = X @ beta
-        if offset is not None:
-            eta = eta + offset
-        eta = jnp.clip(eta, -50, 50)
-        mu = jnp.exp(eta)
-        return mu  # For Poisson, weight = variance = mean
-
-    def _working_resid_fn(
+    def fit(
         self,
         X: jnp.ndarray,
         y: jnp.ndarray,
-        beta: jnp.ndarray,
         offset: jnp.ndarray | None = None,
-    ) -> jnp.ndarray:
-        """Compute working residuals for IRLS."""
-        eta = X @ beta
-        if offset is not None:
-            eta = eta + offset
-        eta = jnp.clip(eta, -50, 50)
-        mu = jnp.exp(eta)
-        return eta + (y - mu) / jnp.clip(mu, 1e-6)
-
-    def predict(self, X: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Make predictions with the Poisson model (returns expected counts)."""
-        eta = X @ params
-        if offset is not None:
-            eta = eta + offset
-        return jnp.exp(eta)
-
-    def fit(self, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None) -> dict:
-        """Fit Poisson regression model with optional offset."""
+    ) -> dict:
+        """Fit logistic regression model with offset."""
         # Fit model
+        init_params = jnp.zeros(X.shape[1])
         if self.optimizer == "BFGS":
             nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset)
-            params = self._fit_bfgs(nll, jnp.zeros(X.shape[1]))
+            params = self._fit_bfgs(nll, init_params)
         elif self.optimizer == "IRLS":
-            params = self._fit_irls(X, y, self._weight_fn, self._working_resid_fn, offset=offset)
+            params = self._fit_irls(X, y, self._weight_fn, self._working_resid_fn, init_params, offset=offset)
         else:
             raise ValueError(f"Unsupported optimizer: {self.optimizer}")
 
@@ -352,70 +230,27 @@ class PoissonRegression(Regression):
 class NegativeBinomialRegression(Regression):
     """Negative Binomial regression with JAX and offset support."""
 
-    alpha: float | None = None
-    alpha_range: tuple[float, float] = (0.01, 10.0)
+    dispersion: float | None = None
+    dispersion_range: tuple[float, float] = (0.001, 10.0)
     estimation_method: str = "moments"
-
-    def _estimate_alpha(self, y: jnp.ndarray) -> float:
-        """Estimate dispersion parameter using specified method."""
-        if self.alpha is not None:
-            return self.alpha
-
-        if self.estimation_method not in ["moments", "intercept"]:
-            raise ValueError(
-                f"Unknown estimation_method: {self.estimation_method}. Must be either 'moments' or 'intercept'."
-            )
-
-        if self.estimation_method == "intercept":
-            return self._estimate_alpha_intercept(y)
-        else:  # method of moments (default)
-            return self._estimate_alpha_moments(y)[0]
-
-    def _estimate_alpha_moments(self, y: jnp.ndarray) -> tuple[float, float, float]:
-        """Estimate dispersion parameter using method of moments."""
-        mu = jnp.clip(jnp.mean(y), 1e-6)
-        var = jnp.clip(jnp.var(y), 1e-6)
-        alpha = jnp.clip((var - mu) / (mu**2), self.alpha_range[0], self.alpha_range[1])
-        return alpha, mu, var
-
-    def _estimate_alpha_intercept(self, y: jnp.ndarray) -> float:
-        """Estimate dispersion parameter using intercept-only model."""
-        # Estimate initial alpha using method of moments
-        alpha_init, mu, _ = self._estimate_alpha_moments(y)
-
-        def neg_ll(log_alpha):
-            alpha = jnp.clip(jnp.exp(log_alpha), 0.01, 10.0)
-            r = 1.0 / alpha
-            ll = (
-                jsp.special.gammaln(r + y)
-                - jsp.special.gammaln(r)
-                - jsp.special.gammaln(y + 1)
-                + r * jnp.log(r / (r + mu))
-                + y * jnp.log(mu / (r + mu))
-            )
-            return -jnp.sum(ll)
-
-        # Optimize log(alpha)
-        log_alpha_init = jnp.log(jnp.array([alpha_init]))
-        result = optimize.minimize(neg_ll, log_alpha_init, method="BFGS")
-        return jnp.clip(jnp.exp(result.x[0]), 0.01, 10.0)
 
     def _negative_log_likelihood(
         self,
         params: jnp.ndarray,
         X: jnp.ndarray,
         y: jnp.ndarray,
-        alpha: float,
         offset: jnp.ndarray | None = None,
+        dispersion: float = 1.0,
     ) -> float:
         """Compute negative log likelihood with offset."""
         eta = X @ params
         if offset is not None:
             eta = eta + offset
-        eta = jnp.clip(eta, -50, 50)
+        eta = jnp.clip(eta, -10, 10)
         mu = jnp.exp(eta)
-        alpha = jnp.clip(alpha, self.alpha_range[0], self.alpha_range[1])
-        r = 1.0 / alpha
+
+        # Get the size (r = alpha = 1 / dispersion)
+        r = 1 / jnp.clip(dispersion, self.dispersion_range[0], self.dispersion_range[1])
 
         ll = (
             jsp.special.gammaln(r + y)
@@ -427,84 +262,92 @@ class NegativeBinomialRegression(Regression):
         return -jnp.sum(ll)
 
     def _weight_fn(
-        self,
-        X: jnp.ndarray,
-        beta: jnp.ndarray,
-        alpha: float,
-        offset: jnp.ndarray | None = None,
+        self, X: jnp.ndarray, beta: jnp.ndarray, offset: jnp.ndarray | None = None, dispersion: float = 1.0
     ) -> jnp.ndarray:
-        """Compute weights for IRLS."""
+        """Compute weights for IRLS with offset."""
         eta = X @ beta
         if offset is not None:
             eta = eta + offset
         eta = jnp.clip(eta, -50, 50)
         mu = jnp.exp(eta)
-        var = mu + alpha * mu**2
-        return 1 / jnp.clip(var, 1e-6)
+
+        # Negative binomial variance = μ + φμ²
+        var = mu + dispersion * mu**2
+        # IRLS weights: (dμ/dη)² / var
+        # For log link: dμ/dη = μ
+        return mu**2 / jnp.clip(var, 1e-6)
 
     def _working_resid_fn(
         self,
         X: jnp.ndarray,
         y: jnp.ndarray,
         beta: jnp.ndarray,
-        alpha: float,
         offset: jnp.ndarray | None = None,
+        dispersion: float = 1.0,
     ) -> jnp.ndarray:
-        """Compute working residuals for IRLS."""
+        """Compute working residuals for IRLS with offset."""
         eta = X @ beta
         if offset is not None:
             eta = eta + offset
         eta = jnp.clip(eta, -50, 50)
         mu = jnp.exp(eta)
-        return eta + (y / jnp.clip(mu, 1e-6) - 1)
+
+        # Working response: z = η + (y - μ) * (dη/dμ)
+        # For log link: dη/dμ = 1/μ
+        return eta + (y - mu) / mu
 
     def get_llf(
         self,
         X: jnp.ndarray,
         y: jnp.ndarray,
         params: jnp.ndarray,
-        alpha: float,
         offset: jnp.ndarray | None = None,
+        dispersion: float = 1.0,
     ) -> float:
-        """Get log-likelihood at fitted parameters."""
-        nll = self._negative_log_likelihood(params, X, y, alpha, offset)
+        """Get log-likelihood at fitted parameters with offset."""
+        nll = self._negative_log_likelihood(params, X, y, offset, dispersion)
         return -nll
 
-    def predict(self, X: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
-        """Make predictions with the Negative Binomial model (returns expected counts)."""
-        eta = X @ params
-        if offset is not None:
-            eta = eta + offset
-        return jnp.exp(eta)
-
-    def fit(self, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None) -> dict:
-        """Fit negative binomial regression model with optional offset."""
+    def fit(
+        self,
+        X: jnp.ndarray,
+        y: jnp.ndarray,
+        offset: jnp.ndarray | None = None,
+    ) -> dict:
+        """Fit negative binomial regression model with offset."""
         # Estimate dispersion parameter
-        alpha = self._estimate_alpha(y)
+        if self.dispersion is not None:
+            dispersion = jnp.clip(self.dispersion, self.dispersion_range[0], self.dispersion_range[1])
+        else:
+            dispersion = DispersionEstimator().estimate_dispersion_single_gene(y, self.estimation_method)
+
+        # Initialize parameters
+        init_params = jnp.zeros(X.shape[1])
+
+        # Better initialization for intercept
+        if offset is not None:
+            init_params = init_params.at[0].set(jnp.log(jnp.mean(y) + 1e-8) - jnp.mean(offset))
+        else:
+            init_params = init_params.at[0].set(jnp.log(jnp.mean(y) + 1e-8))
 
         # Fit model
         if self.optimizer == "BFGS":
-            nll = partial(self._negative_log_likelihood, X=X, y=y, alpha=alpha, offset=offset)
-            params = self._fit_bfgs(nll, jnp.zeros(X.shape[1]))
+            nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset, dispersion=dispersion)
+            params = self._fit_bfgs(nll, init_params)
         elif self.optimizer == "IRLS":
             params = self._fit_irls(
-                X,
-                y,
-                self._weight_fn,
-                self._working_resid_fn,
-                offset=offset,
-                alpha=alpha,
+                X, y, self._weight_fn, self._working_resid_fn, init_params, offset=offset, dispersion=dispersion
             )
         else:
             raise ValueError(f"Unsupported optimizer: {self.optimizer}")
 
         # Get log-likelihood
-        llf = self.get_llf(X, y, params, alpha, offset)
+        llf = self.get_llf(X, y, params, offset, dispersion)
 
         # Compute test statistics if requested
         se = stat = pval = None
         if not self.skip_wald:
-            nll = partial(self._negative_log_likelihood, X=X, y=y, alpha=alpha, offset=offset)
+            nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset, dispersion=dispersion)
             se, stat, pval = self._compute_wald_test(nll, params)
 
         return {
@@ -513,7 +356,7 @@ class NegativeBinomialRegression(Regression):
             "se": se,
             "stat": stat,
             "pval": pval,
-            "alpha": alpha,
+            "dispersion": dispersion,
         }
 
 
@@ -639,7 +482,6 @@ class DispersionEstimator:
         else:
             raise ValueError(f"Unknown method for dispersion shrinkage: {method}")
 
-    # @partial(jax.jit, static_argnums=(0,))
     def _fit_trend_linear(self, dispersions: jnp.ndarray, mu: jnp.ndarray) -> jnp.ndarray:
         """Fit smooth trend to dispersions using local regression."""
         # Filter out extreme values for trend fitting
@@ -666,7 +508,6 @@ class DispersionEstimator:
 
         return jnp.clip(trend, self.dispersion_range[0], self.dispersion_range[1])
 
-    # @partial(jax.jit, static_argnums=(0,))
     def _fit_trend_parametric(self, dispersions: jnp.ndarray, mu: jnp.ndarray) -> jnp.ndarray:
         """Fit parametric curve to dispersion-mean relationship."""
         # Filter out extreme values for trend fitting
