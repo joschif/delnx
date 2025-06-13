@@ -95,6 +95,7 @@ def _run_nb_test(
     disp: jnp.ndarray | None = None,
     optimizer: str = "BFGS",
     maxiter: int = 100,
+    dispersion_method: str = "mle",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Run negative binomial regression test for a batch of features.
 
@@ -105,6 +106,9 @@ def _run_nb_test(
         disp: Dispersion parameters for each feature, shape (batch_size,)
         optimizer: Optimization algorithm to use
         maxiter: Maximum number of iterations for optimization
+        dispersion_method: Method to estimate gene-wise dispersions if not provided
+            - "mle": Maximum likelihood estimation
+            - "moments": Method of moments
 
     Returns
     -------
@@ -112,7 +116,7 @@ def _run_nb_test(
     """
 
     def fit_nb(x, disp):
-        return _fit_nb(x, cond, covars, disp, optimizer=optimizer, maxiter=maxiter)
+        return _fit_nb(x, cond, covars, disp, optimizer=optimizer, maxiter=maxiter, dispersion_method=dispersion_method)
 
     if disp is None:
         fit_nb_batch = jax.vmap(fit_nb, in_axes=(1, None), out_axes=(0, 0))
