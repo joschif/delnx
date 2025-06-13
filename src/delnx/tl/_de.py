@@ -27,9 +27,11 @@ def de(
     condition_key: str,
     group_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
-    method: Method = "deseq2",
-    backend: Backends = "statsmodels",
+    size_factors_key: str | None = None,
+    dispersions_key: str | None = None,
     covariate_keys: list[str] | None = None,
+    method: Method = "lr",
+    backend: Backends = "jax",
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
@@ -67,6 +69,10 @@ def de(
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
         - statsmodels: Use linear models from statsmodels
         - cuml: Use cuML for GPU-accelerated logistic regression
+    size_factors_key
+        Key in adata.obs containing size factors for normalization. Only used for "negbinom" method.
+    dispersions_key
+        Key in adata.var containing precomputed dispersions. Only used for "negbinom" method.
     covariate_keys
         Columns in adata.obs to include as covariate_keys
     mode
@@ -113,9 +119,18 @@ def de(
         for col in covariate_keys:
             if col not in adata.obs.columns:
                 raise ValueError(f"Covariate '{col}' not found in adata.obs")
+    if size_factors_key is not None and size_factors_key not in adata.obs.columns:
+        raise ValueError(f"Size factors key '{size_factors_key}' not found in adata.obs")
+    if dispersions_key is not None and dispersions_key not in adata.var.columns:
+        raise ValueError(f"Dispersions key '{dispersions_key}' not found in adata.var")
 
     # Get condition values
     condition_values = adata.obs[condition_key].values
+    # Get size factors and dispersions if provided
+    size_factors = adata.obs[size_factors_key].values if size_factors_key else None
+    dispersions = adata.var[dispersions_key].values if dispersions_key else None
+
+    # Validate conditions and get comparison levels
     levels, comparisons = _validate_conditions(condition_values, reference, mode)
 
     # Check if grouping requested
@@ -127,9 +142,10 @@ def de(
             condition_key=condition_key,
             reference=reference,
             group_key=group_key,
+            size_factors_key=size_factors_key,
+            covariate_keys=covariate_keys,
             method=method,
             backend=backend,
-            covariate_keys=covariate_keys,
             mode=mode,
             layer=layer,
             data_type=data_type,
@@ -230,6 +246,8 @@ def de(
                 feature_names=feature_names,
                 method=method,
                 condition_key=condition_key,
+                dispersions=dispersions,
+                size_factors=size_factors,
                 covariate_keys=covariate_keys,
                 batch_size=batch_size,
                 optimizer=optimizer,
@@ -246,6 +264,7 @@ def de(
                 method=method,
                 backend=backend,
                 condition_key=condition_key,
+                size_factors=size_factors,
                 covariate_keys=covariate_keys,
                 n_jobs=n_jobs,
                 verbose=verbose,
@@ -316,9 +335,10 @@ def grouped_de(
     condition_key: str,
     group_key: str,
     reference: str | tuple[str, str] | None = None,
+    size_factors_key: str | None = None,
+    covariate_keys: list[str] | None = None,
     method: Method = "deseq2",
     backend: Backends = "statsmodels",
-    covariate_keys: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
@@ -356,6 +376,8 @@ def grouped_de(
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
         - statsmodels: Use linear models from statsmodels
         - cuml: Use cuML for GPU-accelerated logistic regression
+    size_factors_key
+        Key in adata.obs containing size factors for normalization. Only used for "negbinom" method.
     covariate_keys
         Columns in adata.obs to include as covariate_keys
     mode
@@ -406,6 +428,7 @@ def grouped_de(
             group_key=None,
             method=method,
             backend=backend,
+            size_factors_key=size_factors_key,
             covariate_keys=covariate_keys,
             mode=mode,
             layer=layer,
