@@ -59,6 +59,7 @@ def count_data():
     n_samples, n_features = 150, 2
     X = np.random.randn(n_samples, n_features)
     X = np.column_stack([np.ones(n_samples), X])
+    size_factors = np.random.uniform(0.5, 2.0, size=n_samples)
     true_coef = np.array([2.0, 0.5, -0.3])
     true_dispersion = 0.1
 
@@ -73,6 +74,7 @@ def count_data():
         "y": jnp.array(y),
         "true_coef": jnp.array(true_coef),
         "true_dispersion": true_dispersion,
+        "size_factors": jnp.array(size_factors),
         "n_samples": n_samples,
         "n_features": n_features + 1,
     }
@@ -344,6 +346,30 @@ class TestNegativeBinomialRegression:
 
         # Check log-likelihood
         assert jnp.isfinite(result["llf"])
+
+    def test_fit_with_offset(self, count_data):
+        """Test fitting with an offset term."""
+        reg = NegativeBinomialRegression(dispersion=0.1, optimizer="BFGS")
+        offset = jnp.log(count_data["size_factors"])
+
+        # Fit with offset
+        result = reg.fit(count_data["X"], count_data["y"], offset=offset)
+
+        # Check return structure
+        required_keys = ["coef", "llf", "se", "stat", "pval"]
+        assert all(key in result for key in required_keys)
+
+        # Check coefficient shape
+        assert result["coef"].shape == (count_data["n_features"],)
+
+        # Check log-likelihood
+        assert jnp.isfinite(result["llf"])
+
+        # Fit without offset
+        result_no_offset = reg.fit(count_data["X"], count_data["y"])
+
+        # Check that coefficients are not identical
+        assert not jnp.allclose(result["coef"], result_no_offset["coef"])
 
     def test_weight_function(self, count_data):
         """Test IRLS weight function."""
