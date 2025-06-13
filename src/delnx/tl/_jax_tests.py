@@ -74,13 +74,16 @@ def _run_lr_test(
 
 
 @partial(jax.jit, static_argnums=(4, 5, 6))
-def _fit_nb(x, y, covars, disp, optimizer="BFGS", maxiter=100, dispersion_method="mle"):
+def _fit_nb(x, y, covars, disp, size_factors=None, optimizer="BFGS", maxiter=100, dispersion_method="mle"):
     """Fit single negative binomial regression model with JAX."""
-    model = NegativeBinomialRegression(dispersion=disp, optimizer=optimizer, maxiter=maxiter)
+    model = NegativeBinomialRegression(
+        dispersion=disp, optimizer=optimizer, maxiter=maxiter, dispersion_method=dispersion_method
+    )
 
     # Covars should already include intercept
     X = jnp.column_stack([covars, x])
-    results = model.fit(X, y)
+    offset = jnp.log(size_factors) if size_factors is not None else None
+    results = model.fit(X, y, offset=offset)
 
     coefs = results["coef"]
     pvals = results["pval"]
@@ -93,6 +96,7 @@ def _run_nb_test(
     cond: jnp.ndarray,
     covars: jnp.ndarray,
     disp: jnp.ndarray | None = None,
+    size_factors: jnp.ndarray | None = None,
     optimizer: str = "BFGS",
     maxiter: int = 100,
     dispersion_method: str = "mle",
@@ -104,6 +108,7 @@ def _run_nb_test(
         cond: Binary condition labels, shape (n_cells,)
         covars: Covariate data with intercept, shape (n_cells, n_covariates)
         disp: Dispersion parameters for each feature, shape (batch_size,)
+        size_factors: Size factors for normalization, shape (n_cells,), optional
         optimizer: Optimization algorithm to use
         maxiter: Maximum number of iterations for optimization
         dispersion_method: Method to estimate gene-wise dispersions if not provided
@@ -116,7 +121,16 @@ def _run_nb_test(
     """
 
     def fit_nb(x, disp):
-        return _fit_nb(x, cond, covars, disp, optimizer=optimizer, maxiter=maxiter, dispersion_method=dispersion_method)
+        return _fit_nb(
+            x,
+            cond,
+            covars,
+            disp,
+            size_factors=size_factors,
+            optimizer=optimizer,
+            maxiter=maxiter,
+            dispersion_method=dispersion_method,
+        )
 
     if disp is None:
         fit_nb_batch = jax.vmap(fit_nb, in_axes=(1, None), out_axes=(0, 0))
@@ -246,10 +260,6 @@ def _run_batched_de(
     -------
         DataFrame with test results for each feature
     """
-    # If size factors are provided, normalize the data
-    if size_factors is not None:
-        X /= size_factors[:, np.newaxis]
-
     # Prepare data for logistic regression
     if method == "lr":
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
@@ -271,6 +281,7 @@ def _run_batched_de(
                 conditions,
                 covars,
                 disp,
+                size_factors=size_factors,
                 optimizer=optimizer,
                 maxiter=maxiter,
                 dispersion_method=dispersion_method,
