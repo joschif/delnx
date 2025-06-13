@@ -339,7 +339,9 @@ def _run_de(
         """Process a single feature and return results or None if failed."""
         try:
             x = _to_dense(X[:, i]).flatten()
-            coef, pval = test_func(x, model_data, condition_key, covariate_keys, verbose=False)
+            coef, pval = test_func(
+                x, model_data, condition_key=condition_key, covariate_keys=covariate_keys, verbose=False
+            )
             return feature_names[i], coef, pval
         except Exception as e:  # noqa: BLE001
             if verbose:

@@ -207,11 +207,12 @@ def test_de_errors(adata_pb_counts):
 
 def test_de_binomial_binary(adata_small):
     """Test binomial DE method with binary data."""
-    # Run binomial DE analysis
+    # Run binomial DE analysis (currently only with statsmodels)
     de_results = de(
         adata_small,
         condition_key="condition",
         method="binomial",
+        backend="statsmodels",
         reference="control",
         data_type="binary",
         layer="binary",
