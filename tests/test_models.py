@@ -368,7 +368,7 @@ class TestNegativeBinomialRegression:
         # Fit without offset
         result_no_offset = reg.fit(count_data["X"], count_data["y"])
 
-        # Check that coefficients are not identical
+        # Check that coefficients are not identical -> offset is used
         assert not jnp.allclose(result["coef"], result_no_offset["coef"])
 
     def test_weight_function(self, count_data):
