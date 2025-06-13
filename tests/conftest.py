@@ -97,6 +97,7 @@ def adata_pb_counts(adata):
         layer="counts",
         mode="sum",
     )
+    adata_pb.obs["size_factor"] = adata_pb.obs["size_factor_libsize"] / adata_pb.obs["size_factor_libsize"].mean()
 
     return adata_pb
 
