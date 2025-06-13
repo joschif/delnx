@@ -330,6 +330,21 @@ class TestNegativeBinomialRegression:
         # Check log-likelihood
         assert jnp.isfinite(result["llf"])
 
+    def test_fit_with_full_dispersion(self, count_data):
+        """Test fitting with provided full dispersion estimates."""
+        reg = NegativeBinomialRegression(dispersion=count_data["true_dispersion"], optimizer="BFGS")
+        result = reg.fit(count_data["X"], count_data["y"])
+
+        # Check return structure
+        required_keys = ["coef", "llf", "se", "stat", "pval"]
+        assert all(key in result for key in required_keys)
+
+        # Check coefficient shape
+        assert result["coef"].shape == (count_data["n_features"],)
+
+        # Check log-likelihood
+        assert jnp.isfinite(result["llf"])
+
     def test_weight_function(self, count_data):
         """Test IRLS weight function."""
         reg = NegativeBinomialRegression(dispersion=0.1)
