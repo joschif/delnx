@@ -87,6 +87,7 @@ def dispersion_data():
     # True parameters
     true_mu = np.random.exponential(scale=100, size=n_genes)
     true_dispersions = np.random.gamma(shape=2.0, scale=0.05, size=n_genes)
+    size_factors = np.random.uniform(0.5, 2.0, size=n_samples)
 
     # Generate count matrix
     counts = np.zeros((n_samples, n_genes))
@@ -101,6 +102,7 @@ def dispersion_data():
         "counts": jnp.array(counts),
         "true_mu": jnp.array(true_mu),
         "true_dispersions": jnp.array(true_dispersions),
+        "size_factors": jnp.array(size_factors),
         "n_genes": n_genes,
         "n_samples": n_samples,
     }
@@ -435,25 +437,33 @@ class TestDispersionEstimator:
 
         # Test data with known mean and variance
         x = jnp.array([10, 15, 20, 25, 30])
-        disp, mu, var = estimator._estimate_dispersion_moments(x)
+        disp = estimator._estimate_dispersion_moments(x)
 
-        assert jnp.isfinite(disp) and jnp.isfinite(mu) and jnp.isfinite(var)
-        assert mu > 0 and var > 0 and disp > 0
+        assert jnp.isfinite(disp)
+        assert disp > 0
 
-        # Check the relationship: var = mu + disp * mu^2
-        expected_var = mu + disp * mu**2
-        np.testing.assert_allclose(var, expected_var, rtol=1e-10)
+        # Test with size factors
+        x = jnp.array([10, 15, 20, 25, 30])
+        size_factors = jnp.array([1.0, 1.2, 0.8, 1.5, 1.0])
+        disp = estimator._estimate_dispersion_moments(x, size_factors=size_factors)
+
+        assert jnp.isfinite(disp)
+        assert disp > 0
 
     def test_shrink_dispersions_edger(self, dispersion_data):
         """Test edgeR-style dispersion shrinkage."""
         estimator = DispersionEstimator()
 
         # Get initial dispersions
-        dispersions = estimator.estimate_dispersion(dispersion_data["counts"], method="moments")
+        dispersions = estimator.estimate_dispersion(
+            dispersion_data["counts"], method="moments", size_factors=dispersion_data["size_factors"]
+        )
         mean_counts = jnp.mean(dispersion_data["counts"], axis=0)
 
         # Apply shrinkage
-        shrunk = estimator.shrink_dispersion(dispersions, mean_counts, method="edger")
+        shrunk = estimator.shrink_dispersion(
+            dispersions, mean_counts, method="edger", size_factors=dispersion_data["size_factors"]
+        )
 
         assert shrunk.shape == dispersions.shape
         assert jnp.all(jnp.isfinite(shrunk))
