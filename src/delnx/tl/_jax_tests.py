@@ -124,7 +124,7 @@ def _run_nb_test(
         fit_nb_batch = jax.vmap(fit_nb, in_axes=(1, 0), out_axes=(0, 0))
         disp = disp.reshape(-1, 1) if disp.ndim == 1 else disp
 
-    coefs, pvals = fit_nb_batch(cond, X, covars, disp, optimizer, maxiter)
+    coefs, pvals = fit_nb_batch(X, disp)
     return coefs[:, -1], pvals[:, -1]
 
 
