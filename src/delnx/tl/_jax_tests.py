@@ -1,4 +1,4 @@
-"""JAX-accelerated differential expression test functions."""
+"""Batched differential expression test functions in JAX."""
 
 from functools import partial
 
@@ -9,6 +9,7 @@ import pandas as pd
 import patsy
 import scipy.stats as stats
 import tqdm
+from scipy import sparse
 
 from delnx._utils import _to_dense
 from delnx.models import LinearRegression, LogisticRegression, NegativeBinomialRegression
@@ -72,14 +73,17 @@ def _run_lr_test(
     return coefs, pvals
 
 
-@partial(jax.jit, static_argnums=(3, 4))
-def _fit_nb(x, y, covars, optimizer="BFGS", maxiter=100):
+@partial(jax.jit, static_argnums=(5, 6, 7))
+def _fit_nb(x, y, covars, disp, size_factors=None, optimizer="BFGS", maxiter=100, dispersion_method="mle"):
     """Fit single negative binomial regression model with JAX."""
-    model = NegativeBinomialRegression(estimation_method="intercept", optimizer=optimizer, maxiter=maxiter)
+    model = NegativeBinomialRegression(
+        dispersion=disp, optimizer=optimizer, maxiter=maxiter, dispersion_method=dispersion_method
+    )
 
     # Covars should already include intercept
     X = jnp.column_stack([covars, x])
-    results = model.fit(X, y)
+    offset = jnp.log(size_factors) if size_factors is not None else None
+    results = model.fit(X, y, offset=offset)
 
     coefs = results["coef"]
     pvals = results["pval"]
@@ -87,15 +91,15 @@ def _fit_nb(x, y, covars, optimizer="BFGS", maxiter=100):
     return coefs, pvals
 
 
-_fit_nb_batch = jax.vmap(_fit_nb, in_axes=(None, 1, None, None, None), out_axes=(0, 0))
-
-
 def _run_nb_test(
     X: jnp.ndarray,
     cond: jnp.ndarray,
     covars: jnp.ndarray,
+    disp: jnp.ndarray | None = None,
+    size_factors: jnp.ndarray | None = None,
     optimizer: str = "BFGS",
     maxiter: int = 100,
+    dispersion_method: str = "mle",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Run negative binomial regression test for a batch of features.
 
@@ -103,14 +107,38 @@ def _run_nb_test(
         X: Expression data for current batch, shape (n_cells, batch_size)
         cond: Binary condition labels, shape (n_cells,)
         covars: Covariate data with intercept, shape (n_cells, n_covariates)
+        disp: Dispersion parameters for each feature, shape (batch_size,)
+        size_factors: Size factors for normalization, shape (n_cells,), optional
         optimizer: Optimization algorithm to use
         maxiter: Maximum number of iterations for optimization
+        dispersion_method: Method to estimate gene-wise dispersions if not provided
+            - "mle": Maximum likelihood estimation
+            - "moments": Method of moments
 
     Returns
     -------
         Tuple of coefficients and p-values for the batch
     """
-    coefs, pvals = _fit_nb_batch(cond, X, covars, optimizer, maxiter)
+
+    def fit_nb(x, disp):
+        return _fit_nb(
+            x,
+            cond,
+            covars,
+            disp,
+            size_factors=size_factors,
+            optimizer=optimizer,
+            maxiter=maxiter,
+            dispersion_method=dispersion_method,
+        )
+
+    if disp is None:
+        fit_nb_batch = jax.vmap(fit_nb, in_axes=(1, None), out_axes=(0, 0))
+    else:
+        fit_nb_batch = jax.vmap(fit_nb, in_axes=(1, 0), out_axes=(0, 0))
+        disp = disp.reshape(-1, 1) if disp.ndim == 1 else disp
+
+    coefs, pvals = fit_nb_batch(X, disp)
     return coefs[:, -1], pvals[:, -1]
 
 
@@ -190,20 +218,24 @@ def _run_anova_test(
 
 
 def _run_batched_de(
-    X: np.ndarray,
+    X: np.ndarray | sparse.spmatrix,
     model_data: pd.DataFrame,
     feature_names: pd.Index,
     method: str,
     condition_key: str,
-    covariates: list[str] | None = None,
+    dispersions: np.ndarray | None = None,
+    size_factors: np.ndarray | None = None,
+    covariate_keys: list[str] | None = None,
+    dispersion_method: str = "mle",
     batch_size: int = 32,
     optimizer: str = "BFGS",
     maxiter: int = 100,
-    verbose: bool = False,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """Run differential expression analysis in batches.
 
-    Args:
+    Parameters
+    ----------
         X: Expression data matrix, shape (n_cells, n_features)
         model_data: DataFrame containing condition and covariate data
         feature_names: Names of features/genes
@@ -213,7 +245,14 @@ def _run_batched_de(
             - "anova": Linear model with ANOVA F-test
             - "anova_residual": Linear model with residual F-test
         condition_key: Name of condition column in model_data
-        covariates: Names of covariate columns in model_data
+        optimizer: Optimization algorithm to use
+        maxiter: Maximum number of iterations for optimization
+        dispersions: Dispersion estimates for negative binomial regression, shape (n_features,)
+        dispersion_method: Method to estimate gene-wise dispersions if not provided
+            - "mle": Maximum likelihood estimation
+            - "moments": Method of moments
+        size_factors: Size factors for normalization, shape (n_cells,)
+        covariate_keys: Names of covariate columns in model_data
         batch_size: Number of features to process per batch
         verbose: Whether to show progress bar
 
@@ -221,18 +260,10 @@ def _run_batched_de(
     -------
         DataFrame with test results for each feature
     """
-    # Process in batches
-    n_features = X.shape[1]
-    results = {
-        "feature": [],
-        "coef": [],
-        "pval": [],
-    }
-
     # Prepare data for logistic regression
     if method == "lr":
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
-        covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
+        covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
 
         def test_fn(x):
@@ -241,16 +272,25 @@ def _run_batched_de(
     # Prepare data for negative binomial regression
     elif method == "negbinom":
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
-        covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
+        covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
 
-        def test_fn(x):
-            return _run_nb_test(x, conditions, covars, optimizer=optimizer, maxiter=maxiter)
+        def test_fn(x, disp=None):
+            return _run_nb_test(
+                x,
+                conditions,
+                covars,
+                disp,
+                size_factors=size_factors,
+                optimizer=optimizer,
+                maxiter=maxiter,
+                dispersion_method=dispersion_method,
+            )
 
     # Prepare data for ANOVA tests
     elif method in ["anova", "anova_residual"]:
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
-        covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
+        covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
         anova_method = "anova" if method == "anova" else "residual"
 
@@ -260,11 +300,22 @@ def _run_batched_de(
     else:
         raise ValueError(f"Unsupported method: {method}")
 
-    # Process all batches
+    # Process run DE tests in batches
+    n_features = X.shape[1]
+    results = {
+        "feature": [],
+        "coef": [],
+        "pval": [],
+    }
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
         batch = slice(i, min(i + batch_size, n_features))
         X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
-        coefs, pvals = test_fn(X_batch)
+
+        if method == "negbinom" and dispersions is not None:
+            disp_batch = jnp.asarray(dispersions[batch], dtype=jnp.float32)
+            coefs, pvals = test_fn(X_batch, disp_batch)
+        else:
+            coefs, pvals = test_fn(X_batch)
 
         results["feature"].extend(feature_names[batch].tolist())
         results["coef"].extend(coefs.tolist())

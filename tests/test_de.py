@@ -22,13 +22,33 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
         method=method,
         backend=backend,
         reference="control",
+        size_factors_key="size_factors",
     )
 
     # Basic checks
     assert isinstance(de_results, pd.DataFrame)
     assert len(de_results) > 0
     assert len(de_results) > 50
-    assert all(col in de_results.columns for col in ["feature", "pval", "padj"])
+    assert all(col in de_results.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check against no size factors to see if they are actually used
+    de_results_nosf = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method=method,
+        backend=backend,
+        reference="control",
+        size_factors_key=None,
+    )
+
+    # Basic checks
+    assert isinstance(de_results_nosf, pd.DataFrame)
+    assert len(de_results_nosf) > 0
+    assert len(de_results_nosf) > 50
+    assert all(col in de_results_nosf.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check that results are different
+    assert not de_results[["pval", "padj", "coef"]].equals(de_results_nosf[["pval", "padj", "coef"]])
 
 
 @pytest.mark.parametrize(
@@ -187,11 +207,12 @@ def test_de_errors(adata_pb_counts):
 
 def test_de_binomial_binary(adata_small):
     """Test binomial DE method with binary data."""
-    # Run binomial DE analysis
+    # Run binomial DE analysis (currently only with statsmodels)
     de_results = de(
         adata_small,
         condition_key="condition",
         method="binomial",
+        backend="statsmodels",
         reference="control",
         data_type="binary",
         layer="binary",

@@ -27,9 +27,11 @@ def de(
     condition_key: str,
     group_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
-    method: Method = "deseq2",
-    backend: Backends = "statsmodels",
-    covariates: list[str] | None = None,
+    size_factors_key: str | None = None,
+    dispersions_key: str | None = None,
+    covariate_keys: list[str] | None = None,
+    method: Method = "lr",
+    backend: Backends = "jax",
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
@@ -55,7 +57,7 @@ def de(
     group_key
         Column in adata.obs for grouped DE testing
     method
-        Testing method to use. One of:
+        Testing method to use.
         - deseq2: DESeq2 for count data (with pydeseq2 backend)
         - negbinom: Negative binomial GLM and wald test (backends: jax, statsmodels)
         - lr: Logistic regression and likelihood ratio test (backends: jax, statsmodels, cuml)
@@ -67,10 +69,14 @@ def de(
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
         - statsmodels: Use linear models from statsmodels
         - cuml: Use cuML for GPU-accelerated logistic regression
-    covariates
-        Columns in adata.obs to include as covariates
+    size_factors_key
+        Key in adata.obs containing size factors for normalization. Only used for "negbinom" method.
+    dispersions_key
+        Key in adata.var containing precomputed dispersions. Only used for "negbinom" method.
+    covariate_keys
+        Columns in adata.obs to include as covariate_keys
     mode
-        How to perform comparisons. One of:
+        How to perform comparisons.
         - all_vs_ref: Compare all levels to reference
         - all_vs_all: Compare all pairs of levels
         - 1_vs_1: Compare only two levels (reference and comparison group)
@@ -109,13 +115,22 @@ def de(
     # Validate inputs
     if condition_key not in adata.obs.columns:
         raise ValueError(f"Condition key '{condition_key}' not found in adata.obs")
-    if covariates is not None:
-        for col in covariates:
+    if covariate_keys is not None:
+        for col in covariate_keys:
             if col not in adata.obs.columns:
                 raise ValueError(f"Covariate '{col}' not found in adata.obs")
+    if size_factors_key is not None and size_factors_key not in adata.obs.columns:
+        raise ValueError(f"Size factors key '{size_factors_key}' not found in adata.obs")
+    if dispersions_key is not None and dispersions_key not in adata.var.columns:
+        raise ValueError(f"Dispersions key '{dispersions_key}' not found in adata.var")
 
     # Get condition values
     condition_values = adata.obs[condition_key].values
+    # Get size factors and dispersions if provided
+    size_factors = adata.obs[size_factors_key].values if size_factors_key else None
+    dispersions = adata.var[dispersions_key].values if dispersions_key else None
+
+    # Validate conditions and get comparison levels
     levels, comparisons = _validate_conditions(condition_values, reference, mode)
 
     # Check if grouping requested
@@ -127,9 +142,10 @@ def de(
             condition_key=condition_key,
             reference=reference,
             group_key=group_key,
+            size_factors_key=size_factors_key,
+            covariate_keys=covariate_keys,
             method=method,
             backend=backend,
-            covariates=covariates,
             mode=mode,
             layer=layer,
             data_type=data_type,
@@ -154,18 +170,6 @@ def de(
     elif verbose:
         print(f"Using specified data type: {data_type}")
 
-    if method == "deseq2":
-        # Run DESeq2
-        return _run_deseq2(
-            adata=adata,
-            condition_key=condition_key,
-            comparisons=comparisons,
-            covariates=covariates,
-            layer=layer,
-            n_cpus=n_jobs,
-            verbose=verbose,
-        )
-
     # Validate method and data type combinations
     if method == "deseq2" and data_type != "counts":
         raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
@@ -189,6 +193,18 @@ def de(
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
 
+    if method == "deseq2":
+        # Run PyDESeq2
+        return _run_deseq2(
+            adata=adata,
+            condition_key=condition_key,
+            comparisons=comparisons,
+            covariate_keys=covariate_keys,
+            layer=layer,
+            n_cpus=n_jobs,
+            verbose=verbose,
+        )
+
     # Run tests for each comparison
     results = []
     for group1, group2 in comparisons:
@@ -209,7 +225,7 @@ def de(
             adata[all_mask, :],
             condition_key=condition_key,
             reference=group2,
-            covariates=covariates,
+            covariate_keys=covariate_keys,
         )
         condition_mask = model_data[condition_key].values == 1
 
@@ -230,7 +246,9 @@ def de(
                 feature_names=feature_names,
                 method=method,
                 condition_key=condition_key,
-                covariates=covariates,
+                dispersions=dispersions,
+                size_factors=size_factors,
+                covariate_keys=covariate_keys,
                 batch_size=batch_size,
                 optimizer=optimizer,
                 maxiter=maxiter,
@@ -246,7 +264,8 @@ def de(
                 method=method,
                 backend=backend,
                 condition_key=condition_key,
-                covariates=covariates,
+                size_factors=size_factors,
+                covariate_keys=covariate_keys,
                 n_jobs=n_jobs,
                 verbose=verbose,
             )
@@ -297,10 +316,14 @@ def de(
             "padj": padj,
         }
     )
-    results = results.merge(
-        padj_df,
-        on="feature",
-        how="left",
+    results = (
+        results.merge(
+            padj_df,
+            on="feature",
+            how="left",
+        )
+        .sort_values(by="padj")
+        .reset_index(drop=True)
     )
 
     # Reorder columns
@@ -312,9 +335,10 @@ def grouped_de(
     condition_key: str,
     group_key: str,
     reference: str | tuple[str, str] | None = None,
+    size_factors_key: str | None = None,
+    covariate_keys: list[str] | None = None,
     method: Method = "deseq2",
     backend: Backends = "statsmodels",
-    covariates: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
@@ -352,8 +376,10 @@ def grouped_de(
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
         - statsmodels: Use linear models from statsmodels
         - cuml: Use cuML for GPU-accelerated logistic regression
-    covariates
-        Columns in adata.obs to include as covariates
+    size_factors_key
+        Key in adata.obs containing size factors for normalization. Only used for "negbinom" method.
+    covariate_keys
+        Columns in adata.obs to include as covariate_keys
     mode
         How to perform comparisons
     layer
@@ -402,7 +428,8 @@ def grouped_de(
             group_key=None,
             method=method,
             backend=backend,
-            covariates=covariates,
+            size_factors_key=size_factors_key,
+            covariate_keys=covariate_keys,
             mode=mode,
             layer=layer,
             data_type=data_type,

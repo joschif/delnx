@@ -1,3 +1,5 @@
+"""Size factor computation for (single-cell) RNA-seq data."""
+
 from functools import partial
 
 import jax
@@ -10,6 +12,21 @@ from scipy.stats import gmean
 
 from delnx._utils import _get_layer, _to_dense
 from delnx.models import LinearRegression
+
+
+def _compute_cp10k_sf(adata, layer=None):
+    """Compute size factors using counts per 10,000 (CP10K) normalization."""
+    # Get expression matrix
+    X = _get_layer(adata, layer)
+
+    if sparse.issparse(X):
+        counts = np.asarray(X.sum(axis=1)).flatten()
+    else:
+        counts = X.sum(axis=1)
+
+    # Compute size factors
+    size_factors = counts / 10000.0
+    adata.obs["size_factor_cp10k"] = size_factors / np.mean(size_factors)
 
 
 def _compute_library_size(adata, layer=None):
@@ -196,7 +213,7 @@ def _compute_quantile_regression(
     adata.obs["size_factor_qreg"] = size_factors
 
 
-def size_factors(adata, method="median_ratio", layer=None, **kwargs):
+def size_factors(adata, method="library_size", layer=None, **kwargs):
     """Compute size factors for normalization.
 
     Parameters
@@ -209,6 +226,7 @@ def size_factors(adata, method="median_ratio", layer=None, **kwargs):
         - "TMM": edgeR-style TMM normalization
         - "quantile_regression": SCnorm-style quantile regression normalization
         - "library_size": Library size normalization (sum of counts)
+        - "cp10k": Counts per 10,000 normalization
     layer : str, optional
         Layer to use for size factor calculation. If None, use adata.X.
     **kwargs : dict
@@ -227,5 +245,7 @@ def size_factors(adata, method="median_ratio", layer=None, **kwargs):
         _compute_TMM(adata, layer=layer, **kwargs)
     elif method == "library_size":
         _compute_library_size(adata, layer)
+    elif method == "cp10k":
+        _compute_cp10k_sf(adata, layer)
     else:
         raise ValueError(f"Unsupported method: {method}")
