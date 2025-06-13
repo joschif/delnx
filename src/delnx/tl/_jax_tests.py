@@ -261,7 +261,7 @@ def _run_batched_de(
         covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
 
-        def test_fn(x, disp):
+        def test_fn(x, disp=None):
             return _run_nb_test(
                 x,
                 conditions,
@@ -296,7 +296,7 @@ def _run_batched_de(
         batch = slice(i, min(i + batch_size, n_features))
         X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
 
-        if method == "negbinom":
+        if method == "negbinom" and dispersions is not None:
             disp_batch = jnp.asarray(dispersions[batch], dtype=jnp.float32)
             coefs, pvals = test_fn(X_batch, disp_batch)
         else:
