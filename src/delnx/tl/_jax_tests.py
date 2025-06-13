@@ -73,7 +73,7 @@ def _run_lr_test(
     return coefs, pvals
 
 
-@partial(jax.jit, static_argnums=(4, 5, 6))
+@partial(jax.jit, static_argnums=(5, 6, 7))
 def _fit_nb(x, y, covars, disp, size_factors=None, optimizer="BFGS", maxiter=100, dispersion_method="mle"):
     """Fit single negative binomial regression model with JAX."""
     model = NegativeBinomialRegression(
