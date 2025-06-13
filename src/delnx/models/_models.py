@@ -232,7 +232,7 @@ class NegativeBinomialRegression(Regression):
 
     dispersion: float | None = None
     dispersion_range: tuple[float, float] = (0.001, 10.0)
-    estimation_method: str = "moments"
+    dispersion_method: str = "moments"
 
     def _negative_log_likelihood(
         self,
@@ -319,7 +319,7 @@ class NegativeBinomialRegression(Regression):
         if self.dispersion is not None:
             dispersion = jnp.clip(self.dispersion, self.dispersion_range[0], self.dispersion_range[1])
         else:
-            dispersion = DispersionEstimator().estimate_dispersion_single_gene(y, self.estimation_method)
+            dispersion = DispersionEstimator().estimate_dispersion_single_gene(y, self.dispersion_method)
 
         # Initialize parameters
         init_params = jnp.zeros(X.shape[1])
