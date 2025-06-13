@@ -22,7 +22,7 @@ def _run_lr_test(
     X: np.ndarray,
     model_data: pd.DataFrame,
     condition_key: str,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     verbose: bool = False,
 ) -> tuple[float, float]:
     """Run logistic regression with likelihood ratio test."""
@@ -30,8 +30,8 @@ def _run_lr_test(
     model_data["X"] = X
 
     covar_str = ""
-    if covariates:
-        covar_str = " + " + " + ".join(covariates)
+    if covariate_keys:
+        covar_str = " + " + " + ".join(covariate_keys)
 
     # Fit models
     full_formula = f"{condition_key} ~ X{covar_str}"
@@ -54,7 +54,7 @@ def _run_negbinom(
     model_data: pd.DataFrame,
     condition_key: str,
     size_factors: np.ndarray | None = None,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     verbose: bool = False,
 ) -> tuple[float, float]:
     """Run negative binomial GLM."""
@@ -62,8 +62,8 @@ def _run_negbinom(
     model_data["X"] = X
 
     covar_str = ""
-    if covariates:
-        covar_str = " + " + " + ".join(covariates)
+    if covariate_keys:
+        covar_str = " + " + " + ".join(covariate_keys)
 
     formula = f"X ~ {condition_key}{covar_str}"
 
@@ -84,7 +84,7 @@ def _run_anova(
     X: np.ndarray,
     model_data: pd.DataFrame,
     condition_key: str,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     method: str = "anova",
     verbose: bool = False,
 ) -> tuple[float, float]:
@@ -93,8 +93,8 @@ def _run_anova(
     model_data["X"] = X
 
     covar_str = ""
-    if covariates:
-        covar_str = " + " + " + ".join(covariates)
+    if covariate_keys:
+        covar_str = " + " + " + ".join(covariate_keys)
 
     null_formula = f"X ~ 1{covar_str}"
     formula = f"X ~ {condition_key}{covar_str}"
@@ -120,7 +120,7 @@ def _run_binomial(
     X: np.ndarray,
     model_data: pd.DataFrame,
     condition_key: str,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     verbose: bool = False,
 ) -> tuple[float, float]:
     """Run binomial GLM."""
@@ -128,8 +128,8 @@ def _run_binomial(
     model_data["X"] = X
 
     covar_str = ""
-    if covariates:
-        covar_str = " + " + " + ".join(covariates)
+    if covariate_keys:
+        covar_str = " + " + " + ".join(covariate_keys)
 
     # Use X as response and condition as predictor
     formula = f"X ~ {condition_key}{covar_str}"
@@ -145,7 +145,7 @@ def _run_deseq2(
     adata: AnnData,
     condition_key: str,
     comparisons: list[tuple[str, str]] | None = None,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     layer: str | None = None,
     n_cpus: int = 10,
     verbose: bool = False,
@@ -154,8 +154,8 @@ def _run_deseq2(
     inference = DefaultInference(n_cpus=n_cpus)
 
     design = f"~ {condition_key}"
-    if covariates:
-        design += " + " + " + ".join(covariates)
+    if covariate_keys:
+        design += " + " + " + ".join(covariate_keys)
 
     adata = adata.copy()
     adata.X = _get_layer(adata, layer).copy()
@@ -204,7 +204,7 @@ def _run_lrt_cuml(
     X: np.ndarray,
     model_data: pd.DataFrame,
     condition_key: str,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     verbose: bool = False,
 ) -> tuple[float, float]:
     """Run likelihood ratio test using cuML's LogisticRegression.
@@ -217,7 +217,7 @@ def _run_lrt_cuml(
         DataFrame containing condition and covariate values
     condition_key
         Name of condition column in model_data
-    covariates
+    covariate_keys
         Names of covariate columns in model_data
     verbose
         Whether to show warnings and errors
@@ -237,8 +237,8 @@ def _run_lrt_cuml(
     y = model_data[condition_key].values
 
     # Prepare covariate matrix if provided
-    if covariates:
-        Z = model_data[covariates].values
+    if covariate_keys:
+        Z = model_data[covariate_keys].values
         # Fit null model (intercept + covariates)
         X_null = np.column_stack([np.ones(X.shape[0]), Z])
         # Fit full model (intercept + feature + covariates)
@@ -292,7 +292,7 @@ def _run_de(
     method: str,
     backend: str = "statsmodels",
     size_factors: np.ndarray | None = None,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     n_jobs: int = 1,
     verbose: bool = False,
 ) -> pd.DataFrame:
@@ -314,7 +314,7 @@ def _run_de(
         Size factors for normalization, if applicable (e.g., for negative binomial)
     condition_key : str
         Name of condition column in model_data
-    covariates : list[str]
+    covariate_keys : list[str]
         Names of covariate columns in model_data
     n_jobs : int
         Number of parallel jobs for running tests. Use -1 to use all processors.
@@ -332,11 +332,14 @@ def _run_de(
             f"Method '{method}' not supported for backend '{backend}'. Available methods: {list(available_methods.keys())}"
         )
 
+    if method == "negbinom" and size_factors is not None:
+        test_func = partial(test_func, size_factors=size_factors)
+
     def _process_feature(i: int) -> tuple[str, float, float] | tuple[str, None, None]:
         """Process a single feature and return results or None if failed."""
         try:
             x = _to_dense(X[:, i]).flatten()
-            coef, pval = test_func(x, model_data, condition_key, covariates, verbose=False)
+            coef, pval = test_func(x, model_data, condition_key, covariate_keys, verbose=False)
             return feature_names[i], coef, pval
         except Exception as e:  # noqa: BLE001
             if verbose:

@@ -29,7 +29,7 @@ def de(
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
     backend: Backends = "statsmodels",
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
@@ -67,8 +67,8 @@ def de(
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
         - statsmodels: Use linear models from statsmodels
         - cuml: Use cuML for GPU-accelerated logistic regression
-    covariates
-        Columns in adata.obs to include as covariates
+    covariate_keys
+        Columns in adata.obs to include as covariate_keys
     mode
         How to perform comparisons.
         - all_vs_ref: Compare all levels to reference
@@ -109,8 +109,8 @@ def de(
     # Validate inputs
     if condition_key not in adata.obs.columns:
         raise ValueError(f"Condition key '{condition_key}' not found in adata.obs")
-    if covariates is not None:
-        for col in covariates:
+    if covariate_keys is not None:
+        for col in covariate_keys:
             if col not in adata.obs.columns:
                 raise ValueError(f"Covariate '{col}' not found in adata.obs")
 
@@ -129,7 +129,7 @@ def de(
             group_key=group_key,
             method=method,
             backend=backend,
-            covariates=covariates,
+            covariate_keys=covariate_keys,
             mode=mode,
             layer=layer,
             data_type=data_type,
@@ -183,7 +183,7 @@ def de(
             adata=adata,
             condition_key=condition_key,
             comparisons=comparisons,
-            covariates=covariates,
+            covariate_keys=covariate_keys,
             layer=layer,
             n_cpus=n_jobs,
             verbose=verbose,
@@ -209,7 +209,7 @@ def de(
             adata[all_mask, :],
             condition_key=condition_key,
             reference=group2,
-            covariates=covariates,
+            covariate_keys=covariate_keys,
         )
         condition_mask = model_data[condition_key].values == 1
 
@@ -230,7 +230,7 @@ def de(
                 feature_names=feature_names,
                 method=method,
                 condition_key=condition_key,
-                covariates=covariates,
+                covariate_keys=covariate_keys,
                 batch_size=batch_size,
                 optimizer=optimizer,
                 maxiter=maxiter,
@@ -246,7 +246,7 @@ def de(
                 method=method,
                 backend=backend,
                 condition_key=condition_key,
-                covariates=covariates,
+                covariate_keys=covariate_keys,
                 n_jobs=n_jobs,
                 verbose=verbose,
             )
@@ -318,7 +318,7 @@ def grouped_de(
     reference: str | tuple[str, str] | None = None,
     method: Method = "deseq2",
     backend: Backends = "statsmodels",
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     mode: ComparisonMode = "all_vs_all",
     layer: str | None = None,
     data_type: DataType = "auto",
@@ -356,8 +356,8 @@ def grouped_de(
         - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
         - statsmodels: Use linear models from statsmodels
         - cuml: Use cuML for GPU-accelerated logistic regression
-    covariates
-        Columns in adata.obs to include as covariates
+    covariate_keys
+        Columns in adata.obs to include as covariate_keys
     mode
         How to perform comparisons
     layer
@@ -406,7 +406,7 @@ def grouped_de(
             group_key=None,
             method=method,
             backend=backend,
-            covariates=covariates,
+            covariate_keys=covariate_keys,
             mode=mode,
             layer=layer,
             data_type=data_type,

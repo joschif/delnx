@@ -225,7 +225,7 @@ def _run_batched_de(
     condition_key: str,
     dispersions: np.ndarray | None = None,
     size_factors: np.ndarray | None = None,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
     dispersion_method: str = "mle",
     batch_size: int = 32,
     optimizer: str = "BFGS",
@@ -252,7 +252,7 @@ def _run_batched_de(
             - "mle": Maximum likelihood estimation
             - "moments": Method of moments
         size_factors: Size factors for normalization, shape (n_cells,)
-        covariates: Names of covariate columns in model_data
+        covariate_keys: Names of covariate columns in model_data
         batch_size: Number of features to process per batch
         verbose: Whether to show progress bar
 
@@ -263,7 +263,7 @@ def _run_batched_de(
     # Prepare data for logistic regression
     if method == "lr":
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
-        covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
+        covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
 
         def test_fn(x):
@@ -272,7 +272,7 @@ def _run_batched_de(
     # Prepare data for negative binomial regression
     elif method == "negbinom":
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
-        covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
+        covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
 
         def test_fn(x, disp=None):
@@ -290,7 +290,7 @@ def _run_batched_de(
     # Prepare data for ANOVA tests
     elif method in ["anova", "anova_residual"]:
         conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
-        covars = patsy.dmatrix(" + ".join(covariates), model_data) if covariates else np.ones((X.shape[0], 1))
+        covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
         covars = jnp.asarray(covars, dtype=jnp.float32)
         anova_method = "anova" if method == "anova" else "residual"
 
