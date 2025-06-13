@@ -297,10 +297,14 @@ def de(
             "padj": padj,
         }
     )
-    results = results.merge(
-        padj_df,
-        on="feature",
-        how="left",
+    results = (
+        results.merge(
+            padj_df,
+            on="feature",
+            how="left",
+        )
+        .sort_values(by="padj")
+        .reset_index(drop=True)
     )
 
     # Reorder columns
