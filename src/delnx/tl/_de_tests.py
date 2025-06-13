@@ -53,6 +53,7 @@ def _run_negbinom(
     X: np.ndarray,
     model_data: pd.DataFrame,
     condition_key: str,
+    size_factors: np.ndarray | None = None,
     covariates: list[str] | None = None,
     verbose: bool = False,
 ) -> tuple[float, float]:
@@ -66,9 +67,15 @@ def _run_negbinom(
 
     formula = f"X ~ {condition_key}{covar_str}"
 
-    # Fit model
     with suppress_output(verbose):
-        model = sm.NegativeBinomial.from_formula(formula, data=model_data).fit(disp=False)
+        # Use log(size_factors) as offset if provided
+        if size_factors is not None:
+            model_data["offset"] = np.log(size_factors)
+            model = sm.NegativeBinomial.from_formula(formula, data=model_data, offset=model_data["offset"]).fit(
+                disp=False
+            )
+        else:
+            model = sm.NegativeBinomial.from_formula(formula, data=model_data).fit(disp=False)
 
     return model.params[condition_key], model.pvalues[condition_key]
 
@@ -284,6 +291,7 @@ def _run_de(
     condition_key: str,
     method: str,
     backend: str = "statsmodels",
+    size_factors: np.ndarray | None = None,
     covariates: list[str] | None = None,
     n_jobs: int = 1,
     verbose: bool = False,
@@ -302,6 +310,8 @@ def _run_de(
         DE method to use: "lr", "negbinom", "anova", "binomial"
     backend : str
         Backend to use for testing. Currently supports "statsmodels" and "cuml".
+    size_factors : np.ndarray | None
+        Size factors for normalization, if applicable (e.g., for negative binomial)
     condition_key : str
         Name of condition column in model_data
     covariates : list[str]
