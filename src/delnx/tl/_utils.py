@@ -116,17 +116,17 @@ def _prepare_model_data(
     adata: AnnData,
     condition_key: str,
     reference: str,
-    covariates: list[str] | None = None,
+    covariate_keys: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Prepare data frame for statsmodels."""
+    """Prepare data frame for fitting models."""
     model_data = pd.DataFrame(index=range(adata.n_obs))
 
     # Set up condition
     model_data[condition_key] = (adata.obs[condition_key].values != reference).astype(int)
 
     # Add covariates
-    if covariates is not None:
-        for cov in covariates:
+    if covariate_keys is not None:
+        for cov in covariate_keys:
             model_data[cov] = adata.obs[cov].values
 
     return model_data
