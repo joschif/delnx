@@ -390,7 +390,8 @@ def de(
         all_mask = mask1 | mask2
 
         # Get data for tests
-        data = X[all_mask, :]
+        X_comp = X[all_mask, :]
+        sf_comp = size_factors[all_mask] if size_factors is not None else None
         model_data = _prepare_model_data(
             adata[all_mask, :],
             condition_key=condition_key,
@@ -399,25 +400,26 @@ def de(
         )
         condition_mask = model_data[condition_key].values == 1
 
-        log2fc = _log2fc(X=data, condition_mask=condition_mask, data_type=data_type)
+        # Calculate log2 fold change
+        log2fc = _log2fc(X=X_comp, condition_mask=condition_mask, data_type=data_type)
         # Apply log2fc threshold
-        mask = np.abs(log2fc) > log2fc_threshold
-        data = data[:, mask]
-        feature_names = adata.var_names[mask]
+        feature_mask = np.abs(log2fc) > log2fc_threshold
+        X_comp = X_comp[:, feature_mask]
+        feature_names = adata.var_names[feature_mask]
 
         if verbose:
-            print(f"{np.sum(mask)} features passed log2fc threshold of {log2fc_threshold}")
+            print(f"{np.sum(feature_mask)} features passed log2fc threshold of {log2fc_threshold}")
 
         if backend == "jax":
             # Run batched DE test
             group_results = _run_batched_de(
-                X=data,
+                X=X_comp,
                 model_data=model_data,
                 feature_names=feature_names,
                 method=method,
                 condition_key=condition_key,
                 dispersions=dispersions,
-                size_factors=size_factors,
+                size_factors=sf_comp,
                 covariate_keys=covariate_keys,
                 batch_size=batch_size,
                 optimizer=optimizer,
@@ -428,7 +430,7 @@ def de(
         else:
             # Run test per gene
             group_results = _run_de(
-                X=data,
+                X=X_comp,
                 model_data=model_data,
                 feature_names=feature_names,
                 method=method,
@@ -440,7 +442,7 @@ def de(
                 verbose=verbose,
             )
 
-        auroc = _batched_auroc(X=data, groups=model_data[condition_key].values, batch_size=batch_size)
+        auroc = _batched_auroc(X=X_comp, groups=model_data[condition_key].values, batch_size=batch_size)
         auroc_df = pd.DataFrame(
             {
                 "feature": feature_names,
@@ -454,7 +456,7 @@ def de(
         group_results["ref_condition"] = group2
         logfc_df = pd.DataFrame(
             {
-                "log2fc": log2fc[mask],
+                "log2fc": log2fc[feature_mask],
                 "feature": feature_names,
             }
         )
