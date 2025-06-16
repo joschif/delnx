@@ -176,7 +176,7 @@ class LogisticRegression(Regression):
         eta = X @ beta
         if offset is not None:
             eta = eta + offset
-        eta = jnp.clip(eta, -10, 10)
+        eta = jnp.clip(eta, -50, 50)
         p = jax.nn.sigmoid(eta)
         return p * (1 - p)
 
@@ -187,7 +187,7 @@ class LogisticRegression(Regression):
         eta = X @ beta
         if offset is not None:
             eta = eta + offset
-        eta = jnp.clip(eta, -10, 10)
+        eta = jnp.clip(eta, -50, 50)
         p = jax.nn.sigmoid(eta)
         return eta + (y - p) / jnp.clip(p * (1 - p), 1e-6)
 
@@ -231,7 +231,7 @@ class NegativeBinomialRegression(Regression):
     """Negative Binomial regression with JAX and offset support."""
 
     dispersion: float | None = None
-    dispersion_range: tuple[float, float] = (0.001, 10.0)
+    dispersion_range: tuple[float, float] = (1e-6, 10.0)
     dispersion_method: str = "moments"
 
     def _negative_log_likelihood(
@@ -246,7 +246,7 @@ class NegativeBinomialRegression(Regression):
         eta = X @ params
         if offset is not None:
             eta = eta + offset
-        eta = jnp.clip(eta, -10, 10)
+        eta = jnp.clip(eta, -50, 50)
         mu = jnp.exp(eta)
 
         # Get the size (r = alpha = 1 / dispersion)
@@ -364,7 +364,7 @@ class NegativeBinomialRegression(Regression):
 class DispersionEstimator:
     """Estimate dispersion parameter for Negative Binomial regression."""
 
-    dispersion_range: tuple[float, float] = (1e-4, 10.0)
+    dispersion_range: tuple[float, float] = (1e-6, 10.0)
     shrinkage_weight_range: tuple[float, float] = (0.05, 0.95)
     prior_variance: float = 0.25
     prior_df: float = 10.0
