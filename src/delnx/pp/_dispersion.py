@@ -127,10 +127,10 @@ def dispersion(
 
     if size_factor_key is not None:
         size_factors = adata.obs[size_factor_key].values
-        X /= size_factors[:, None]
+        X_norm = X / size_factors[:, None]
 
     dispersions = _estimate_dispersion_batched(
-        X=X,
+        X=X_norm,
         method=method,
         dispersion_range=dispersion_range,
         shrinkage_weight_range=shrinkage_weight_range,
