@@ -17,7 +17,6 @@ def _log2fc(
     X: np.ndarray,
     condition_mask: np.ndarray,
     data_type: DataType,
-    size_factors: np.ndarray | None = None,
     eps: float = 1e-8,
 ) -> np.ndarray:
     """Calculate log2 fold changes between two conditions.
@@ -33,8 +32,6 @@ def _log2fc(
         - counts: Raw count data
         - lognorm: Log-normalized data (assumed to be log1p of normalized counts)
         - binary: Binary data
-    size_factors
-        Size factors for normalization (optional, used for count data)
     eps
         Small constant to add for numerical stability with raw counts
 
@@ -56,11 +53,6 @@ def _log2fc(
         # compute means, then take log2 ratio
         ref_data = np.expm1(ref_data.astype(np.float64))
         test_data = np.expm1(test_data.astype(np.float64))
-
-    elif (data_type == "counts") & (size_factors is not None):
-        # Normalize by size factors if provided
-        ref_data = ref_data / size_factors[~condition_mask][:, np.newaxis]
-        test_data = test_data / size_factors[condition_mask][:, np.newaxis]
 
     ref_means = ref_data.mean(axis=0) + eps
     test_means = test_data.mean(axis=0) + eps

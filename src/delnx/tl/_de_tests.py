@@ -146,6 +146,7 @@ def _run_deseq2(
     condition_key: str,
     comparisons: list[tuple[str, str]] | None = None,
     covariate_keys: list[str] | None = None,
+    multitest_method: str = "fdr_bh",
     layer: str | None = None,
     n_cpus: int = 10,
     verbose: bool = False,
@@ -185,11 +186,12 @@ def _run_deseq2(
             results_df["ref_condition"] = group2
             results.append(results_df)
 
-    results_df = pd.concat(results)
+    results = pd.concat(results)
 
-    # Rename columns
-    results_df["feature"] = results_df.index.values
-    results_df.rename(
+    # Rename columns and drop index
+    results["feature"] = results.index.values
+    results.reset_index(drop=True, inplace=True)
+    results.rename(
         columns={
             "pvalue": "pval",
             "log2FoldChange": "log2fc",
@@ -197,7 +199,20 @@ def _run_deseq2(
         inplace=True,
     )
 
-    return results_df[["feature", "test_condition", "ref_condition", "log2fc", "stat", "pval", "padj"]]
+    # Perform multiple testing correction
+    padj = sm.stats.multipletests(
+        results["pval"][results["pval"].notna()].values,
+        method=multitest_method,
+    )[1]
+    results["padj"] = np.nan  # Initialize with NaN
+    results.loc[results["pval"].notna(), "padj"] = padj
+
+    results.sort_values(
+        by=["test_condition", "ref_condition", "padj"],
+        inplace=True,
+    )
+
+    return results[["feature", "test_condition", "ref_condition", "log2fc", "stat", "pval", "padj"]]
 
 
 def _run_lrt_cuml(

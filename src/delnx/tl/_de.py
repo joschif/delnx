@@ -86,17 +86,39 @@ def _grouped_de(
         group_results["group"] = group
         results.append(group_results)
 
-    # Combine results and add multiple testing correction
-    if len(results) == 0:
-        raise ValueError("No valid groups found for differential expression analysis")
+    results = pd.concat(results, axis=0).reset_index(drop=True)
 
-    results = pd.concat(results, axis=0)
-    results["padj"] = sm.stats.multipletests(
-        results["pval"],
+    # Check if any results are valid
+    if len(results) == 0 or results["pval"].isna().all():
+        raise ValueError(
+            "Differential expression analysis failed for all groups. Please check the input data or set `verbose=True` for more details."
+        )
+
+    # Perform multiple testing correction
+    padj = sm.stats.multipletests(
+        results["pval"][results["pval"].notna()].values,
         method=multitest_method,
     )[1]
+    results["padj"] = np.nan  # Initialize with NaN
+    results.loc[results["pval"].notna(), "padj"] = padj
 
-    return results
+    results = results.sort_values(
+        by=["test_condition", "ref_condition", "padj"],
+    ).reset_index(drop=True)
+
+    # Reorder columns
+    return results[
+        [
+            "feature",
+            "test_condition",
+            "ref_condition",
+            "log2fc",
+            "auroc",
+            "coef",
+            "pval",
+            "padj",
+        ]
+    ]
 
 
 def de(
@@ -367,6 +389,7 @@ def de(
             condition_key=condition_key,
             comparisons=comparisons,
             covariate_keys=covariate_keys,
+            multitest_method=multitest_method,
             layer=layer,
             n_cpus=n_jobs,
             verbose=verbose,
@@ -392,6 +415,12 @@ def de(
         # Get data for tests
         X_comp = X[all_mask, :]
         sf_comp = size_factors[all_mask] if size_factors is not None else None
+
+        if data_type == "counts" and size_factors is not None:
+            X_norm = X_comp / sf_comp[:, np.newaxis]
+        else:
+            X_norm = X_comp
+
         model_data = _prepare_model_data(
             adata[all_mask, :],
             condition_key=condition_key,
@@ -401,11 +430,13 @@ def de(
         condition_mask = model_data[condition_key].values == 1
 
         # Calculate log2 fold change
-        log2fc = _log2fc(X=X_comp, condition_mask=condition_mask, data_type=data_type)
+        log2fc = _log2fc(X=X_norm, condition_mask=condition_mask, data_type=data_type)
+
         # Apply log2fc threshold
         feature_mask = np.abs(log2fc) > log2fc_threshold
         X_comp = X_comp[:, feature_mask]
-        feature_names = adata.var_names[feature_mask]
+        X_norm = X_norm[:, feature_mask]
+        feature_names = adata.var_names[feature_mask].values
 
         if verbose:
             print(f"{np.sum(feature_mask)} features passed log2fc threshold of {log2fc_threshold}")
@@ -442,7 +473,7 @@ def de(
                 verbose=verbose,
             )
 
-        auroc = _batched_auroc(X=X_comp, groups=model_data[condition_key].values, batch_size=batch_size)
+        auroc = _batched_auroc(X=X_norm, groups=model_data[condition_key].values, batch_size=batch_size)
         auroc_df = pd.DataFrame(
             {
                 "feature": feature_names,
@@ -471,32 +502,25 @@ def de(
         )
         results.append(group_results)
 
-    results = pd.concat(results, axis=0)
+    results = pd.concat(results, axis=0).reset_index(drop=True)
 
     # Check if any valid comparisons were found (length > 0 and not all pvals are NaN)
     if len(results) == 0 or results["pval"].isna().all():
-        raise ValueError("No valid comparisons found for differential expression analysis")
+        raise ValueError(
+            "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
+        )
 
-    # Combine results and add multiple testing correction
+    # Perform multiple testing correction
     padj = sm.stats.multipletests(
-        results["pval"][results["pval"].notna()],
+        results["pval"][results["pval"].notna()].values,
         method=multitest_method,
     )[1]
-    padj_df = pd.DataFrame(
-        {
-            "feature": results["feature"][results["pval"].notna()],
-            "padj": padj,
-        }
-    )
-    results = (
-        results.merge(
-            padj_df,
-            on="feature",
-            how="left",
-        )
-        .sort_values(by="padj")
-        .reset_index(drop=True)
-    )
+    results["padj"] = np.nan  # Initialize with NaN
+    results.loc[results["pval"].notna(), "padj"] = padj
+
+    results = results.sort_values(
+        by=["test_condition", "ref_condition", "padj"],
+    ).reset_index(drop=True)
 
     # Reorder columns
     return results[
