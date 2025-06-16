@@ -22,6 +22,81 @@ from ._utils import (
 SUPPORTED_BACKENDS = ["jax", "statsmodels", "cuml"]
 
 
+def _grouped_de(
+    adata: AnnData,
+    condition_key: str,
+    group_key: str,
+    reference: str | tuple[str, str] | None = None,
+    size_factors_key: str | None = None,
+    covariate_keys: list[str] | None = None,
+    method: Method = "lr",
+    backend: Backends = "jax",
+    mode: ComparisonMode = "all_vs_all",
+    layer: str | None = None,
+    data_type: DataType = "auto",
+    log2fc_threshold: float = 0.0,
+    min_samples: int = 2,
+    multitest_method: str = "fdr_bh",
+    n_jobs: int = 1,
+    batch_size: int = 2048,
+    optimizer: str = "BFGS",
+    maxiter: int = 100,
+    verbose: bool = True,
+):
+    """
+    Perform differential expression analysis for each group separately.
+    This function runs DE tests for each unique group in `adata.obs[group_key]`
+    and combines the results.
+    """  # noqa: D205
+    results = []
+    for group in adata.obs[group_key].unique():
+        mask = adata.obs[group_key].values == group
+        if sum(mask) < (min_samples * 2):
+            if verbose:
+                warnings.warn(
+                    f"Skipping group {group} with < {min_samples * 2} samples",
+                    stacklevel=2,
+                )
+            continue
+
+        # Run DE for group
+        group_results = de(
+            adata=adata[mask, :],
+            condition_key=condition_key,
+            reference=reference,
+            group_key=None,
+            method=method,
+            backend=backend,
+            size_factors_key=size_factors_key,
+            covariate_keys=covariate_keys,
+            mode=mode,
+            layer=layer,
+            data_type=data_type,
+            log2fc_threshold=log2fc_threshold,
+            min_samples=min_samples,
+            multitest_method=multitest_method,
+            n_jobs=n_jobs,
+            batch_size=batch_size,
+            optimizer=optimizer,
+            maxiter=maxiter,
+            verbose=verbose,
+        )
+        group_results["group"] = group
+        results.append(group_results)
+
+    # Combine results and add multiple testing correction
+    if len(results) == 0:
+        raise ValueError("No valid groups found for differential expression analysis")
+
+    results = pd.concat(results, axis=0)
+    results["padj"] = sm.stats.multipletests(
+        results["pval"],
+        method=multitest_method,
+    )[1]
+
+    return results
+
+
 def de(
     adata: AnnData,
     condition_key: str,
@@ -44,73 +119,162 @@ def de(
     maxiter: int = 100,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Run differential expression between condition levels.
+    """
+    Perform differential expression analysis between condition levels.
+
+    This function runs differential expression testing using various statistical methods
+    and backends. It supports both single and grouped comparisons with multiple
+    testing correction.
 
     Parameters
     ----------
-    adata
-        AnnData object
-    condition_key
-        Column in adata.obs containing condition values
-    reference
-        Reference condition level or tuple (reference, comparison)
-    group_key
-        Column in adata.obs for grouped DE testing
-    method
-        Testing method to use.
-        - deseq2: DESeq2 for count data (with pydeseq2 backend)
-        - negbinom: Negative binomial GLM and wald test (backends: jax, statsmodels)
-        - lr: Logistic regression and likelihood ratio test (backends: jax, statsmodels, cuml)
-        - anova: ANOVA based on a linear model (backends: jax, statsmodels)
-        - anova_residual: Linear model with residual F-test (backends: jax, statsmodels)
-        - binomial: Binomial GLM (backends: statsmodels)
-    backend
-        Backend to use for linear mdoel-based DE methods.
-        - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
-        - statsmodels: Use linear models from statsmodels
-        - cuml: Use cuML for GPU-accelerated logistic regression
-    size_factors_key
-        Key in adata.obs containing size factors for normalization. Only used for "negbinom" method.
-    dispersions_key
-        Key in adata.var containing precomputed dispersions. Only used for "negbinom" method.
-    covariate_keys
-        Columns in adata.obs to include as covariate_keys
-    mode
-        How to perform comparisons.
-        - all_vs_ref: Compare all levels to reference
-        - all_vs_all: Compare all pairs of levels
-        - 1_vs_1: Compare only two levels (reference and comparison group)
-    layer
-        Layer in adata to use
-    data_type
-        Type of data:
-        - counts: Raw count data
-        - lognorm: Log-normalized data (assumed to be log1p of normalized counts)
-        - binary: Binary data
-        - auto: Automatically infer data type
-    log2fc_threshold
-        Minimum absolute log2 fold change to consider
-    min_samples
-        Minimum number of samples per condition level
-    multitest_method
-        Method for multiple testing correction
-    n_jobs
-        Number of parallel jobs
-    batch_size
-        Number of features to process per batch. For very large datasets (>1M samples) or if you have memory issues, you can reduce this.
-    optimizer
-        Optimizer to use for certain JAX methods.
-        - BFGS: BFGS optimizer throgh jax.scipy.optimize
-        - IRLS: Iteratively reweighted least squares (experimental)
-    maxiter
-        Maximum number of iterations for optimization
-    verbose
-        Whether to print progress messages
+    adata : AnnData
+        Annotated data object containing expression data and metadata.
+    condition_key : str
+        Column name in `adata.obs` containing condition labels for comparison.
+    group_key : str, optional
+        Column name in `adata.obs` for grouped differential expression testing
+        (e.g., cell type). If provided, DE testing is performed separately for
+        each group. Default is None.
+    reference : str or tuple of str, optional
+        Reference condition for comparison. Can be:
+        - Single string: reference condition for all comparisons
+        - Tuple (reference, comparison): specific pair to compare
+        - None: automatically determined based on mode
+        Default is None.
+    size_factors_key : str, optional
+        Column name in `adata.obs` containing size factors for normalization.
+        Used as offset in negative binomial models. Default is None.
+    dispersions_key : str, optional
+        Column name in `adata.var` containing precomputed dispersions.
+        Only used for negative binomial methods. Default is None.
+    covariate_keys : list of str, optional
+        List of column names in `adata.obs` to include as covariates in the model.
+        Default is None.
+    method : {"lr", "deseq2", "negbinom", "anova", "anova_residual", "binomial"}
+        Statistical method for differential expression testing:
+        - "lr": Logistic regression with likelihood ratio test
+        - "deseq2": DESeq2 method for count data (requires pydeseq2)
+        - "negbinom": Negative binomial GLM with Wald test
+        - "anova": ANOVA based on linear model
+        - "anova_residual": Linear model with residual F-test
+        - "binomial": Binomial GLM
+        Default is "lr".
+    backend : {"jax", "statsmodels", "cuml"}
+        Computational backend for linear model-based methods:
+        - "jax": Custom JAX implementation (batched, GPU-accelerated)
+        - "statsmodels": Standard statsmodels implementation
+        - "cuml": cuML for GPU-accelerated logistic regression
+        Default is "jax".
+    mode : {"all_vs_all", "all_vs_ref", "1_vs_1"}
+        Comparison strategy:
+        - "all_vs_all": Compare all pairs of condition levels
+        - "all_vs_ref": Compare all levels against reference
+        - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
+        Default is "all_vs_all".
+    layer : str, optional
+        Layer name in `adata.layers` to use for expression data.
+        If None, uses `adata.X`. Default is None.
+    data_type : {"auto", "counts", "lognorm", "binary"}
+        Type of expression data:
+        - "auto": Automatically infer from data
+        - "counts": Raw count data
+        - "lognorm": Log-normalized data (log1p of normalized counts)
+        - "binary": Binary expression data
+        Default is "auto".
+    log2fc_threshold : float
+        Minimum absolute log2 fold change threshold for feature inclusion.
+        Features below this threshold are excluded from testing. Default is 0.0.
+    min_samples : int
+        Minimum number of samples required per condition level.
+        Comparisons with fewer samples are skipped. Default is 2.
+    multitest_method : str
+        Method for multiple testing correction. Accepts any method supported
+        by `statsmodels.stats.multipletests`. Common options include:
+        - "fdr_bh": Benjamini-Hochberg FDR correction
+        - "bonferroni": Bonferroni correction
+        Default is "fdr_bh".
+    n_jobs : int
+        Number of parallel jobs for non-JAX backends. Default is 1.
+    batch_size : int
+        Number of features to process per batch. Reduce for memory-constrained
+        environments or very large datasets (>1M samples). Default is 2048.
+    optimizer : {"BFGS", "IRLS"}
+        Optimization algorithm for JAX backend:
+        - "BFGS": BFGS optimizer via jax.scipy.optimize
+        - "IRLS": Iteratively reweighted least squares (experimental)
+        Default is "BFGS".
+    maxiter : int
+        Maximum number of optimization iterations. Default is 100.
+    verbose : bool
+        Whether to print progress messages and warnings. Default is True.
 
     Returns
     -------
-    pandas.DataFrame
-        Differential expression results
+    pd.DataFrame
+        Differential expression results with columns:
+        - "feature": Feature/gene names
+        - "test_condition": Test condition label
+        - "ref_condition": Reference condition label
+        - "log2fc": Log2 fold change (test vs reference)
+        - "auroc": Area under ROC curve
+        - "coef": Model coefficient
+        - "pval": Raw p-value
+        - "padj": Adjusted p-value (multiple testing corrected)
+        - "group": Group label (only for grouped DE)
+
+    Raises
+    ------
+    ValueError
+        If required keys are missing from adata.obs/var, if method and data_type
+        are incompatible, or if no valid comparisons are found.
+
+    Examples
+    --------
+    Basic differential expression between two conditions:
+
+    >>> results = de(adata, condition_key="treatment", reference="control", mode="all_vs_ref")
+
+    Pairwise DE testing between all conditions:
+    >>> results = de(adata, condition_key="treatment", mode="all_vs_all")
+
+    Grouped DE by cell type with covariates:
+
+    >>> results = de(
+    ...     adata, condition_key="disease_state", group_key="cell_type", covariate_keys=["age", "sex"], method="deseq2"
+    ... )
+
+    Testing on count data with a negative binomial model:
+
+    >>> results = de(
+    ...     adata,
+    ...     condition_key="condition",
+    ...     method="negbinom",
+    ...     size_factors_key="size_factors",
+    ...     dispersions_key="dispersions",
+    ...     layer="counts",
+    ... )
+
+    Using other methods and backends:
+    >>> results = de(adata, method="binomial", backend="statsmodels", condition_key="treatment")
+    >>> results = de(adata, method="anova", condition_key="treatment", data_type="lognorm")
+    >>> results = de(adata, method="lr", backend="cuml", condition_key="treatment")
+    >>> results = de(adata, method="deseq2", condition_key="treatment", layer="counts")
+
+    Notes
+    -----
+    - Method and data type compatibility:
+      - "deseq2" and "negbinom" require count data
+      - "binomial" requires binary data
+      - "lr" works best with log-normalized or binary data
+      - "anova" methods work best with log-normalized data
+    - Backend options:
+        - "jax" provides batched, GPU-accelerated testing with the following methods: "lr", "negbinom", "anova", "anova_residual"
+        - "statsmodels" uses statsmodels implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
+        - "cuml" provides GPU-accelerated logistic regression with the "lr" method
+    - The "deseq2" method ignores the `backend` parameter and always uses the PyDESeq2 implementation.
+    - Size factors and dispersion parameters shoudl be pre-computed for the "negbinom" method.
+    - Multiple testing correction is applied across all comparisons
     """
     # Validate inputs
     if condition_key not in adata.obs.columns:
@@ -137,7 +301,7 @@ def de(
     if group_key is not None:
         if group_key not in adata.obs.columns:
             raise ValueError(f"Group by key '{group_key}' not found in adata.obs")
-        return grouped_de(
+        return _grouped_de(
             adata=adata,
             condition_key=condition_key,
             reference=reference,
@@ -214,7 +378,10 @@ def de(
 
         if np.sum(mask1) < min_samples or np.sum(mask2) < min_samples:
             if verbose:
-                warnings.warn(f"Skipping comparison {group1} vs {group2} with < {min_samples} samples", stacklevel=2)
+                warnings.warn(
+                    f"Skipping comparison {group1} vs {group2} with < {min_samples} samples",
+                    stacklevel=2,
+                )
             continue
 
         all_mask = mask1 | mask2
@@ -327,132 +494,15 @@ def de(
     )
 
     # Reorder columns
-    return results[["feature", "test_condition", "ref_condition", "log2fc", "auroc", "coef", "pval", "padj"]]
-
-
-def grouped_de(
-    adata: AnnData,
-    condition_key: str,
-    group_key: str,
-    reference: str | tuple[str, str] | None = None,
-    size_factors_key: str | None = None,
-    covariate_keys: list[str] | None = None,
-    method: Method = "deseq2",
-    backend: Backends = "statsmodels",
-    mode: ComparisonMode = "all_vs_all",
-    layer: str | None = None,
-    data_type: DataType = "auto",
-    log2fc_threshold: float = 0.0,
-    min_samples: int = 2,
-    multitest_method: str = "fdr_bh",
-    n_jobs: int = 1,
-    batch_size: int = 2048,
-    optimizer: str = "BFGS",
-    maxiter: int = 100,
-    verbose: bool = True,
-):
-    """Run differential expression between condition levels grouped by cell type.
-
-    Parameters
-    ----------
-    adata
-        AnnData object
-    condition_key
-        Column in adata.obs containing condition values
-    group_key
-        Column in adata.obs for grouped DE testing
-    reference
-        Reference condition level or tuple (reference, comparison)
-    method
-        Testing method to use. One of:
-        - deseq2: DESeq2 for count data
-        - negbinom: Negative binomial GLM and wald test (backends: jax, statsmodels)
-        - lr: Logistic regression and likelihood ratio test (backends: jax, statsmodels, cuml)
-        - anova: ANOVA based on a linear model (backends: jax, statsmodels)
-        - anova_residual: Linear model with residual F-test (backends: jax, statsmodels)
-        - binomial: Binomial GLM (backends: statsmodels)
-    backend
-        Backend to use for linear model-based DE methods.
-        - jax: Use custom linear models in JAX for batched and GPU-accelerated methods
-        - statsmodels: Use linear models from statsmodels
-        - cuml: Use cuML for GPU-accelerated logistic regression
-    size_factors_key
-        Key in adata.obs containing size factors for normalization. Only used for "negbinom" method.
-    covariate_keys
-        Columns in adata.obs to include as covariate_keys
-    mode
-        How to perform comparisons
-    layer
-        Layer in adata to use
-    data_type
-        Type of data:
-        - counts: Raw count data
-        - lognorm: Log-normalized data (assumed to be log1p of normalized counts)
-        - binary: Binary data
-        - auto: Automatically infer data type
-    log2fc_threshold
-        Minimum absolute log2 fold change to consider
-    min_samples
-        Minimum number of samples per condition level
-    multitest_method
-        Method for multiple testing correction
-    n_jobs
-        Number of parallel jobs
-    batch_size
-        Number of features to process per batch. For very large datasets (>1M samples) or if you have memory issues, you can reduce this.
-    optimizer
-        Optimizer for model fitting (only used for certain JAX methods)
-    maxiter
-        Maximum number of iterations for optimization
-    verbose
-        Whether to print progress messages
-
-    Returns
-    -------
-    pandas.DataFrame
-        Differential expression results grouped by cell type
-    """
-    results = []
-    for group in adata.obs[group_key].unique():
-        mask = adata.obs[group_key].values == group
-        if sum(mask) < (min_samples * 2):
-            if verbose:
-                warnings.warn(f"Skipping group {group} with < {min_samples * 2} samples", stacklevel=2)
-            continue
-
-        # Run DE for group
-        group_results = de(
-            adata=adata[mask, :],
-            condition_key=condition_key,
-            reference=reference,
-            group_key=None,
-            method=method,
-            backend=backend,
-            size_factors_key=size_factors_key,
-            covariate_keys=covariate_keys,
-            mode=mode,
-            layer=layer,
-            data_type=data_type,
-            log2fc_threshold=log2fc_threshold,
-            min_samples=min_samples,
-            multitest_method=multitest_method,
-            n_jobs=n_jobs,
-            batch_size=batch_size,
-            optimizer=optimizer,
-            maxiter=maxiter,
-            verbose=verbose,
-        )
-        group_results["group"] = group
-        results.append(group_results)
-
-    # Combine results and add multiple testing correction
-    if len(results) == 0:
-        raise ValueError("No valid groups found for differential expression analysis")
-
-    results = pd.concat(results, axis=0)
-    results["padj"] = sm.stats.multipletests(
-        results["pval"],
-        method=multitest_method,
-    )[1]
-
-    return results
+    return results[
+        [
+            "feature",
+            "test_condition",
+            "ref_condition",
+            "log2fc",
+            "auroc",
+            "coef",
+            "pval",
+            "padj",
+        ]
+    ]
