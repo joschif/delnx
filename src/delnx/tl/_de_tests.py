@@ -173,16 +173,16 @@ def _run_deseq2(
 
         # Get results for each comparison
         results = []
-        for treatment, ref in comparisons:
+        for group1, group2 in comparisons:
             stat_res = DeseqStats(
                 dds,
-                contrast=[condition_key, treatment, ref],
+                contrast=[condition_key, group1, group2],
                 inference=inference,
             )
             stat_res.summary()
             results_df = stat_res.results_df
-            results_df["test_condition"] = treatment
-            results_df["ref_condition"] = ref
+            results_df["test_condition"] = group1
+            results_df["ref_condition"] = group2
             results.append(results_df)
 
     results_df = pd.concat(results)
