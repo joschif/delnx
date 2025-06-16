@@ -1,12 +1,12 @@
 """Size factor computation for (single-cell) RNA-seq data."""
 
+import warnings
 from functools import partial
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-import tqdm
 from scipy import sparse
 from scipy.stats import gmean
 
@@ -26,7 +26,7 @@ def _compute_cp10k_sf(adata, layer=None):
 
     # Compute size factors
     size_factors = counts / 10000.0
-    adata.obs["size_factor"] = size_factors / np.mean(size_factors)
+    return size_factors / np.mean(size_factors)
 
 
 def _compute_library_size(adata, layer=None):
@@ -39,8 +39,7 @@ def _compute_library_size(adata, layer=None):
     else:
         libsize = X.sum(axis=1)
 
-    size_factors = libsize / np.mean(libsize)
-    adata.obs["size_factor"] = size_factors
+    return libsize / np.mean(libsize)
 
 
 def _compute_median_ratio(adata, layer=None):
@@ -54,7 +53,7 @@ def _compute_median_ratio(adata, layer=None):
     geometric_means = gmean(X + 1e-6, axis=0)
     ratios = X / geometric_means
     size_factors = np.median(ratios, axis=1)
-    adata.obs["size_factor"] = size_factors / np.mean(size_factors)
+    return size_factors / np.mean(size_factors)
 
 
 def _masked_quantile(x, mask, q):
@@ -126,7 +125,7 @@ def _tmm(X, ref_data, logratio_trim, abs_expr_trim):
 _tmm_batch = jax.vmap(_tmm, in_axes=(0, None, None, None), out_axes=0)
 
 
-def _compute_TMM(adata, layer=None, ref_col=None, logratio_trim=0.3, abs_expr_trim=0.05, batch_size=64, verbose=False):
+def _compute_TMM(adata, layer=None, ref_col=None, logratio_trim=0.3, abs_expr_trim=0.05, batch_size=64):
     """Compute edgeR-style TMM normalization size factors using JAX.
 
     Parameters
@@ -151,7 +150,7 @@ def _compute_TMM(adata, layer=None, ref_col=None, logratio_trim=0.3, abs_expr_tr
     ref_data = (ref, libsize_ref)
 
     results = []
-    for i in tqdm.tqdm(range(0, n_cells, batch_size), disable=not verbose):
+    for i in range(0, n_cells, batch_size):
         # Get current batch of features
         batch = slice(i, min(i + batch_size, n_cells))
         X_batch = jnp.asarray(_to_dense(X[batch, :]), dtype=jnp.float32)
@@ -160,7 +159,7 @@ def _compute_TMM(adata, layer=None, ref_col=None, logratio_trim=0.3, abs_expr_tr
 
     # Concatenate results
     tmm_factors = np.concatenate(results)
-    adata.obs["size_factor"] = tmm_factors / np.mean(tmm_factors)
+    return tmm_factors / np.mean(tmm_factors)
 
 
 @partial(jax.jit, static_argnums=(2,))
@@ -174,9 +173,7 @@ def _fit_lm(x, y, maxiter=100):
 _fit_lm_batch = jax.vmap(_fit_lm, in_axes=(None, 1), out_axes=0)
 
 
-def _compute_quantile_regression(
-    adata, layer=None, min_counts=1, quantiles=np.linspace(0.1, 0.9, 9), batch_size=32, verbose=False
-):
+def _compute_quantile_regression(adata, layer=None, min_counts=1, quantiles=np.linspace(0.1, 0.9, 9), batch_size=32):
     # Get count matrix and filter genes
     X = _get_layer(adata, layer)  # shape: (cells x genes)
     gene_means = np.asarray(X.mean(axis=0)).flatten()  # per-gene means
@@ -200,7 +197,7 @@ def _compute_quantile_regression(
         # Median expression per cell across genes in the group
         median_expr = np.median(log_counts[:, group_idx], axis=1).reshape(-1, 1)  # shape: (n_cells, 1)
 
-        for i in tqdm.trange(0, len(group_idx), batch_size, disable=not verbose):
+        for i in range(0, len(group_idx), batch_size):
             batch = slice(i, min(i + batch_size, len(group_idx)))
             y = jnp.array(_to_dense(log_counts[:, group_idx[batch]]))  # shape: (n_cells, batch_size)
             preds = _fit_lm_batch(median_expr, y)  # shape: (batch_size, n_cells)
@@ -208,9 +205,7 @@ def _compute_quantile_regression(
             total_weight += preds.shape[0]
 
     size_factors = size_factor_numerators / total_weight
-    size_factors /= np.mean(size_factors)
-
-    adata.obs["size_factor"] = size_factors
+    return size_factors / np.mean(size_factors)
 
 
 def size_factors(adata, method="library_size", layer=None, **kwargs):
@@ -238,14 +233,24 @@ def size_factors(adata, method="library_size", layer=None, **kwargs):
         Size factors are stored in adata.obs.
     """
     if method == "median_ratio":
-        _compute_median_ratio(adata, layer)
+        size_factors = _compute_median_ratio(adata, layer)
     elif method == "quantile_regression":
-        _compute_quantile_regression(adata, layer=layer, **kwargs)
+        size_factors = _compute_quantile_regression(adata, layer=layer, **kwargs)
     elif method == "TMM":
-        _compute_TMM(adata, layer=layer, **kwargs)
+        size_factors = _compute_TMM(adata, layer=layer, **kwargs)
     elif method == "library_size":
-        _compute_library_size(adata, layer)
+        size_factors = _compute_library_size(adata, layer)
     elif method == "cp10k":
-        _compute_cp10k_sf(adata, layer)
+        size_factors = _compute_cp10k_sf(adata, layer)
     else:
         raise ValueError(f"Unsupported method: {method}")
+
+    # Warn if size factors contain zeros
+    if np.any(size_factors <= 0):
+        warnings.warn(
+            "Size factors contain zero or negative values. This may indicate issues with the data and can be problematic for downstream analyses.",
+            stacklevel=2,
+        )
+
+    # Store size factors in adata.obs
+    adata.obs["size_factor"] = size_factors
