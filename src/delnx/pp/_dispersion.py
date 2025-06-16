@@ -80,7 +80,7 @@ def dispersion(
     layer: str | None = None,
     size_factor_key: str | None = None,
     method: Method = "deseq2",
-    vars_key_added: str = "dispersion",
+    var_key_added: str = "dispersion",
     dispersion_range: tuple[float, float] = (1e-4, 10.0),
     shrinkage_weight_range: tuple[float, float] = (0.05, 0.95),
     prior_variance: float = 0.25,
@@ -104,7 +104,7 @@ def dispersion(
         - "edger": EdgeR-inspired dispersion estimation with empirical Bayes shrinkage towards a log-linear trend.
         - "mle": Maximum likelihood estimation of dispersion.
         - "moments": Simple method of moments dispersion estimation.
-    vars_key_added : str, optional
+    var_key_added : str, optional
         Key in `adata.var` where the estimated dispersion values will be stored.
     dispersion_range : tuple, optional
         Range of dispersion values to consider.
@@ -121,7 +121,7 @@ def dispersion(
 
     Returns
     -------
-    Returns `None` and sets `adata.var[vars_key_added]` with estimated dispersion values.
+    Returns `None` and sets `adata.var[var_key_added]` with estimated dispersion values.
     """
     X = _get_layer(adata, layer)
 
@@ -140,4 +140,4 @@ def dispersion(
         verbose=verbose,
     )
 
-    adata.vars[vars_key_added] = np.array(dispersions)
+    adata.var[var_key_added] = np.array(dispersions)
