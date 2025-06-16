@@ -27,7 +27,6 @@ def _compute_cp10k_sf(adata, layer=None):
     # Compute size factors
     size_factors = counts / 10000.0
     adata.obs["size_factor"] = size_factors / np.mean(size_factors)
-    adata.obs["size_factor_cp10k"] = size_factors / np.mean(size_factors)
 
 
 def _compute_library_size(adata, layer=None):
@@ -42,7 +41,6 @@ def _compute_library_size(adata, layer=None):
 
     size_factors = libsize / np.mean(libsize)
     adata.obs["size_factor"] = size_factors
-    adata.obs["size_factor_libsize"] = size_factors
 
 
 def _compute_median_ratio(adata, layer=None):
@@ -57,7 +55,6 @@ def _compute_median_ratio(adata, layer=None):
     ratios = X / geometric_means
     size_factors = np.median(ratios, axis=1)
     adata.obs["size_factor"] = size_factors / np.mean(size_factors)
-    adata.obs["size_factor_mratio"] = size_factors / np.mean(size_factors)
 
 
 def _masked_quantile(x, mask, q):
@@ -164,7 +161,6 @@ def _compute_TMM(adata, layer=None, ref_col=None, logratio_trim=0.3, abs_expr_tr
     # Concatenate results
     tmm_factors = np.concatenate(results)
     adata.obs["size_factor"] = tmm_factors / np.mean(tmm_factors)
-    adata.obs["size_factor_TMM"] = tmm_factors / np.mean(tmm_factors)
 
 
 @partial(jax.jit, static_argnums=(2,))
@@ -215,7 +211,6 @@ def _compute_quantile_regression(
     size_factors /= np.mean(size_factors)
 
     adata.obs["size_factor"] = size_factors
-    adata.obs["size_factor_qreg"] = size_factors
 
 
 def size_factors(adata, method="library_size", layer=None, **kwargs):
