@@ -467,7 +467,7 @@ def de(
                 method=method,
                 backend=backend,
                 condition_key=condition_key,
-                size_factors=size_factors,
+                size_factors=sf_comp,
                 covariate_keys=covariate_keys,
                 n_jobs=n_jobs,
                 verbose=verbose,
