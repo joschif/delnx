@@ -27,7 +27,8 @@ def _grouped_de(
     condition_key: str,
     group_key: str,
     reference: str | tuple[str, str] | None = None,
-    size_factors_key: str | None = None,
+    size_factor_key: str | None = None,
+    dispersion_key: str | None = None,
     covariate_keys: list[str] | None = None,
     method: Method = "lr",
     backend: Backends = "jax",
@@ -67,7 +68,8 @@ def _grouped_de(
             group_key=None,
             method=method,
             backend=backend,
-            size_factors_key=size_factors_key,
+            size_factor_key=size_factor_key,
+            dispersion_key=dispersion_key,
             covariate_keys=covariate_keys,
             mode=mode,
             layer=layer,
@@ -102,8 +104,8 @@ def de(
     condition_key: str,
     group_key: str | None = None,
     reference: str | tuple[str, str] | None = None,
-    size_factors_key: str | None = None,
-    dispersions_key: str | None = None,
+    size_factor_key: str | None = None,
+    dispersion_key: str | None = None,
     covariate_keys: list[str] | None = None,
     method: Method = "lr",
     backend: Backends = "jax",
@@ -142,10 +144,10 @@ def de(
         - Tuple (reference, comparison): specific pair to compare
         - None: automatically determined based on mode
         Default is None.
-    size_factors_key : str, optional
+    size_factor_key : str, optional
         Column name in `adata.obs` containing size factors for normalization.
         Used as offset in negative binomial models. Default is None.
-    dispersions_key : str, optional
+    dispersion_key : str, optional
         Column name in `adata.var` containing precomputed dispersions.
         Only used for negative binomial methods. Default is None.
     covariate_keys : list of str, optional
@@ -250,8 +252,8 @@ def de(
     ...     adata,
     ...     condition_key="condition",
     ...     method="negbinom",
-    ...     size_factors_key="size_factors",
-    ...     dispersions_key="dispersions",
+    ...     size_factor_key="size_factors",
+    ...     dispersion_key="dispersions",
     ...     layer="counts",
     ... )
 
@@ -283,16 +285,16 @@ def de(
         for col in covariate_keys:
             if col not in adata.obs.columns:
                 raise ValueError(f"Covariate '{col}' not found in adata.obs")
-    if size_factors_key is not None and size_factors_key not in adata.obs.columns:
-        raise ValueError(f"Size factors key '{size_factors_key}' not found in adata.obs")
-    if dispersions_key is not None and dispersions_key not in adata.var.columns:
-        raise ValueError(f"Dispersions key '{dispersions_key}' not found in adata.var")
+    if size_factor_key is not None and size_factor_key not in adata.obs.columns:
+        raise ValueError(f"Size factors key '{size_factor_key}' not found in adata.obs")
+    if dispersion_key is not None and dispersion_key not in adata.var.columns:
+        raise ValueError(f"Dispersions key '{dispersion_key}' not found in adata.var")
 
     # Get condition values
     condition_values = adata.obs[condition_key].values
     # Get size factors and dispersions if provided
-    size_factors = adata.obs[size_factors_key].values if size_factors_key else None
-    dispersions = adata.var[dispersions_key].values if dispersions_key else None
+    size_factors = adata.obs[size_factor_key].values if size_factor_key else None
+    dispersions = adata.var[dispersion_key].values if dispersion_key else None
 
     # Validate conditions and get comparison levels
     levels, comparisons = _validate_conditions(condition_values, reference, mode)
@@ -306,7 +308,8 @@ def de(
             condition_key=condition_key,
             reference=reference,
             group_key=group_key,
-            size_factors_key=size_factors_key,
+            size_factor_key=size_factor_key,
+            dispersion_key=dispersion_key,
             covariate_keys=covariate_keys,
             method=method,
             backend=backend,
