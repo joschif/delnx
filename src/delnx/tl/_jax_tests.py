@@ -122,8 +122,8 @@ def _run_nb_test(
 
     def fit_nb(x, disp):
         return _fit_nb(
-            x,
             cond,
+            x,
             covars,
             disp,
             size_factors=size_factors,
