@@ -446,14 +446,15 @@ class DispersionEstimator:
 
         # Work with normalized counts
         x_norm = x / size_factors
+        # mean inverse size factor
+        sf_mean_inv = (1 / size_factors).mean()
 
         # Estimate mean and variance of normalized counts
-        mu_norm = jnp.maximum(jnp.mean(x_norm), 1e-6)
-        var_norm = jnp.maximum(jnp.var(x_norm, ddof=1), 1e-6)
+        mu_norm = jnp.maximum(jnp.mean(x_norm, axis=0), 1e-6)
+        var_norm = jnp.maximum(jnp.var(x_norm, axis=0, ddof=1), 1e-6)
 
-        # For negative binomial: Var = μ + φ * μ²
-        # So: φ = (Var - μ) / μ²
-        excess_var = var_norm - mu_norm
+        # For negative binomial: Var = μ + φ * μ² -> φ = (Var - μ) / μ
+        excess_var = var_norm - sf_mean_inv * mu_norm
         dispersion = excess_var / (mu_norm**2)
 
         # Clip to valid range
