@@ -8,25 +8,9 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from scipy.stats import gmean
 
 from delnx._utils import _get_layer, _to_dense
 from delnx.models import LinearRegression
-
-
-def _compute_cp10k_sf(adata, layer=None):
-    """Compute size factors using counts per 10,000 (CP10K) normalization."""
-    # Get expression matrix
-    X = _get_layer(adata, layer)
-
-    if sparse.issparse(X):
-        counts = np.asarray(X.sum(axis=1)).flatten()
-    else:
-        counts = X.sum(axis=1)
-
-    # Compute size factors
-    size_factors = counts / 10000.0
-    return size_factors / np.mean(size_factors)
 
 
 def _compute_library_size(adata, layer=None):
@@ -43,123 +27,30 @@ def _compute_library_size(adata, layer=None):
 
 
 def _compute_median_ratio(adata, layer=None):
-    """Compute DESeq2-style median ratio size factors."""
-    # Only really works for (dense) pseudobulk data
+    """Compute median-of-ratios size factors."""
     X = _get_layer(adata, layer)
 
-    if sparse.issparse(X):
-        raise ValueError("Method 'median_ratio' requires a dense matrix.")
+    # Compute gene-wise mean log counts
+    with np.errstate(divide="ignore"):  # ignore division by zero warnings
+        log_X = np.log(X)
 
-    geometric_means = gmean(X + 1e-6, axis=0)
-    ratios = X / geometric_means
-    size_factors = np.median(ratios, axis=1)
-    return size_factors / np.mean(size_factors)
+    log_means = log_X.mean(0)
 
+    # Filter out genes with -∞ log means (genes with all zero counts)
+    filtered_genes = ~np.isinf(log_means)
 
-def _masked_quantile(x, mask, q):
-    """Compute quantile from masked array using jax operations."""
-    x_masked = jnp.where(mask, x, jnp.inf)
-    x_sorted = jnp.sort(x_masked)
-    n_valid = jnp.sum(mask)
-    idx = jnp.clip(jnp.floor(q * (n_valid - 1)).astype(int), 0, x.shape[0] - 1)
-    return x_sorted[idx]
+    # Check if we have any genes left after filtering
+    if not filtered_genes.any():
+        raise ValueError("All genes have all-zero counts. Cannot compute size factors with median-of-ratios method.")
 
+    # Compute log ratios using only filtered genes
+    log_ratios = log_X[:, filtered_genes] - log_means[filtered_genes]
 
-@partial(jax.jit, static_argnums=(2, 3))
-def _tmm(X, ref_data, logratio_trim, abs_expr_trim):
-    """Compute TMM factor for a single column using JAX.
+    # Compute sample-wise median of log ratios
+    log_medians = np.median(log_ratios, axis=1)
+    size_factors = np.exp(log_medians)
 
-    Parameters
-    ----------
-    X : jnp.ndarray
-        Observed expression data for a single sample (column)
-    ref_data : tuple
-        Tuple containing (reference_expression, reference_libsize)
-    logratio_trim : float
-        Proportion of log fold changes to trim
-    abs_expr_trim : float
-        Proportion of average expression values to trim
-
-    Returns
-    -------
-    factor : float
-        TMM normalization factor
-    """
-    ref, libsize_ref = ref_data
-    libsize_X = jnp.sum(X)
-    eps = 1e-6  # Small constant for numerical stability
-
-    # Calculate log ratio and absolute expression
-    logR = jnp.log2((X / libsize_X + eps) / (ref / libsize_ref + eps))
-    absE = 0.5 * (jnp.log2(X / libsize_X + eps) + jnp.log2(ref / libsize_ref + eps))
-
-    # Calculate variance
-    v = (1.0 / jnp.clip(X, 1e-3)) + (1.0 / jnp.clip(ref, 1e-3))
-
-    # Filter for finite values
-    finite_mask = jnp.isfinite(logR) & jnp.isfinite(absE)
-    logR = jnp.where(finite_mask, logR, 0.0)
-    absE = jnp.where(finite_mask, absE, 0.0)
-    v = jnp.where(finite_mask, v, jnp.inf)
-
-    # Get quantiles for trimming
-    lo_lrt = _masked_quantile(logR, finite_mask, logratio_trim)
-    hi_lrt = _masked_quantile(logR, finite_mask, 1 - logratio_trim)
-    lo_aet = _masked_quantile(absE, finite_mask, abs_expr_trim)
-    hi_aet = _masked_quantile(absE, finite_mask, 1 - abs_expr_trim)
-
-    # Apply trimming
-    keep = (logR > lo_lrt) & (logR < hi_lrt) & (absE > lo_aet) & (absE < hi_aet) & finite_mask
-
-    # Calculate weights and weighted log fold change
-    w = 1.0 / v
-    w = jnp.where(keep, w, 0.0)
-    numer = jnp.sum(w * logR)
-    denom = jnp.sum(w)
-
-    # Calculate TMM factor
-    factor = jnp.where(denom > 0, 2.0 ** (numer / denom), 1.0)
-    return factor
-
-
-_tmm_batch = jax.vmap(_tmm, in_axes=(0, None, None, None), out_axes=0)
-
-
-def _compute_TMM(adata, layer=None, ref_col=None, logratio_trim=0.3, abs_expr_trim=0.05, batch_size=64):
-    """Compute edgeR-style TMM normalization size factors using JAX.
-
-    Parameters
-    ----------
-    adata : AnnData
-        AnnData object containing expression data
-    layer : str, optional
-        Layer of expression data to use. If None, use adata.X
-    logratio_trim : float, default=0.3
-        Proportion of log fold changes to trim (0-0.5)
-    abs_expr_trim : float, default=0.05
-        Proportion of average expression values to trim (0-0.5)
-    """
-    # Get expression matrix
-    X = _get_layer(adata, layer)
-    n_cells = X.shape[0]
-    ref_obs = np.argmin(np.abs(np.sum(X, axis=1) - np.median(np.sum(X, axis=1))))
-
-    # Get reference data
-    ref = X[ref_obs, :]
-    libsize_ref = np.sum(ref)
-    ref_data = (ref, libsize_ref)
-
-    results = []
-    for i in range(0, n_cells, batch_size):
-        # Get current batch of features
-        batch = slice(i, min(i + batch_size, n_cells))
-        X_batch = jnp.asarray(_to_dense(X[batch, :]), dtype=jnp.float32)
-        tmm_factors = _tmm_batch(X_batch, ref_data, logratio_trim, abs_expr_trim)
-        results.append(tmm_factors)
-
-    # Concatenate results
-    tmm_factors = np.concatenate(results)
-    return tmm_factors / np.mean(tmm_factors)
+    return size_factors
 
 
 @partial(jax.jit, static_argnums=(2,))
@@ -217,11 +108,9 @@ def size_factors(adata, method="library_size", layer=None, **kwargs):
         Annotated data matrix.
     method : str, optional
         Method to compute size factors. Options are:
-        - "median_ratio": DESeq2-style median ratio
-        - "TMM": edgeR-style TMM normalization
+        - "ratio": DESeq2-style median-of-ratios size factor
         - "quantile_regression": SCnorm-style quantile regression normalization
         - "library_size": Library size normalization (sum of counts)
-        - "cp10k": Counts per 10,000 normalization
     layer : str, optional
         Layer to use for size factor calculation. If None, use adata.X.
     **kwargs : dict
@@ -232,16 +121,12 @@ def size_factors(adata, method="library_size", layer=None, **kwargs):
     None
         Size factors are stored in adata.obs.
     """
-    if method == "median_ratio":
+    if method == "ratio":
         size_factors = _compute_median_ratio(adata, layer)
     elif method == "quantile_regression":
         size_factors = _compute_quantile_regression(adata, layer=layer, **kwargs)
-    elif method == "TMM":
-        size_factors = _compute_TMM(adata, layer=layer, **kwargs)
     elif method == "library_size":
         size_factors = _compute_library_size(adata, layer)
-    elif method == "cp10k":
-        size_factors = _compute_cp10k_sf(adata, layer)
     else:
         raise ValueError(f"Unsupported method: {method}")
 
