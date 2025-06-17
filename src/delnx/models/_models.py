@@ -362,10 +362,18 @@ class NegativeBinomialRegression(Regression):
 
 @dataclass(frozen=True)
 class DispersionEstimator:
-    """Estimate dispersion parameter for Negative Binomial regression."""
+    """Estimate dispersion parameter for Negative Binomial regression.
+
+    Parameters
+    ----------
+    dispersion_range : tuple[float, float]
+        Range for valid dispersion values.
+    shrinkage_weight_range : tuple[float, float]
+        Range for shrinkage weights used in dispersion estimation.
+    """
 
     dispersion_range: tuple[float, float] = (1e-6, 10.0)
-    shrinkage_weight_range: tuple[float, float] = (0.05, 0.95)
+    shrinkage_weight_range: tuple[float, float] = (0.1, 0.9)
     prior_variance: float = 0.25
     prior_df: float = 10.0
 
@@ -434,13 +442,7 @@ class DispersionEstimator:
 
     @partial(jax.jit, static_argnums=(0,))
     def _estimate_dispersion_moments(self, x: jnp.ndarray, size_factors: jnp.ndarray | None = None) -> float:
-        """Estimate dispersion parameter using method of moments on normalized counts.
-
-        For normalized counts x_norm = x / size_factors:
-        - E[x_norm] = μ (true normalized mean)
-        - Var[x_norm] = μ + φ * μ² (negative binomial variance)
-        - So: φ = (observed_var - observed_mean) / observed_mean²
-        """
+        """Estimate dispersion parameter using method-of-moments on normalized counts."""
         if size_factors is None:
             size_factors = jnp.ones_like(x)
 
@@ -450,12 +452,12 @@ class DispersionEstimator:
         sf_mean_inv = (1 / size_factors).mean()
 
         # Estimate mean and variance of normalized counts
-        mu_norm = jnp.maximum(jnp.mean(x_norm, axis=0), 1e-6)
-        var_norm = jnp.maximum(jnp.var(x_norm, axis=0, ddof=1), 1e-6)
+        mu_norm = jnp.mean(x_norm, axis=0)
+        var_norm = jnp.var(x_norm, axis=0, ddof=1)
 
         # For negative binomial: Var = μ + φ * μ² -> φ = (Var - μ) / μ
         excess_var = var_norm - sf_mean_inv * mu_norm
-        dispersion = excess_var / (mu_norm**2)
+        dispersion = jnp.nan_to_num(excess_var / (mu_norm**2))
 
         # Clip to valid range
         return jnp.clip(dispersion, self.dispersion_range[0], self.dispersion_range[1])
@@ -470,20 +472,22 @@ class DispersionEstimator:
         dispersion_init = self._estimate_dispersion_moments(x, size_factors)
 
         # Estimate base mean from normalized counts
-        mu_base_init = jnp.maximum(jnp.mean(x / size_factors), 1e-6)
+        mu_init = jnp.clip(jnp.mean(x / size_factors), 1e-6, 1e6)
+        offset = jnp.log(size_factors) if size_factors is not None else None
 
         def neg_ll(params):
-            log_mu_base, log_dispersion = params
-            mu_base = jnp.exp(log_mu_base)
-            dispersion = jnp.clip(jnp.exp(log_dispersion), self.dispersion_range[0], self.dispersion_range[1])
+            eta, log_dispersion = params
 
-            # Expected counts: μ_i = size_factor_i * μ_base
-            mu = size_factors * mu_base
+            if offset is not None:
+                eta = eta + offset
 
-            # Negative binomial parameters
-            r = 1 / dispersion  # shape parameter
+            eta = jnp.clip(eta, -50, 50)
+            mu = jnp.exp(eta)
 
-            # Negative binomial log-likelihood
+            # Get the size (r = alpha = 1 / dispersion)
+            dispersion = jnp.exp(log_dispersion)
+            r = 1 / jnp.clip(dispersion, self.dispersion_range[0], self.dispersion_range[1])
+
             ll = (
                 jsp.special.gammaln(r + x)
                 - jsp.special.gammaln(r)
@@ -494,7 +498,7 @@ class DispersionEstimator:
             return -jnp.sum(ll)
 
         # Initialize parameters on log scale for better optimization
-        initial_params = jnp.array([jnp.log(mu_base_init), jnp.log(jnp.maximum(dispersion_init, 1e-6))])
+        initial_params = jnp.array([jnp.log(mu_init), jnp.log(dispersion_init)])
         result = optimize.minimize(neg_ll, initial_params, method="BFGS")
 
         # With lax to make jit compatible
