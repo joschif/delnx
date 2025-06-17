@@ -207,10 +207,9 @@ def _run_deseq2(
     results["padj"] = np.nan  # Initialize with NaN
     results.loc[results["pval"].notna(), "padj"] = padj
 
-    results.sort_values(
+    results = results.sort_values(
         by=["test_condition", "ref_condition", "padj"],
-        inplace=True,
-    )
+    ).reset_index(drop=True)
 
     return results[["feature", "test_condition", "ref_condition", "log2fc", "stat", "pval", "padj"]]
 
