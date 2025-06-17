@@ -244,8 +244,10 @@ class NegativeBinomialRegression(Regression):
     ) -> float:
         """Compute negative log likelihood with offset."""
         eta = X @ params
+
         if offset is not None:
             eta = eta + offset
+
         eta = jnp.clip(eta, -50, 50)
         mu = jnp.exp(eta)
 
@@ -325,10 +327,11 @@ class NegativeBinomialRegression(Regression):
         init_params = jnp.zeros(X.shape[1])
 
         # Better initialization for intercept
+        mean_y = jnp.maximum(jnp.mean(y), 1e-8)
         if offset is not None:
-            init_params = init_params.at[0].set(jnp.log(jnp.mean(y) + 1e-8) - jnp.mean(offset))
+            init_params = init_params.at[0].set(jnp.log(mean_y) - jnp.mean(offset))
         else:
-            init_params = init_params.at[0].set(jnp.log(jnp.mean(y) + 1e-8))
+            init_params = init_params.at[0].set(jnp.log(mean_y))
 
         # Fit model
         if self.optimizer == "BFGS":
@@ -370,10 +373,14 @@ class DispersionEstimator:
         Range for valid dispersion values.
     shrinkage_weight_range : tuple[float, float]
         Range for shrinkage weights used in dispersion estimation.
+    prior_variance : float
+        Prior variance for Bayesian shrinkage methods.
+    prior_df : float
+        Prior degrees of freedom for empirical Bayes methods.
     """
 
     dispersion_range: tuple[float, float] = (1e-6, 10.0)
-    shrinkage_weight_range: tuple[float, float] = (0.1, 0.9)
+    shrinkage_weight_range: tuple[float, float] = (0.1, 0.95)
     prior_variance: float = 0.25
     prior_df: float = 10.0
 
@@ -472,21 +479,21 @@ class DispersionEstimator:
         dispersion_init = self._estimate_dispersion_moments(x, size_factors)
 
         # Estimate base mean from normalized counts
-        mu_init = jnp.clip(jnp.mean(x / size_factors), 1e-6, 1e6)
+        log_mu = jnp.log(jnp.maximum(jnp.mean(x / size_factors), 1e-6))
         offset = jnp.log(size_factors) if size_factors is not None else None
 
-        def neg_ll(params):
-            eta, log_dispersion = params
+        def neg_ll(log_dispersion):
+            # Get the size (r = alpha = 1 / dispersion)
+            dispersion = jnp.exp(log_dispersion)
+            r = 1 / jnp.clip(dispersion, self.dispersion_range[0], self.dispersion_range[1])
+
+            eta = log_mu
 
             if offset is not None:
                 eta = eta + offset
 
             eta = jnp.clip(eta, -50, 50)
             mu = jnp.exp(eta)
-
-            # Get the size (r = alpha = 1 / dispersion)
-            dispersion = jnp.exp(log_dispersion)
-            r = 1 / jnp.clip(dispersion, self.dispersion_range[0], self.dispersion_range[1])
 
             ll = (
                 jsp.special.gammaln(r + x)
@@ -498,7 +505,7 @@ class DispersionEstimator:
             return -jnp.sum(ll)
 
         # Initialize parameters on log scale for better optimization
-        initial_params = jnp.array([jnp.log(mu_init), jnp.log(dispersion_init)])
+        initial_params = jnp.array([jnp.log(dispersion_init)])
         result = optimize.minimize(neg_ll, initial_params, method="BFGS")
 
         # With lax to make jit compatible
