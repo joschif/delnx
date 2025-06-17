@@ -16,7 +16,7 @@ def _estimate_dispersion_batched(
     dispersion_range: tuple[float, float] = (1e-6, 10.0),
     shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
     prior_variance: float = 0.25,
-    prior_df: float = 10.0,
+    prior_df: float = 5.0,
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> jnp.ndarray:
@@ -84,7 +84,7 @@ def dispersion(
     dispersion_range: tuple[float, float] = (1e-4, 10.0),
     shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
     prior_variance: float = 0.25,
-    prior_df: float = 10.0,
+    prior_df: float = 5.0,
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> DispersionEstimator:
