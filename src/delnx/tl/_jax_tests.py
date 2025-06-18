@@ -18,7 +18,7 @@ from delnx.models import LinearRegression, LogisticRegression, NegativeBinomialR
 @partial(jax.jit, static_argnums=(3, 4))
 def _fit_lr(y, covars, x=None, optimizer="BFGS", maxiter=100):
     """Fit single logistic regression model with JAX."""
-    model = LogisticRegression(skip_wald=True, optimizer=optimizer, maxiter=maxiter)
+    model = LogisticRegression(skip_stats=True, optimizer=optimizer, maxiter=maxiter)
 
     # Covars should include intercept
     if x is not None:
@@ -145,7 +145,7 @@ def _run_nb_test(
 @partial(jax.jit, static_argnums=(3, 4))
 def _fit_anova(x, y, covars, method="anova", maxiter=100):
     """Fit linear model based ANOVA."""
-    model = LinearRegression(skip_wald=True, maxiter=maxiter)
+    model = LinearRegression(skip_stats=True, maxiter=maxiter)
     n = y.shape[0]
 
     # Fit null model (without feature)
