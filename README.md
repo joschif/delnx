@@ -72,10 +72,10 @@ results = dx.tl.de(
 ## ⚙️ Backends
 **delnx** implements DE tests using regression models from different backends:
 
-- **JAX**: All custom methods are implemented in [JAX](https://docs.jax.dev/en/latest/) to allow GPU-accelerated and batched DE testing.
-- **statsmodels**: Using regression models from [statsmodels](https://www.statsmodels.org/stable/index.html) for statistical tests.
-- **cuML**: Using GPU-accelerated regression models from [cuML](https://rapids.ai/cuml.html).
-- **PyDESeq2**: For DESeq2 analysis.
+- [JAX](https://docs.jax.dev/en/latest/)
+- [statsmodels](https://www.statsmodels.org/stable/index.html)
+- [cuML](https://rapids.ai/cuml.html).
+- [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
 
 
 ## 🗺️ Roadmap
