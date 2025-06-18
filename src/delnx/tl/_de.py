@@ -1,4 +1,18 @@
-"""Differential expression testing module."""
+"""Differential expression testing module.
+
+This module provides functions for differential expression analysis between
+condition levels in single-cell or bulk RNA-seq data. It implements various
+statistical methods including:
+
+- Logistic regression with likelihood ratio tests
+- Negative binomial regression for count data
+- ANOVA-based linear models
+- DESeq2-style analysis
+
+The implementation supports multiple computational backends for performance
+optimization (JAX, statsmodels, cuML), size factor normalization via offset terms,
+and grouped analysis for cell type-specific differential expression.
+"""
 
 import warnings
 
@@ -44,11 +58,61 @@ def _grouped_de(
     maxiter: int = 100,
     verbose: bool = True,
 ):
+    """Perform differential expression analysis for each group separately.
+
+    This internal function implements the grouped differential expression analysis
+    workflow. It runs DE tests for each unique group in `adata.obs[group_key]`
+    (e.g., cell types) and combines the results into a single DataFrame with a
+    'group' column indicating the group identity.
+
+    Parameters
+    ----------
+    adata : AnnData
+        AnnData object containing expression data and metadata.
+    condition_key : str
+        Column name in `adata.obs` containing condition labels.
+    group_key : str
+        Column name in `adata.obs` defining the groups for separate DE analysis.
+    reference : str | tuple[str, str] | None, default=None
+        Reference condition or specific comparison pair.
+    size_factor_key : str | None, default=None
+        Column name in `adata.obs` containing size factors for normalization.
+    dispersion_key : str | None, default=None
+        Column name in `adata.var` containing precomputed dispersions.
+    covariate_keys : list[str] | None, default=None
+        List of column names in `adata.obs` to include as covariates.
+    method : Method, default='lr'
+        Statistical method for differential expression testing.
+    backend : Backends, default='jax'
+        Computational backend for model fitting.
+    mode : ComparisonMode, default='all_vs_all'
+        Comparison strategy for condition levels.
+    layer : str | None, default=None
+        Layer in `adata.layers` to use for expression data.
+    data_type : DataType, default='auto'
+        Type of expression data.
+    log2fc_threshold : float, default=0.0
+        Minimum absolute log2 fold change threshold.
+    min_samples : int, default=2
+        Minimum number of samples required per condition level.
+    multitest_method : str, default='fdr_bh'
+        Method for multiple testing correction.
+    n_jobs : int, default=1
+        Number of parallel jobs.
+    batch_size : int, default=2048
+        Number of features to process per batch.
+    optimizer : str, default='BFGS'
+        Optimization algorithm for model fitting.
+    maxiter : int, default=100
+        Maximum number of iterations for optimization.
+    verbose : bool, default=True
+        Whether to print progress information.
+
+    Returns
+    -------
+    pd.DataFrame
+        Combined differential expression results with an additional 'group' column.
     """
-    Perform differential expression analysis for each group separately.
-    This function runs DE tests for each unique group in `adata.obs[group_key]`
-    and combines the results.
-    """  # noqa: D205
     results = []
     for group in adata.obs[group_key].unique():
         mask = adata.obs[group_key].values == group
@@ -143,12 +207,12 @@ def de(
     maxiter: int = 100,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """
-    Perform differential expression analysis between condition levels.
+    """Perform differential expression analysis between condition levels.
 
     This function runs differential expression testing using various statistical methods
     and backends. It supports both single and grouped comparisons with multiple
-    testing correction.
+    testing correction. The function is flexible and can handle different data types,
+    normalization strategies, and computational backends.
 
     Parameters
     ----------
@@ -156,26 +220,26 @@ def de(
         Annotated data object containing expression data and metadata.
     condition_key : str
         Column name in `adata.obs` containing condition labels for comparison.
-    group_key : str, optional
+    group_key : str | None, default=None
         Column name in `adata.obs` for grouped differential expression testing
         (e.g., cell type). If provided, DE testing is performed separately for
-        each group. Default is None.
-    reference : str or tuple of str, optional
+        each group.
+    reference : str | tuple[str, str] | None, default=None
         Reference condition for comparison. Can be:
         - Single string: reference condition for all comparisons
         - Tuple (reference, comparison): specific pair to compare
         - None: automatically determined based on mode
-        Default is None.
-    size_factor_key : str, optional
+    size_factor_key : str | None, default=None
         Column name in `adata.obs` containing size factors for normalization.
-        Used as offset in negative binomial models. Default is None.
-    dispersion_key : str, optional
+        When provided, size factors are incorporated into the model as offset terms
+        (log-transformed). This is particularly important for count-based methods
+        like "negbinom" to account for differences in sequencing depth.
+    dispersion_key : str | None, default=None
         Column name in `adata.var` containing precomputed dispersions.
-        Only used for negative binomial methods. Default is None.
-    covariate_keys : list of str, optional
+        Only used for negative binomial methods.
+    covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
-        Default is None.
-    method : {"lr", "deseq2", "negbinom", "anova", "anova_residual", "binomial"}
+    method : Method, default='lr'
         Statistical method for differential expression testing:
         - "lr": Logistic regression with likelihood ratio test
         - "deseq2": DESeq2 method for count data (requires pydeseq2)
@@ -183,55 +247,49 @@ def de(
         - "anova": ANOVA based on linear model
         - "anova_residual": Linear model with residual F-test
         - "binomial": Binomial GLM
-        Default is "lr".
-    backend : {"jax", "statsmodels", "cuml"}
+    backend : Backends, default='jax'
         Computational backend for linear model-based methods:
         - "jax": Custom JAX implementation (batched, GPU-accelerated)
         - "statsmodels": Standard statsmodels implementation
         - "cuml": cuML for GPU-accelerated logistic regression
-        Default is "jax".
-    mode : {"all_vs_all", "all_vs_ref", "1_vs_1"}
+    mode : ComparisonMode, default='all_vs_all'
         Comparison strategy:
         - "all_vs_all": Compare all pairs of condition levels
         - "all_vs_ref": Compare all levels against reference
         - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
-        Default is "all_vs_all".
-    layer : str, optional
+    layer : str | None, default=None
         Layer name in `adata.layers` to use for expression data.
-        If None, uses `adata.X`. Default is None.
-    data_type : {"auto", "counts", "lognorm", "binary"}
+        If None, uses `adata.X`.
+    data_type : DataType, default='auto'
         Type of expression data:
         - "auto": Automatically infer from data
         - "counts": Raw count data
         - "lognorm": Log-normalized data (log1p of normalized counts)
         - "binary": Binary expression data
-        Default is "auto".
-    log2fc_threshold : float
+    log2fc_threshold : float, default=0.0
         Minimum absolute log2 fold change threshold for feature inclusion.
-        Features below this threshold are excluded from testing. Default is 0.0.
-    min_samples : int
+        Features below this threshold are excluded from testing.
+    min_samples : int, default=2
         Minimum number of samples required per condition level.
-        Comparisons with fewer samples are skipped. Default is 2.
-    multitest_method : str
+        Comparisons with fewer samples are skipped.
+    multitest_method : str, default='fdr_bh'
         Method for multiple testing correction. Accepts any method supported
         by `statsmodels.stats.multipletests`. Common options include:
         - "fdr_bh": Benjamini-Hochberg FDR correction
         - "bonferroni": Bonferroni correction
-        Default is "fdr_bh".
-    n_jobs : int
-        Number of parallel jobs for non-JAX backends. Default is 1.
-    batch_size : int
+    n_jobs : int, default=1
+        Number of parallel jobs for non-JAX backends.
+    batch_size : int, default=2048
         Number of features to process per batch. Reduce for memory-constrained
-        environments or very large datasets (>1M samples). Default is 2048.
-    optimizer : {"BFGS", "IRLS"}
+        environments or very large datasets (>1M samples).
+    optimizer : str, default='BFGS'
         Optimization algorithm for JAX backend:
         - "BFGS": BFGS optimizer via jax.scipy.optimize
         - "IRLS": Iteratively reweighted least squares (experimental)
-        Default is "BFGS".
-    maxiter : int
-        Maximum number of optimization iterations. Default is 100.
-    verbose : bool
-        Whether to print progress messages and warnings. Default is True.
+    maxiter : int, default=100
+        Maximum number of optimization iterations.
+    verbose : bool, default=True
+        Whether to print progress messages and warnings.
 
     Returns
     -------
