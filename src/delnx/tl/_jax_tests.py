@@ -1,4 +1,4 @@
-"""Batched differential expression test functions in JAX."""
+"""Batched differential expression testing with JAX."""
 
 from functools import partial
 
@@ -17,7 +17,31 @@ from delnx.models import LinearRegression, LogisticRegression, NegativeBinomialR
 
 @partial(jax.jit, static_argnums=(3, 4))
 def _fit_lr(y, covars, x=None, optimizer="BFGS", maxiter=100):
-    """Fit single logistic regression model with JAX."""
+    """Fit a single logistic regression model using JAX.
+
+    This function fits a logistic regression model for a single feature,
+    with support for covariates. It is designed to be used within a batched
+    context via JAX's vmap functionality.
+
+    Parameters
+    ----------
+    y : jnp.ndarray
+        Binary outcome variable of shape (n_samples,).
+    covars : jnp.ndarray
+        Covariate matrix including intercept of shape (n_samples, n_covariates).
+    x : jnp.ndarray, optional
+        Feature values of shape (n_samples,). If None, only the null model with
+        covariates is fitted.
+    optimizer : str, default='BFGS'
+        Optimization method to use for fitting the model.
+    maxiter : int, default=100
+        Maximum number of iterations for the optimizer.
+
+    Returns
+    -------
+    tuple
+        Log-likelihood value and coefficient estimates.
+    """
     model = LogisticRegression(skip_stats=True, optimizer=optimizer, maxiter=maxiter)
 
     # Covars should include intercept
@@ -46,16 +70,32 @@ def _run_lr_test(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Run logistic regression test for a batch of features.
 
-    Args:
-        X: Expression data for current batch, shape (n_cells, batch_size)
-        cond: Binary condition labels, shape (n_cells,)
-        covars: Covariate data with intercept, shape (n_cells, n_covariates)
-        optimizer: Optimization algorithm to use
-        maxiter: Maximum number of iterations for optimization
+    This function performs logistic regression-based differential expression
+    testing for multiple features in parallel. It fits both null and alternative
+    models, and computes likelihood ratio test statistics and p-values.
+
+    Parameters
+    ----------
+    X : jnp.ndarray
+        Expression data matrix of shape (n_samples, n_features), where each
+        column represents a feature (gene) to be tested.
+    cond : jnp.ndarray
+        Binary condition labels of shape (n_samples,), typically encoding
+        treatment or control groups.
+    covars : jnp.ndarray | None, default=None
+        Covariate data including intercept of shape (n_samples, n_covariates).
+        Should include a column of ones for the intercept.
+    optimizer : str, default='BFGS'
+        Optimization method to use for model fitting.
+    maxiter : int, default=100
+        Maximum number of iterations for the optimizer.
 
     Returns
     -------
-        Tuple of coefficients and p-values for the batch
+    tuple[jnp.ndarray, jnp.ndarray]
+        Tuple containing:
+        - Feature coefficients of shape (n_features,)
+        - P-values from likelihood ratio test of shape (n_features,)
     """
     # Fit null model (with intercept only)
     ll_null, _ = _fit_lr(cond, covars, optimizer=optimizer, maxiter=maxiter)
@@ -75,7 +115,37 @@ def _run_lr_test(
 
 @partial(jax.jit, static_argnums=(5, 6, 7))
 def _fit_nb(x, y, covars, disp, size_factors=None, optimizer="BFGS", maxiter=100, dispersion_method="mle"):
-    """Fit single negative binomial regression model with JAX."""
+    """Fit a single negative binomial regression model using JAX.
+
+    This function fits a negative binomial regression model for a single feature,
+    with support for covariates and size factors for normalization. It is designed
+    to be used within batched operations.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Feature values of shape (n_samples,).
+    y : jnp.ndarray
+        Count data outcome variable of shape (n_samples,).
+    covars : jnp.ndarray
+        Covariate matrix including intercept of shape (n_samples, n_covariates).
+    disp : float | None
+        Fixed dispersion parameter. If None, it will be estimated from the data.
+    size_factors : jnp.ndarray | None, default=None
+        Size factors for normalization of shape (n_samples,). Will be log-transformed
+        and used as offset in the model.
+    optimizer : str, default='BFGS'
+        Optimization method to use for fitting the model.
+    maxiter : int, default=100
+        Maximum number of iterations for the optimizer.
+    dispersion_method : str, default='mle'
+        Method for estimating dispersion if not provided. Options are 'mle' or 'moments'.
+
+    Returns
+    -------
+    tuple
+        Coefficient estimates and p-values from the model.
+    """
     model = NegativeBinomialRegression(
         dispersion=disp, optimizer=optimizer, maxiter=maxiter, dispersion_method=dispersion_method
     )
@@ -101,23 +171,45 @@ def _run_nb_test(
     maxiter: int = 100,
     dispersion_method: str = "mle",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Run negative binomial regression test for a batch of features.
+    """Run negative binomial regression tests for a batch of features.
 
-    Args:
-        X: Expression data for current batch, shape (n_cells, batch_size)
-        cond: Binary condition labels, shape (n_cells,)
-        covars: Covariate data with intercept, shape (n_cells, n_covariates)
-        disp: Dispersion parameters for each feature, shape (batch_size,)
-        size_factors: Size factors for normalization, shape (n_cells,), optional
-        optimizer: Optimization algorithm to use
-        maxiter: Maximum number of iterations for optimization
-        dispersion_method: Method to estimate gene-wise dispersions if not provided
-            - "mle": Maximum likelihood estimation
-            - "moments": Method of moments
+    This function performs negative binomial regression-based differential
+    expression testing for multiple features in parallel. It leverages the
+    NegativeBinomialRegression model and supports size factor normalization
+    through offset terms.
+
+    Parameters
+    ----------
+    X : jnp.ndarray
+        Expression data matrix of shape (n_samples, n_features), where each
+        column represents a feature (gene) to be tested.
+    cond : jnp.ndarray
+        Condition indicator of shape (n_samples,). Should be a design vector
+        where each element indicates group membership or a continuous covariate.
+    covars : jnp.ndarray
+        Covariate matrix including intercept of shape (n_samples, n_covariates).
+        Must include a column of ones for the intercept.
+    disp : jnp.ndarray | None, default=None
+        Dispersion parameters for each feature of shape (n_features,).
+        If None, dispersion will be estimated for each feature.
+    size_factors : jnp.ndarray | None, default=None
+        Size factors for normalization of shape (n_samples,).
+        These will be log-transformed and used as offset in the model.
+    optimizer : str, default='BFGS'
+        Optimization method to use for model fitting.
+    maxiter : int, default=100
+        Maximum number of iterations for the optimizer.
+    dispersion_method : str, default='mle'
+        Method to estimate gene-wise dispersions if not provided:
+        - 'mle': Maximum likelihood estimation (more accurate but slower)
+        - 'moments': Method of moments (faster but less accurate)
 
     Returns
     -------
-        Tuple of coefficients and p-values for the batch
+    tuple[jnp.ndarray, jnp.ndarray]
+        Tuple containing:
+        - Feature coefficients of shape (n_features,)
+        - P-values from Wald tests of shape (n_features,)
     """
 
     def fit_nb(x, disp):
@@ -144,7 +236,31 @@ def _run_nb_test(
 
 @partial(jax.jit, static_argnums=(3, 4))
 def _fit_anova(x, y, covars, method="anova", maxiter=100):
-    """Fit linear model based ANOVA."""
+    """Fit linear model-based ANOVA for a single feature.
+
+    This function fits linear models and performs ANOVA-type analysis
+    to test for differential expression of a continuous feature.
+    It compares a null model (covariates only) to a full model
+    (covariates + feature) using an F-test.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Feature values of shape (n_samples,).
+    y : jnp.ndarray
+        Continuous response variable of shape (n_samples,).
+    covars : jnp.ndarray
+        Covariate matrix including intercept of shape (n_samples, n_covariates).
+    method : str, default='anova'
+        Method for the test. Currently only 'anova' is supported.
+    maxiter : int, default=100
+        Maximum number of iterations for the optimizer.
+
+    Returns
+    -------
+    tuple
+        Coefficient estimate and p-value from F-test.
+    """
     model = LinearRegression(skip_stats=True, maxiter=maxiter)
     n = y.shape[0]
 
@@ -193,18 +309,36 @@ def _run_anova_test(
     method: str = "anova",
     maxiter: int = 100,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Run ANOVA test for a batch of features.
-    Args:
-        X: Expression data for current batch, shape (n_cells, batch_size)
-        cond: Binary condition labels, shape (n_cells,)
-        covars: Optional covariate data, shape (n_cells, n_covariates)
-        method: Type of test, either "anova" or "residual"
-        maxiter: Maximum number of iterations for optimization
+    """Run ANOVA-based tests for a batch of features.
+
+    This function performs linear model-based ANOVA tests for
+    multiple features in parallel. It can perform standard ANOVA
+    (testing for the effect of adding a feature) or residual F-tests
+    (testing for differences in residual variances).
+
+    Parameters
+    ----------
+    X : jnp.ndarray
+        Expression data matrix of shape (n_samples, n_features), where each
+        column represents a feature (gene) to be tested.
+    cond : jnp.ndarray
+        Continuous response variable of shape (n_samples,).
+    covars : jnp.ndarray
+        Covariate matrix including intercept of shape (n_samples, n_covariates).
+    method : str, default='anova'
+        Type of test to perform:
+        - 'anova': Standard ANOVA F-test for feature effect
+        - 'residual': Residual F-test comparing error variances
+    maxiter : int, default=100
+        Maximum number of iterations for the optimizer.
 
     Returns
     -------
-        Tuple of coefficients and p-values for the batch
-    """  # noqa: D205
+    tuple[jnp.ndarray, jnp.ndarray]
+        Tuple containing:
+        - Feature coefficients of shape (n_features,)
+        - P-values from F-tests of shape (n_features,)
+    """
     coefs, (f_stat, dfn, dfd) = _fit_anova_batch(cond, X, covars, method, maxiter)
 
     if method == "anova":
@@ -234,31 +368,57 @@ def _run_batched_de(
 ) -> pd.DataFrame:
     """Run differential expression analysis in batches.
 
+    This function is the main entry point for performing differential expression
+    analysis using JAX-based implementations. It processes large expression matrices
+    in batches to optimize memory usage and leverages JAX for acceleration.
+    The function supports different statistical methods and handles various
+    modeling approaches including offset terms for size factor normalization.
+
     Parameters
     ----------
-        X: Expression data matrix, shape (n_cells, n_features)
-        model_data: DataFrame containing condition and covariate data
-        feature_names: Names of features/genes
-        method: Testing method to use:
-            - "lr": Logistic regression with LR test
-            - "negbinom": Negative binomial with Wald test
-            - "anova": Linear model with ANOVA F-test
-            - "anova_residual": Linear model with residual F-test
-        condition_key: Name of condition column in model_data
-        optimizer: Optimization algorithm to use
-        maxiter: Maximum number of iterations for optimization
-        dispersions: Dispersion estimates for negative binomial regression, shape (n_features,)
-        dispersion_method: Method to estimate gene-wise dispersions if not provided
-            - "mle": Maximum likelihood estimation
-            - "moments": Method of moments
-        size_factors: Size factors for normalization, shape (n_cells,)
-        covariate_keys: Names of covariate columns in model_data
-        batch_size: Number of features to process per batch
-        verbose: Whether to show progress bar
+    X : np.ndarray | sparse.spmatrix
+        Expression data matrix of shape (n_samples, n_features).
+    model_data : pd.DataFrame
+        DataFrame containing condition labels and covariates.
+    feature_names : pd.Index
+        Names of features/genes corresponding to columns in X.
+    method : str
+        Statistical method for testing:
+        - 'lr': Logistic regression with likelihood ratio test
+        - 'negbinom': Negative binomial regression with Wald test
+        - 'anova': Linear model with ANOVA F-test
+        - 'anova_residual': Linear model with residual F-test
+    condition_key : str
+        Name of the column in model_data containing condition labels.
+    dispersions : np.ndarray | None, default=None
+        Pre-computed dispersion estimates for negative binomial regression
+        of shape (n_features,).
+    size_factors : np.ndarray | None, default=None
+        Size factors for normalization of shape (n_samples,). Will be
+        log-transformed and used as offset in the model.
+    covariate_keys : list[str] | None, default=None
+        Names of covariate columns in model_data to include in the design matrix.
+    dispersion_method : str, default='mle'
+        Method for estimating dispersions when using negative binomial models:
+        - 'mle': Maximum likelihood estimation (more accurate)
+        - 'moments': Method of moments (faster)
+    batch_size : int, default=32
+        Number of features to process in each batch for memory efficiency.
+    optimizer : str, default='BFGS'
+        Optimization algorithm for fitting models.
+    maxiter : int, default=100
+        Maximum number of iterations for optimization algorithms.
+    verbose : bool, default=True
+        Whether to display progress information.
 
     Returns
     -------
-        DataFrame with test results for each feature
+    pd.DataFrame
+        DataFrame with test results for each feature, including:
+        - Feature names
+        - Coefficients/effect sizes
+        - P-values
+        - Other test-specific statistics
     """
     # Prepare data for logistic regression
     if method == "lr":
