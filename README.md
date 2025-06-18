@@ -70,11 +70,11 @@ results = dx.tl.de(
 
 
 ## ⚙️ Backends
-**delnx** implements DE tests using regression models from different backends:
+**delnx** implements DE tests using regression models and statistical tests from various backends:
 
-- [JAX](https://docs.jax.dev/en/latest/)
+- [JAX](https://docs.jax.dev/en/latest/).
 - [statsmodels](https://www.statsmodels.org/stable/index.html)
-- [cuML](https://rapids.ai/cuml.html).
+- [cuML](https://rapids.ai/cuml.html)
 - [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
 
 
