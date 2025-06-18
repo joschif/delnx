@@ -352,10 +352,10 @@ def de(
       - "anova" methods work best with log-normalized data
     - Backend options:
         - "jax" provides batched, GPU-accelerated testing with the following methods: "lr", "negbinom", "anova", "anova_residual"
-        - "statsmodels" uses statsmodels implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
+        - "statsmodels" uses [statsmodels](https://www.statsmodels.org/stable/index.html) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
         - "cuml" provides GPU-accelerated logistic regression with the "lr" method
     - The "deseq2" method ignores the `backend` parameter and always uses the PyDESeq2 implementation.
-    - Size factors and dispersion parameters shoudl be pre-computed for the "negbinom" method.
+    - Size factors and dispersion parameters should be pre-computed for the "negbinom" method.
     - Multiple testing correction is applied across all comparisons
     """
     # Validate inputs
