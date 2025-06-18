@@ -72,7 +72,7 @@ results = dx.tl.de(
 ## ⚙️ Backends
 **delnx** implements DE tests using regression models and statistical tests from various backends:
 
-- [JAX](https://docs.jax.dev/en/latest/).
+- [JAX](https://docs.jax.dev/en/latest/)
 - [statsmodels](https://www.statsmodels.org/stable/index.html)
 - [cuML](https://rapids.ai/cuml.html)
 - [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
@@ -94,9 +94,10 @@ results = dx.tl.de(
         - [x] statsmodels
         - [ ] JAX
 - [x] Implement DESeq2 wrapper using [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
-- [x] Add dispersion estimation methods.
-- [ ] Take covariates into account for dispersion estimation.
-- [ ] Add plotting functions to visualize DE results.
+- [x] Implement size factor estimation methods
+- [x] Add dispersion estimation methods
+- [ ] Take covariates into account for dispersion estimation
+- [ ] Add plotting functions to visualize DE results
 
 
 ## 📖 Documentation
