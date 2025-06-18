@@ -39,6 +39,12 @@ pip install git+https://github.com/joschif/delnx.git@main
 ```python
 import delnx as dx
 
+# Compute size factors
+adata = dx.pp.size_factors(adata, method="ratio")
+
+# Estimate dispersion parameters
+adata = dx.pp.dispersion(adata, size_factor_key="size_factor", method="deseq2")
+
 # Run differential expression analysis
 results = dx.tl.de(
     adata,
@@ -47,7 +53,8 @@ results = dx.tl.de(
     mode="all_vs_ref",
     reference="control",
     method="negbinom",
-    backend="jax"
+    size_factor_key="size_factor",
+    dispersion_key="dispersion",
 )
 ```
 
