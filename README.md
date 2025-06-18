@@ -58,9 +58,50 @@ results = dx.tl.de(
 )
 ```
 
+## 💎 Features
+- **Size factor estimation**: Compute size factors for normalization and DE analysis.
+- **Dispersion estimation**: Estimate dispersion parameters for negative binomial models.
+- **Differential expression analysis**: Consistent interface to perform DE analysis using various methods, including:
+  - **Negative binomial regression** with dispersion estimates.
+  - **Logistic regression** with a likelihood ratio test.
+  - **ANOVA** tests based on linear models.
+  - **DESeq2** through [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/), a widely used method for DE analysis of RNA-seq data.
+- **GPU acceleration**: Most methods are implemented in JAX, enabling GPU acceleration for scalable DE-analysis on large datasets.
+
+
+## ⚙️ Backends
+**delnx** implements DE tests using regression models from different backends:
+    - **JAX**: All custom methods are implemented in [JAX](https://docs.jax.dev/en/latest/) to allow GPU-accelerated and batched DE testing.
+    - **statsmodels**: Using regression models from [statsmodels](https://www.statsmodels.org/stable/index.html) for statistical tests.
+    - **cuML**: Using GPU-accelerated regression models from [cuML](https://rapids.ai/cuml.html).
+    - **PyDESeq2**: For DESeq2 analysis.
+
+
+## 🗺️ Roadmap
+- [x] Implement standard GLM-based DE tests (inspired by [Seurat::FindMarkers](https://satijalab.org/seurat/reference/findmarkers))
+    - [x] Logistic regression with likelihood ratio test
+        - [x] statsmodels
+        - [x] JAX
+        - [x] cuML
+    - [x] Negative binomial regression with dispersion estimates
+        - [x] statsmodels
+        - [x] JAX
+    - [x] ANOVA
+        - [x] statsmodels
+        - [x] JAX
+    - [x] Binomial regression for binary data
+        - [x] statsmodels
+        - [ ] JAX
+- [x] Implement DESeq2 wrapper using [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
+- [x] Add dispersion estimation methods.
+- [ ] Take covariates into account for dispersion estimation.
+- [ ] Add plotting functions to visualize DE results.
+
+
 ## 📖 Documentation
 
 For more information, check out the [documentation][documentation] and the [API reference][api documentation].
+
 
 
 [issue tracker]: https://github.com/joschif/delnx/issues
