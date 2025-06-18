@@ -29,7 +29,7 @@ def _estimate_dispersion_batched(
     method: str = "deseq2",
     dispersion_range: tuple[float, float] = (1e-6, 10.0),
     shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
-    prior_variance: float = 0.25,
+    prior_variance: float = 0.1,
     prior_df: float = 5.0,
     batch_size: int = 2048,
     verbose: bool = True,
@@ -118,7 +118,7 @@ def dispersion(
     var_key_added: str = "dispersion",
     dispersion_range: tuple[float, float] = (1e-4, 10.0),
     shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
-    prior_variance: float = 0.25,
+    prior_variance: float = 0.1,
     prior_df: float = 5.0,
     batch_size: int = 2048,
     verbose: bool = True,
@@ -162,7 +162,7 @@ def dispersion(
         Range for the shrinkage weight used in DESeq2 and EdgeR methods, specified as
         (min_weight, max_weight). Controls how strongly individual gene estimates
         are shrunk towards the trend.
-    prior_variance : float, default=0.25
+    prior_variance : float, default=0.1
         Prior variance parameter for DESeq2-style dispersion shrinkage. Higher values
         result in less shrinkage.
     prior_df : float, default=5.0
