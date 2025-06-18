@@ -1,4 +1,20 @@
-"""Size factor computation for (single-cell) RNA-seq data."""
+"""Size factor computation for RNA-seq normalization.
+
+This module provides methods to compute size factors that account for differences
+in sequencing depth and technical biases between samples in RNA-seq data. Size factors
+are crucial for accurate differential expression analysis and can be used as offset terms
+in count-based regression models.
+
+The module implements several normalization methods:
+- DESeq2-style median-of-ratios size factors
+- Quantile regression-based normalization (similar to SCnorm)
+- Library size normalization (sequencing depth)
+
+These size factors can be used for:
+1. Scaling raw counts for visualization
+2. Providing offset terms for negative binomial regression models
+3. Normalizing counts prior to log-transformation
+"""
 
 import warnings
 from functools import partial
@@ -14,7 +30,23 @@ from delnx.models import LinearRegression
 
 
 def _compute_library_size(adata, layer=None):
-    """Compute library size factors for each cell."""
+    """Compute library size factors for each cell.
+
+    This function calculates size factors based on the total count (library size)
+    of each cell, normalized by the mean library size across all cells.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix containing expression data.
+    layer : str, optional
+        Layer in `adata.layers` to use for calculation. If None, uses `adata.X`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of size factors with the same length as the number of observations in `adata`.
+    """
     # Get expression matrix
     X = _get_layer(adata, layer)
 
@@ -27,7 +59,31 @@ def _compute_library_size(adata, layer=None):
 
 
 def _compute_median_ratio(adata, layer=None):
-    """Compute median-of-ratios size factors."""
+    """Compute DESeq2-style median-of-ratios size factors.
+
+    This function implements the DESeq2 normalization method which computes size factors
+    as the median of ratios of gene expression to a reference sample (geometric mean
+    across all samples). This approach is robust to differential expression between
+    samples and is recommended for bulk RNA-seq and single-cell data with sufficient
+    coverage.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix containing expression data.
+    layer : str, optional
+        Layer in `adata.layers` to use for calculation. If None, uses `adata.X`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of size factors with the same length as the number of observations in `adata`.
+
+    Raises
+    ------
+    ValueError
+        If all genes have zero counts across all samples.
+    """
     X = _get_layer(adata, layer)
 
     # Compute gene-wise mean log counts
@@ -55,16 +111,62 @@ def _compute_median_ratio(adata, layer=None):
 
 @partial(jax.jit, static_argnums=(2,))
 def _fit_lm(x, y, maxiter=100):
+    """Fit a linear model using JAX.
+
+    Parameters
+    ----------
+    x : jax.numpy.ndarray
+        Input features, shape (n_samples, n_features).
+    y : jax.numpy.ndarray
+        Target values, shape (n_samples,).
+    maxiter : int, default=100
+        Maximum number of iterations for optimization.
+
+    Returns
+    -------
+    jax.numpy.ndarray
+        Predicted values from the linear model.
+    """
     model = LinearRegression(skip_wald=True, maxiter=maxiter)
     results = model.fit(x, y)
     pred = x @ results["coef"]
     return pred
 
 
-_fit_lm_batch = jax.vmap(_fit_lm, in_axes=(None, 1), out_axes=0)
+_fit_lm_batch = jax.vmap(_fit_lm, in_axes=(None, 1), out_axes=0)  # Vectorized version for batch processing
 
 
 def _compute_quantile_regression(adata, layer=None, min_counts=1, quantiles=np.linspace(0.1, 0.9, 9), batch_size=32):
+    """Compute size factors using quantile regression.
+
+    This function implements a quantile regression-based approach similar to SCnorm,
+    which accounts for gene-specific count-depth relationships. It is particularly
+    useful for single-cell RNA-seq data where library size normalization may not
+    adequately correct for technical biases.
+
+    The method:
+    1. Groups genes into quantile bins based on their mean expression
+    2. For each bin, fits linear models to predict gene expression from cell-specific medians
+    3. Combines predictions across bins to compute size factors
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix containing expression data.
+    layer : str, optional
+        Layer in `adata.layers` to use for calculation. If None, uses `adata.X`.
+    min_counts : float, default=1
+        Minimum mean count threshold for genes to be included in normalization.
+    quantiles : numpy.ndarray, default=np.linspace(0.1, 0.9, 9)
+        Quantile points for binning genes based on mean expression.
+    batch_size : int, default=32
+        Number of genes to process per batch for memory efficiency.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of size factors with the same length as the number of observations in `adata`.
+    """
     # Get count matrix and filter genes
     X = _get_layer(adata, layer)  # shape: (cells x genes)
     gene_means = np.asarray(X.mean(axis=0)).flatten()  # per-gene means
@@ -99,27 +201,69 @@ def _compute_quantile_regression(adata, layer=None, min_counts=1, quantiles=np.l
     return size_factors / np.mean(size_factors)
 
 
-def size_factors(adata, method="library_size", layer=None, **kwargs):
-    """Compute size factors for normalization.
+def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor", **kwargs):
+    """Compute size factors for RNA-seq normalization.
+
+    This function calculates sample/cell-specific normalization factors (size factors)
+    to account for differences in sequencing depth and technical biases between samples.
+    The computed size factors can be used to normalize counts for visualization or
+    as offset terms in statistical models for differential expression analysis.
 
     Parameters
     ----------
     adata : AnnData
-        Annotated data matrix.
-    method : str, optional
-        Method to compute size factors. Options are:
-        - "ratio": DESeq2-style median-of-ratios size factor
-        - "quantile_regression": SCnorm-style quantile regression normalization
-        - "library_size": Library size normalization (sum of counts)
+        Annotated data matrix containing expression data.
+    method : str, default="ratio"
+        Method to compute size factors:
+        - "ratio": DESeq2-style median-of-ratios size factors, robust to differential
+          expression between samples. Recommended for bulk RNA-seq and well-covered
+          single-cell data.
+        - "quantile_regression": SCnorm-style quantile regression normalization,
+          accounts for gene-specific count-depth relationships. Recommended for
+          single-cell RNA-seq data with potential gene-dependent biases.
+        - "library_size": Library size normalization based on the total counts per
+          sample. Simple but less robust to highly expressed genes or differential
+          expression.
     layer : str, optional
-        Layer to use for size factor calculation. If None, use adata.X.
+        Layer in `adata.layers` to use for size factor calculation. If None,
+        uses `adata.X`. Should contain raw (unlogged) counts.
+    obs_key_added : str, default="size_factor"
+        Key in `adata.obs` where the computed size factors will be stored.
     **kwargs : dict
-        Additional parameters for specific methods.
+        Additional parameters for specific methods:
+        - For "quantile_regression": min_counts (default=1), quantiles, batch_size (default=32)
 
     Returns
     -------
     None
-        Size factors are stored in adata.obs.
+        Size factors are stored in `adata.obs[obs_key_added]`.
+
+    Examples
+    --------
+    Calculate DESeq2-style median-of-ratios size factors:
+
+    >>> import scanpy as sc
+    >>> import delnx as dx
+    >>> adata = sc.read_h5ad("counts.h5ad")
+    >>> dx.pp.size_factors(adata, method="ratio", obs_key_added="size_factors")
+
+    Use different normalization methods:
+
+    >>> # Library size normalization
+    >>> dx.pp.size_factors(adata, method="library_size", obs_key_added="lib_size_factors")
+    >>> # Quantile regression normalization (SCnorm-style)
+    >>> dx.pp.size_factors(adata, method="quantile_regression", obs_key_added="qr_factors", min_counts=5)
+
+    Use size factors for normalization in differential expression analysis:
+
+    >>> # Compute DE with size factors as offset
+    >>> results = dx.tl.de(adata, condition_key="treatment", size_factor_key="size_factors")
+
+    Notes
+    -----
+    - Size factors are scaled to have a mean of 1.0 across all samples
+    - A warning will be raised if any size factors are zero or negative
+    - For sparse count matrices, computation is automatically adjusted for efficiency
     """
     if method == "ratio":
         size_factors = _compute_median_ratio(adata, layer)
@@ -138,4 +282,4 @@ def size_factors(adata, method="library_size", layer=None, **kwargs):
         )
 
     # Store size factors in adata.obs
-    adata.obs["size_factor"] = size_factors
+    adata.obs[obs_key_added] = size_factors
