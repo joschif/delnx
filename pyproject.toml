@@ -40,18 +40,20 @@ optional-dependencies.dev = [
   "pre-commit>=4.2",
   "twine>=4.0.2",
 ]
-optional-dependencies.doc = [
-  "docutils>=0.21.2",
-  "ipykernel>=6.29.5",
-  "ipython>=9.0.2",
-  "myst-nb>=1.2",
-  "pandas>=2.2.3",
-  "sphinx>=8.2.3",
-  "sphinx-autodoc-typehints>=3.1",
+optional-dependencies.docs = [
+  "docutils>=0.8,!=0.18.*,!=0.19.*",
+  # For notebooks
+  "ipykernel",
+  "ipython",
+  "myst-nb>=1.1",
+  "pandas",
+  "scvi-tools",
+  "setuptools",
+  "sphinx>=8",
+  "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
-  "sphinx-copybutton>=0.5.2",
-  "sphinx-tabs",
-  "sphinxcontrib-bibtex>=2.6.3",
+  "sphinx-copybutton",
+  "sphinxcontrib-bibtex>=2",
   "sphinxext-opengraph",
 ]
 optional-dependencies.test = [
