@@ -51,6 +51,7 @@ def _grouped_de(
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
     min_samples: int = 2,
+    dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
     n_jobs: int = 1,
     batch_size: int = 2048,
@@ -95,6 +96,10 @@ def _grouped_de(
         Minimum absolute log2 fold change threshold.
     min_samples : int, default=2
         Minimum number of samples required per condition level.
+    dispersion_method : str, default='mle'
+        Method for estimating gene-wise dispersions for negative binomial models if not provided:
+        - 'mle': Maximum likelihood estimation based on the intercept
+        - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction.
     n_jobs : int, default=1
@@ -140,6 +145,7 @@ def _grouped_de(
             data_type=data_type,
             log2fc_threshold=log2fc_threshold,
             min_samples=min_samples,
+            dispersion_method=dispersion_method,
             multitest_method=multitest_method,
             n_jobs=n_jobs,
             batch_size=batch_size,
@@ -200,6 +206,7 @@ def de(
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
     min_samples: int = 2,
+    dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
     n_jobs: int = 1,
     batch_size: int = 2048,
@@ -272,6 +279,10 @@ def de(
     min_samples : int, default=2
         Minimum number of samples required per condition level.
         Comparisons with fewer samples are skipped.
+    dispersion_method : str, default='mle'
+        Method for estimating gene-wise dispersions for negative binomial models if not provided:
+        - 'mle': Maximum likelihood estimation based on the intercept
+        - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction. Accepts any method supported
         by `statsmodels.stats.multipletests`. Common options include:
@@ -398,6 +409,7 @@ def de(
             data_type=data_type,
             log2fc_threshold=log2fc_threshold,
             min_samples=min_samples,
+            dispersion_method=dispersion_method,
             multitest_method=multitest_method,
             n_jobs=n_jobs,
             batch_size=batch_size,

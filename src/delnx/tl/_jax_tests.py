@@ -399,9 +399,9 @@ def _run_batched_de(
     covariate_keys : list[str] | None, default=None
         Names of covariate columns in model_data to include in the design matrix.
     dispersion_method : str, default='mle'
-        Method for estimating dispersions when using negative binomial models:
-        - 'mle': Maximum likelihood estimation (more accurate)
-        - 'moments': Method of moments (faster)
+        Method for estimating gene-wise dispersions for negative binomial models if not provided:
+        - 'mle': Maximum likelihood estimation based on the intercept
+        - 'moments': Method of moments
     batch_size : int, default=32
         Number of features to process in each batch for memory efficiency.
     optimizer : str, default='BFGS'

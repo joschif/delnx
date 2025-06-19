@@ -487,7 +487,7 @@ class NegativeBinomialRegression(Regression):
 
     dispersion: float | None = None
     dispersion_range: tuple[float, float] = (1e-6, 10.0)
-    dispersion_method: str = "moments"
+    dispersion_method: str = "mle"
 
     def _negative_log_likelihood(
         self,
