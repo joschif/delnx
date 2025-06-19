@@ -136,10 +136,10 @@ def dispersion(
     adata : :class:`~anndata.AnnData`
         Annotated data matrix containing expression data. The data should contain
         raw or normalized counts.
-    layer : str | None, default=None
+    layer : str | :obj:`None`, default=:obj:`None`
         Layer in `adata.layers` containing count data to use for dispersion estimation.
-        If None, uses `adata.X`. Should contain raw counts or normalized counts.
-    size_factor_key : str | None, default=None
+        If :obj:`None`, uses `adata.X`. Should contain raw counts or normalized counts.
+    size_factor_key : str | :obj:`None`, default=:obj:`None`
         Key in `adata.obs` containing size factors for normalization. If provided,
         counts will be normalized by these factors before dispersion estimation.
         This is important for accurate dispersion estimation in datasets with

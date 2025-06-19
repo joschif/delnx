@@ -36,16 +36,16 @@ def pseudobulk(
         Column name in `adata.obs` that contains the sample identifiers.
         Each unique value will become a separate pseudobulk sample
         (or multiple samples if `n_pseudoreps` is specified).
-    group_key : str | None, default=None
+    group_key : str | :obj:`None`, default=:obj:`None`
         Column name in `adata.obs` that contains group identifiers like cell types.
         If provided, pseudobulk samples will be generated separately for each combination
         of sample and group, enabling cell type-specific analysis.
-    n_pseudoreps : int | None, default=None
-        Number of pseudoreplicates to create per sample. If None, uses the original
+    n_pseudoreps : int | :obj:`None`, default=:obj:`None`
+        Number of pseudoreplicates to create per sample. If :obj:`None`, uses the original
         sample structure without resampling. If specified, creates `n_pseudoreps`
         pseudoreplicates per sample by randomly sampling cells with replacement.
-    layer : str | None, default=None
-        Layer in `adata.layers` to use for aggregation. If None, uses `adata.X`.
+    layer : str | :obj:`None`, default=:obj:`None`
+        Layer in `adata.layers` to use for aggregation. If :obj:`None`, uses `adata.X`.
         Should contain raw or normalized counts, not log-transformed values.
     mode : str, default="sum"
         Method to aggregate cell-level data into pseudobulk samples:
