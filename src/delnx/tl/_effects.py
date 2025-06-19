@@ -60,8 +60,8 @@ def _log2fc(
         raise ValueError(f"Unsupported data type: {data_type}")
 
     # Extract test and reference data once
-    ref_data = X[~condition_mask]
-    test_data = X[condition_mask]
+    ref_data = X[~condition_mask, :]
+    test_data = X[condition_mask, :]
 
     if data_type == "lognorm":
         # For log-normalized data (log1p transformed):

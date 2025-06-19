@@ -98,6 +98,7 @@ def adata_pb_counts(adata):
         mode="sum",
     )
     adata_pb.obs["size_factors"] = adata_pb.obs["psbulk_counts"] / adata_pb.obs["psbulk_counts"].mean()
+    adata_pb.var["dispersion"] = np.random.uniform(0.01, 2.0, size=adata_pb.n_vars)
 
     return adata_pb
 

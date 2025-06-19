@@ -98,7 +98,7 @@ def _run_negbinom(
         Column name in model_data containing the condition labels.
     size_factors : np.ndarray | None, default=None
         Size factors for normalization, shape (n_samples,). When provided, they are
-        incorporated into the model as log-transformed offsets, similar to DESeq2.
+        incorporated into the model as log-transformed offsets.
     covariate_keys : list[str] | None, default=None
         Column names in model_data to include as covariates in the model.
     verbose : bool, default=False
@@ -537,7 +537,7 @@ def _run_de(
             f"Method '{method}' not supported for backend '{backend}'. Available methods: {list(available_methods.keys())}"
         )
 
-    if method == "negbinom" and size_factors is not None:
+    if method == "negbinom":
         test_func = partial(test_func, size_factors=size_factors)
 
     def _process_feature(i: int) -> tuple[str, float, float] | tuple[str, None, None]:

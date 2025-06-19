@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from anndata import AnnData
+from scipy.sparse import csr_matrix, issparse
 
 import delnx as dx
 from delnx._typing import Backends, ComparisonMode, DataType, Method
@@ -386,6 +387,7 @@ def de(
     # Get size factors and compute if not provided
     if size_factor_key is None and method == "negbinom":
         dx.pp.size_factors(adata, method="library_size")
+        size_factor_key = "size_factor"
 
     size_factors = adata.obs[size_factor_key].values if size_factor_key else None
 
@@ -493,6 +495,7 @@ def de(
 
         if data_type == "counts" and size_factors is not None:
             X_norm = X_comp / sf_comp[:, np.newaxis]
+            X_norm = csr_matrix(X_norm) if issparse(X_comp) else X_norm
         else:
             X_norm = X_comp
 

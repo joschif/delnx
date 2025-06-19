@@ -31,7 +31,28 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
     assert len(de_results) > 50
     assert all(col in de_results.columns for col in ["feature", "pval", "padj", "coef"])
 
-    # Check against no size factors to see if they are actually used
+    # Check against randomly generated size factors
+    # This is to ensure that the size factors are actually used in the DE analysis
+    adata_pb_counts.obs["rand_size_factors"] = np.random.uniform(0.5, 1.5, size=adata_pb_counts.n_obs)
+    de_results_rsf = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method=method,
+        backend=backend,
+        reference="control",
+        size_factor_key="rand_size_factors",
+    )
+
+    # Basic checks
+    assert isinstance(de_results_rsf, pd.DataFrame)
+    assert len(de_results_rsf) > 0
+    assert len(de_results_rsf) > 50
+    assert all(col in de_results_rsf.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check that results are different
+    assert not de_results[["pval", "padj", "coef"]].equals(de_results_rsf[["pval", "padj", "coef"]])
+
+    # Check against no size factors to see if they are computed internally
     de_results_nosf = de(
         adata_pb_counts,
         condition_key="condition",
@@ -48,7 +69,31 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
     assert all(col in de_results_nosf.columns for col in ["feature", "pval", "padj", "coef"])
 
     # Check that results are different
-    assert not de_results[["pval", "padj", "coef"]].equals(de_results_nosf[["pval", "padj", "coef"]])
+    assert de_results[["pval", "padj", "coef"]].equals(de_results_nosf[["pval", "padj", "coef"]])
+
+    # Check with dispersion and size factors to see if they are actually used (only for jax backend)
+    de_results_disp = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method=method,
+        backend=backend,
+        reference="control",
+        size_factor_key="size_factors",
+        dispersion_key="dispersion",
+    )
+
+    # Basic checks
+    assert isinstance(de_results_disp, pd.DataFrame)
+    assert len(de_results_disp) > 0
+    assert len(de_results_disp) > 50
+    assert all(col in de_results_disp.columns for col in ["feature", "pval", "padj", "coef"])
+
+    if backend == "jax":
+        # Check that results are different
+        assert not de_results[["pval", "padj", "coef"]].equals(de_results_disp[["pval", "padj", "coef"]])
+    else:
+        # For statsmodels, dispersion is not used, so results should be the same
+        assert de_results[["pval", "padj", "coef"]].equals(de_results_disp[["pval", "padj", "coef"]])
 
 
 @pytest.mark.parametrize(
