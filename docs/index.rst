@@ -1,3 +1,6 @@
+🌳 delnx
+=========
+
 .. image:: https://img.shields.io/pypi/v/delnx.svg?color=blue
    :target: https://pypi.org/project/delnx
    :alt: PyPI version
@@ -18,30 +21,28 @@
    :target: https://delnx.readthedocs.io
    :alt: Documentation Status
 
-🌳 delnx
-=========
 
 :mod:`delnx` (``"de-lo-nix"  | /dɪˈlɒnɪks/``) is a python package for differential expression analysis of (single-cell) genomics data. It enables scalable analyses of atlas-level datasets through GPU-accelerated regression models and statistical tests implemented in `JAX <https://docs.jax.dev/en/latest/>`_. It also provides a consistent interface to perform DE analysis with other methods, such as `statsmodels <https://www.statsmodels.org/stable/index.html>`_ and `PyDESeq2 <https://pydeseq2.readthedocs.io/en/stable/>`_.
 
 🚀 Installation
-===============
+---------------
 
 PyPI
-----
+~~~~
 
 .. code-block:: bash
 
    pip install delnx
 
 Development version
--------------------
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
    pip install git+https://github.com/joschif/delnx.git@main
 
 ⚡ Quickstart
-=============
+----------------
 
 .. code-block:: python
 
@@ -66,7 +67,7 @@ Development version
    )
 
 💎 Features
-===========
+------------
 
 - **Pseudobulking**: Perform DE on large multi-sample datasets by using pseudobulk aggregation.
 - **Size factor estimation**: Compute size factors for normalization and DE analysis.
@@ -81,7 +82,7 @@ Development version
 - **GPU acceleration**: Most methods are implemented in JAX, enabling GPU acceleration for scalable DE-analysis on large datasets.
 
 ⚙️ Backends
-============
+-----------
 
 **delnx** implements DE tests using regression models and statistical tests from various backends:
 
@@ -91,7 +92,7 @@ Development version
 - `PyDESeq2 <https://pydeseq2.readthedocs.io/en/stable/>`_
 
 🗺️ Roadmap
-===========
+-----------
 
 - ✅ Provide a common interface to standard GLM-based DE tests (inspired by `Seurat::FindMarkers <https://satijalab.org/seurat/reference/findmarkers>`_)
 
@@ -128,6 +129,6 @@ Development version
 - ⬜ Gene set enrichment analysis for DE results
 
 📖 Documentation
-================
+----------------
 
 For more information, check out the `documentation <https://delnx.readthedocs.io>`_ and the `API reference <https://delnx.readthedocs.io/en/latest/api.html>`_.
