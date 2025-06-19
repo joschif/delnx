@@ -183,6 +183,7 @@ def _grouped_de(
             "feature",
             "test_condition",
             "ref_condition",
+            "group",
             "log2fc",
             "auroc",
             "coef",
