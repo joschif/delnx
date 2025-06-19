@@ -40,7 +40,7 @@ def _compute_library_size(adata, layer=None):
     adata : AnnData
         Annotated data matrix containing expression data.
     layer : str, optional
-        Layer in `adata.layers` to use for calculation. If None, uses `adata.X`.
+        Layer in `adata.layers` to use for calculation. If `None`, uses `adata.X`.
 
     Returns
     -------
@@ -224,7 +224,7 @@ def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor",
         Key in `adata.obs` where the computed size factors will be stored.
     **kwargs : dict
         Additional parameters for specific methods:
-            - For "quantile_regression": min_counts (default=1), quantiles, batch_size (default=32)
+            - For "quantile_regression": `min_counts` (default=1), `quantiles`, `batch_size` (default=32)
 
     Returns
     -------

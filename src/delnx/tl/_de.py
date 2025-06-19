@@ -230,21 +230,21 @@ def de(
         Annotated data object containing expression data and metadata.
     condition_key : str
         Column name in `adata.obs` containing condition labels for comparison.
-    group_key : str | :obj:`None`, default=:obj:`None`
+    group_key : str | None, default=None
         Column name in `adata.obs` for grouped differential expression testing
         (e.g., cell type). If provided, DE testing is performed separately for
         each group.
-    reference : str | tuple[str, str] | :obj:`None`, default=:obj:`None`
+    reference : str | tuple[str, str] | None, default=None
         Reference condition for comparison. Can be:
             - Single string: reference condition for all comparisons
             - Tuple (reference, comparison): specific pair to compare
             - :obj:`None`: automatically determined based on mode
-    size_factor_key : str | :obj:`None`, default=:obj:`None`
+    size_factor_key : str | None, default=None
         Column name in `adata.obs` containing size factors for normalization. When using a negative binomial model, this is used as an offset term to account for library size differences. If not provided, size are computed internally based on library size normalization.
-    dispersion_key : str | :obj:`None`, default=:obj:`None`
+    dispersion_key : str | None, default=None
         Column name in `adata.var` containing precomputed dispersions.
         Only used for negative binomial methods.
-    covariate_keys : list[str] | :obj:`None`, default=:obj:`None`
+    covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
         Method for differential expression testing:
@@ -264,7 +264,7 @@ def de(
             - "all_vs_all": Compare all pairs of condition levels
             - "all_vs_ref": Compare all levels against reference
             - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
-    layer : str | :obj:`None`, default=:obj:`None`
+    layer : str | None, default=None
         Layer name in :attr:`~anndata.AnnData.layers` to use for expression data.
         If :obj:`None`, uses :attr:`~anndata.AnnData.X`.
     data_type : DataType, default='auto'
