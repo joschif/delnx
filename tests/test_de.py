@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from delnx.tl import de, grouped_de
+from delnx.tl import de
 
 
 @pytest.mark.parametrize(
@@ -296,25 +296,6 @@ def test_de_data_type_validation(adata_pb_counts):
 )
 def test_grouped_de(adata_pb_lognorm, method, mode, reference):
     """Test grouped DE analysis."""
-    # Run DE analysis with grouping
-    de_results = grouped_de(
-        adata_pb_lognorm,
-        condition_key="condition_str",
-        group_key="cell_type",
-        method=method,
-        backend="statsmodels",
-        mode=mode,
-        reference=reference,
-    )
-
-    # Basic checks
-    assert isinstance(de_results, pd.DataFrame)
-    assert len(de_results) > 0
-    assert len(de_results) > 200
-    assert all(col in de_results.columns for col in ["feature", "pval", "padj", "group"])
-    assert len(de_results["group"].unique()) == 3
-    assert "cell_type_1" in de_results["group"].values.tolist()
-
     # Run DE analysis with grouping
     de_results = de(
         adata_pb_lognorm,
