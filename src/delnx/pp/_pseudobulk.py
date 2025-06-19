@@ -26,11 +26,7 @@ def pseudobulk(
 ) -> AnnData:
     """Create pseudobulk samples from single-cell RNA-seq data.
 
-    This function aggregates single-cell RNA-seq data into pseudobulk samples based on
-    specified sample and group identifiers. It can optionally create random pseudoreplicates
-    by sampling cells with replacement, which can be useful for assessing technical variation.
-    Pseudobulking is often used as a preprocessing step for differential expression analysis
-    to improve statistical power and reduce the impact of technical noise.
+    This function aggregates single-cell RNA-seq data into pseudobulk samples based on specified sample and group identifiers. It can optionally create random pseudoreplicates.
 
     Parameters
     ----------
@@ -53,12 +49,12 @@ def pseudobulk(
         Should contain raw or normalized counts, not log-transformed values.
     mode : str, default="sum"
         Method to aggregate cell-level data into pseudobulk samples:
-        - "sum": Sum of counts (recommended for RNA-seq data)
-        - "mean": Average of counts across cells
+            - "sum": Sum of counts (recommended for RNA-seq data)
+            - "mean": Average of counts across cells
     **kwargs
-        Additional arguments to pass to `decoupler.pseudobulk()`, such as:
-        - min_cells: Minimum number of cells required per pseudobulk sample
-        - min_counts: Minimum number of counts required per pseudobulk sample
+        Additional arguments to pass to :func:`decoupler.pp.pseudobulk`, such as:
+            - min_cells: Minimum number of cells required per pseudobulk sample
+            - min_counts: Minimum number of counts required per pseudobulk sample
 
     Returns
     -------
@@ -68,7 +64,7 @@ def pseudobulk(
 
     Notes
     -----
-    - Wrapper around the [decoupler](https://github.com/scverse/decoupler) pseudobulk function to support pseudo-replicates
+    - Wrapper around the decoupler (https://github.com/scverse/decoupler) pseudobulk function to support pseudo-replicates
     - It's generally recommended to aggregate counts using the "sum" mode and then re-normalize rather than using "mean" directly on log-normalized data.
 
     Examples

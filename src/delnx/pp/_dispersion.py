@@ -146,10 +146,10 @@ def dispersion(
         variable sequencing depth.
     method : Method, default="deseq2"
         Method for dispersion estimation:
-        - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a parametric trend based on a gamma distribution.
-        - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards a log-linear trend.
-        - "mle": Maximum likelihood estimation without shrinkage.
-        - "moments": Simple method of moments estimation (faster but less accurate).
+            - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a parametric trend based on a gamma distribution.
+            - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards a log-linear trend.
+            - "mle": Maximum likelihood estimation without shrinkage.
+            - "moments": Simple method of moments estimation (faster but less accurate).
     var_key_added : str, default="dispersion"
         Key in `adata.var` where the estimated dispersion values will be stored.
         Existing values will be overwritten.

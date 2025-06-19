@@ -48,6 +48,7 @@ optional-dependencies.docs = [
   "furo",
   "ipykernel",
   "ipython",
+  "jax",
   "myst-nb>=1.1",
   "pandas",
   "scvi-tools",
@@ -61,6 +62,7 @@ optional-dependencies.docs = [
   "sphinxcontrib-bibtex",
   "sphinxcontrib-bibtex>=2",
   "sphinxext-opengraph",
+  "statsmodels",
   "tox>=4",
   "twine>=4.0.2",
 ]

@@ -247,7 +247,7 @@ def de(
     covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
-        Statistical method for differential expression testing:
+        Method for differential expression testing:
             - "lr": Logistic regression with likelihood ratio test
             - "deseq2": DESeq2 method for count data (requires pydeseq2)
             - "negbinom": Negative binomial GLM with Wald test
@@ -265,8 +265,8 @@ def de(
             - "all_vs_ref": Compare all levels against reference
             - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
     layer : str | None, default=None
-        Layer name in `adata.layers` to use for expression data.
-        If None, uses `adata.X`.
+        Layer name in :attr:`~anndata.AnnData.layers` to use for expression data.
+        If None, uses :attr:`~anndata.AnnData.X`.
     data_type : DataType, default='auto'
         Type of expression data:
             - "auto": Automatically infer from data
@@ -284,8 +284,7 @@ def de(
             - 'mle': Maximum likelihood estimation based an intercept-only model
             - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
-        Method for multiple testing correction. Accepts any method supported
-        by `statsmodels.stats.multipletests`. Common options include:
+        Method for multiple testing correction. Accepts any method supported by :func:`statsmodels.stats.multipletests`. Common options include:
             - "fdr_bh": Benjamini-Hochberg FDR correction
             - "bonferroni": Bonferroni correction
     n_jobs : int, default=1
@@ -295,7 +294,7 @@ def de(
         environments or very large datasets (>1M samples).
     optimizer : str, default='BFGS'
         Optimization algorithm for JAX backend:
-            - "BFGS": BFGS optimizer via jax.scipy.optimize
+            - "BFGS": BFGS optimizer via :func:`jax.scipy.optimize.minimize`
             - "IRLS": Iteratively reweighted least squares (experimental)
     maxiter : int, default=100
         Maximum number of optimization iterations.
@@ -304,17 +303,16 @@ def de(
 
     Returns
     -------
-    pd.DataFrame
-        Differential expression results with columns:
-            - "feature": Feature/gene names
-            - "test_condition": Test condition label
-            - "ref_condition": Reference condition label
-            - "log2fc": Log2 fold change (test vs reference)
-            - "auroc": Area under ROC curve
-            - "coef": Model coefficient
-            - "pval": Raw p-value
-            - "padj": Adjusted p-value (multiple testing corrected)
-            - "group": Group label (only for grouped DE)
+    :obj:`pandas.DataFrame` with differential expression results with columns:
+        - "feature": Feature/gene names
+        - "test_condition": Test condition label
+        - "ref_condition": Reference condition label
+        - "log2fc": Log2 fold change (test vs reference)
+        - "auroc": Area under ROC curve
+        - "coef": Model coefficient
+        - "pval": Raw p-value
+        - "padj": Adjusted p-value (multiple testing corrected)
+        - "group": Group label (only for grouped DE)
 
     Raises
     ------
@@ -329,6 +327,7 @@ def de(
     >>> results = de(adata, condition_key="treatment", reference="control", mode="all_vs_ref")
 
     Pairwise DE testing between all conditions:
+
     >>> results = de(adata, condition_key="treatment", mode="all_vs_all")
 
     Grouped DE by cell type with covariates:
@@ -364,7 +363,7 @@ def de(
         - "anova" methods work best with log-normalized data
     - Backend options:
         - "jax" provides batched, GPU-accelerated testing with the following methods: "lr", "negbinom", "anova", "anova_residual"
-        - "statsmodels" uses [statsmodels](https://www.statsmodels.org/stable/index.html) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
+        - "statsmodels" uses statsmodels (https://www.statsmodels.org/) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
         - "cuml" provides GPU-accelerated logistic regression with the "lr" method
     - The "deseq2" method ignores the `backend` parameter and always uses the PyDESeq2 implementation.
     - Size factors and dispersion parameters should be pre-computed for the "negbinom" method.
