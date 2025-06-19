@@ -678,8 +678,8 @@ class DispersionEstimator:
             Raw expression counts for a single gene.
         method : str, optional
             Method to use for dispersion estimation:
-            - "moments": Method of moments (works with normalized counts).
-            - "mle": Maximum likelihood estimation (works with raw counts).
+            - "moments": Method of moments.
+            - 'mle': Maximum likelihood estimation based an intercept-only model
         size_factors : jnp.ndarray, optional
             Size factors for normalization. If None, assumes all equal to 1.
 

@@ -21,6 +21,7 @@ import pandas as pd
 import statsmodels.api as sm
 from anndata import AnnData
 
+import delnx as dx
 from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
@@ -237,10 +238,7 @@ def de(
         - Tuple (reference, comparison): specific pair to compare
         - None: automatically determined based on mode
     size_factor_key : str | None, default=None
-        Column name in `adata.obs` containing size factors for normalization.
-        When provided, size factors are incorporated into the model as offset terms
-        (log-transformed). This is particularly important for count-based methods
-        like "negbinom" to account for differences in sequencing depth.
+        Column name in `adata.obs` containing size factors for normalization. When using a negative binomial model, this is used as an offset term to account for library size differences. If not provided, size are computed internally based on library size normalization.
     dispersion_key : str | None, default=None
         Column name in `adata.var` containing precomputed dispersions.
         Only used for negative binomial methods.
@@ -281,7 +279,7 @@ def de(
         Comparisons with fewer samples are skipped.
     dispersion_method : str, default='mle'
         Method for estimating gene-wise dispersions for negative binomial models if not provided:
-        - 'mle': Maximum likelihood estimation based on the intercept
+        - 'mle': Maximum likelihood estimation based an intercept-only model
         - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction. Accepts any method supported
@@ -383,8 +381,14 @@ def de(
 
     # Get condition values
     condition_values = adata.obs[condition_key].values
-    # Get size factors and dispersions if provided
+
+    # Get size factors and compute if not provided
+    if size_factor_key is None and method == "negbinom":
+        dx.pp.size_factors(adata, method="library_size")
+
     size_factors = adata.obs[size_factor_key].values if size_factor_key else None
+
+    # Get dispersions
     dispersions = adata.var[dispersion_key].values if dispersion_key else None
 
     # Validate conditions and get comparison levels
@@ -432,17 +436,17 @@ def de(
     # Validate method and data type combinations
     if method == "deseq2" and data_type != "counts":
         raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
-    elif method.startswith("negbinom") and data_type != "counts":
+    elif method == "negbinom" and data_type != "counts":
         raise ValueError(f"Negative binomial models require count data. Current data type is {data_type}.")
-    elif method.startswith("binomial") and data_type != "binary":
+    elif method == "binomial" and data_type != "binary":
         raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
-    elif method.startswith("lr") and data_type not in ["lognorm", "binary"]:
+    elif method == "lr" and data_type not in ["lognorm", "binary"]:
         warnings.warn(
             "Logistic regression is designed for log-normalized or binary data. "
             f"Current data type is {data_type}, which may give unreliable results.",
             stacklevel=2,
         )
-    elif (method.startswith("anova") or method.startswith("anova_residual")) and data_type != "lognorm":
+    elif (method == "anova" or method == "anova_residual") and data_type != "lognorm":
         warnings.warn(
             "ANOVA is designed for log-normalized data. "
             f"Current data type is {data_type}, which may give unreliable results.",
