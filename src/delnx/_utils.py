@@ -1,6 +1,6 @@
 import sys
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from contextlib import contextmanager
 from io import StringIO
 
@@ -32,32 +32,6 @@ def suppress_output(verbose: bool = False):
                 yield
         finally:
             sys.stdout, sys.stderr = old_stdout, old_stderr
-
-
-def aggregate(x: np.ndarray, groups: np.ndarray | None = None, fun: Callable = np.mean, axis: int = 0) -> np.ndarray:
-    """Aggregate a matrix by groups.
-
-    Parameters
-    ----------
-    x : numpy.ndarray
-        Input matrix to aggregate.
-    groups : numpy.ndarray, optional
-        Group labels for aggregation, by default None
-    fun : callable, optional
-        Aggregation function, by default np.mean
-    axis : int, optional
-        Axis along which to aggregate, by default 0
-
-    Returns
-    -------
-    numpy.ndarray
-        Aggregated matrix. If groups=None, returns array of aggregated values.
-        Otherwise, returns stacked array of aggregated values per group.
-    """
-    if groups is None:
-        return fun(x, axis=axis)
-    else:
-        return np.stack([fun(x[groups == g], axis=axis) for g in np.unique(groups)])
 
 
 def _get_layer(adata: AnnData, layer: str | None) -> np.ndarray | sparse.spmatrix:

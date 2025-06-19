@@ -17,7 +17,7 @@
 
 # 🌳 delnx
 
-**delnx** (`/dɪˈlɒnɪks/`) is a python package for differential expression analysis of single-cell genomics data.
+**delnx** (`"de-lo-nix"  | /dɪˈlɒnɪks/`) is a python package for differential expression analysis of (single-cell) genomics data. It enables scalable analyses of atlas-level datasets through GPU-accelerated regression models and statistical tests implemented in [JAX](https://docs.jax.dev/en/latest/). It also provides a consistent interface to perform DE analysis with other methods, such as [statsmodels](https://www.statsmodels.org/stable/index.html) and [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/).
 
 ## 🚀 Installation
 
@@ -59,6 +59,7 @@ results = dx.tl.de(
 ```
 
 ## 💎 Features
+- **Pseudobulking**: Perform DE on large multi-sample datasets by using pseudobulk aggregation.
 - **Size factor estimation**: Compute size factors for normalization and DE analysis.
 - **Dispersion estimation**: Estimate dispersion parameters for negative binomial models.
 - **Differential expression analysis**: Consistent interface to perform DE analysis using various methods, including:
@@ -80,11 +81,11 @@ results = dx.tl.de(
 
 ## 🗺️ Roadmap
 - [x] Provide a common interface to standard GLM-based DE tests (inspired by [Seurat::FindMarkers](https://satijalab.org/seurat/reference/findmarkers))
-    - [x] Logistic regression with likelihood ratio test
+    - [x] Logistic regression and likelihood ratio test
         - [x] statsmodels
         - [x] JAX
         - [x] cuML
-    - [x] Negative binomial regression with dispersion estimates
+    - [x] Negative binomial regression
         - [x] statsmodels
         - [x] JAX
     - [x] ANOVA
@@ -96,8 +97,11 @@ results = dx.tl.de(
 - [x] Implement DESeq2 wrapper using [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
 - [x] Implement size factor estimation methods
 - [x] Add dispersion estimation methods
-- [ ] Take covariates into account for dispersion estimation
-- [ ] Add plotting functions to visualize DE results
+    - [x] Basic gene-wise dispersion estimation
+    - [x] DESeq2 and edgeR-inspired dispersion estimation with shrinkage
+    - [ ] Take design and covariates into account for dispersion estimation
+- [ ] Plotting functions to visualize DE results
+- [ ] Gene set enrichment analysis for DE results
 
 
 ## 📖 Documentation
