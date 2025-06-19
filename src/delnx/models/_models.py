@@ -29,7 +29,7 @@ class Regression:
         (Iteratively Reweighted Least Squares) for GLM-type models.
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics (for faster computation).
-    offset : jnp.ndarray | None, default=None
+    offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
         Offset terms (on log scale for GLMs) to include in the model. Used for
         incorporating normalization factors like size factors in RNA-seq data.
     """
@@ -88,7 +88,7 @@ class Regression:
             Function to compute working residuals at each iteration.
         init_params : jnp.ndarray
             Initial parameter values.
-        offset : jnp.ndarray | None, default=None
+        offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
             Offset term (log scale for GLMs) to include in the model.
         **kwargs
             Additional arguments passed to weight_fn and working_resid_fn.
@@ -186,7 +186,7 @@ class Regression:
             Design matrix of shape (n_samples, n_features).
         y : jnp.ndarray
             Response vector of shape (n_samples,).
-        offset : jnp.ndarray | None, default=None
+        offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
             Offset term to include in the model.
 
         Returns
@@ -219,7 +219,7 @@ class Regression:
             Response vector of shape (n_samples,).
         params : jnp.ndarray
             Parameter estimates.
-        offset : jnp.ndarray | None, default=None
+        offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
             Offset term to include in the model.
 
         Returns
@@ -249,7 +249,7 @@ class LinearRegression(Regression):
         Optimization method (inherited from Regression).
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics (inherited from Regression).
-    offset : jnp.ndarray | None, default=None
+    offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
         Offset terms to include in the model (inherited from Regression).
 
     Examples
@@ -294,7 +294,7 @@ class LinearRegression(Regression):
             Design matrix of shape (n_samples, n_features).
         y : jnp.ndarray
             Response vector of shape (n_samples,).
-        offset : jnp.ndarray | None, default=None
+        offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
             Offset term to include in the model. If provided, overrides
             the offset set during class initialization.
 
@@ -303,9 +303,9 @@ class LinearRegression(Regression):
         Dictionary containing:
                 - coef: Parameter estimates
                 - llf: Log-likelihood at fitted parameters
-                - se: Standard errors (None if skip_stats=True)
-                - stat: Test statistics (None if skip_stats=True)
-                - pval: P-values (None if skip_stats=True)
+                - se: Standard errors (:obj:`None` if `skip_stats=True`)
+                - stat: Test statistics (:obj:`None` if `skip_stats=True`)
+                - pval: P-values (:obj:`None` if `skip_stats=True`)
         """
         # Fit model
         params = self._exact_solution(X, y, offset)
@@ -342,7 +342,7 @@ class LogisticRegression(Regression):
         Optimization method to use. Options are "BFGS" or "IRLS" (recommended).
     skip_stats : bool, default=False
         Whether to skip calculating test statistics.
-    offset : jnp.ndarray | None, default=None
+    offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
         Offset terms to include in the model.
 
     Examples
@@ -400,7 +400,7 @@ class LogisticRegression(Regression):
             Design matrix of shape (n_samples, n_features).
         y : jnp.ndarray
             Binary response vector of shape (n_samples,).
-        offset : jnp.ndarray | None, default=None
+        offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
             Offset term to include in the model. If provided, overrides
             the offset set during class initialization.
 
@@ -409,9 +409,9 @@ class LogisticRegression(Regression):
         Dictionary containing:
                 - coef: Parameter estimates
                 - llf: Log-likelihood at fitted parameters
-                - se: Standard errors (None if skip_stats=True)
-                - stat: Test statistics (None if skip_stats=True)
-                - pval: P-values (None if skip_stats=True)
+                - se: Standard errors (:obj:`None` if `skip_stats=True`)
+                - stat: Test statistics (:obj:`None` if `skip_stats=True`)
+                - pval: P-values (:obj:`None` if `skip_stats=True`)
         """
         # Fit model
         init_params = jnp.zeros(X.shape[1])
@@ -460,11 +460,11 @@ class NegativeBinomialRegression(Regression):
         Optimization method to use. Options are "BFGS" or "IRLS".
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics.
-    offset : jnp.ndarray | None, default=None
+    offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
         Offset terms (log scale) to include in the model. Typically log(size_factors)
         to account for differences in sequencing depth in RNA-seq analysis.
-    dispersion : float | None, default=None
-        Fixed dispersion parameter. If None, dispersion is estimated from the data.
+    dispersion : float | :obj:`None`, default=:obj:`None`
+        Fixed dispersion parameter. If :obj:`None`, dispersion is estimated from the data.
     dispersion_range : tuple[float, float], default=(1e-6, 10.0)
         Range for valid dispersion values to prevent numerical issues.
     dispersion_method : str, default="moments"
@@ -582,7 +582,7 @@ class NegativeBinomialRegression(Regression):
             Design matrix of shape (n_samples, n_features).
         y : jnp.ndarray
             Count response vector of shape (n_samples,).
-        offset : jnp.ndarray | None, default=None
+        offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
             Offset term (log scale) to include in the model. Typically
             log(size_factors) for RNA-seq data. If provided, overrides
             the offset set during class initialization.
@@ -592,9 +592,9 @@ class NegativeBinomialRegression(Regression):
         Dictionary containing:
                 - coef: Parameter estimates
                 - llf: Log-likelihood at fitted parameters
-                - se: Standard errors (None if skip_stats=True)
-                - stat: Test statistics (None if skip_stats=True)
-                - pval: P-values (None if skip_stats=True)
+                - se: Standard errors (:obj:`None` if `skip_stats=True`)
+                - stat: Test statistics (:obj:`None` if `skip_stats=True`)
+                - pval: P-values (:obj:`None` if `skip_stats=True`)
                 - dispersion: Estimated or provided dispersion parameter
         """
         # Estimate dispersion parameter
