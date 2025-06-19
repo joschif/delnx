@@ -37,7 +37,16 @@ dependencies = [
   "tqdm>=4.67.1",
 ]
 optional-dependencies.dev = [
+  "furo",
+  "myst-nb",
   "pre-commit>=4.2",
+  "sphinx",
+  "sphinx-autodoc-typehints",
+  "sphinx-copybutton",
+  "sphinx-design",
+  "sphinx-tippy",
+  "sphinxcontrib-bibtex",
+  "tox>=4",
   "twine>=4.0.2",
 ]
 optional-dependencies.docs = [
