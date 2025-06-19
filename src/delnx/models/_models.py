@@ -301,6 +301,7 @@ class LinearRegression(Regression):
         Returns
         -------
         Dictionary containing:
+
                 - coef: Parameter estimates
                 - llf: Log-likelihood at fitted parameters
                 - se: Standard errors (:obj:`None` if `skip_stats=True`)
@@ -407,6 +408,7 @@ class LogisticRegression(Regression):
         Returns
         -------
         Dictionary containing:
+
                 - coef: Parameter estimates
                 - llf: Log-likelihood at fitted parameters
                 - se: Standard errors (:obj:`None` if `skip_stats=True`)
@@ -590,6 +592,7 @@ class NegativeBinomialRegression(Regression):
         Returns
         -------
         Dictionary containing:
+
                 - coef: Parameter estimates
                 - llf: Log-likelihood at fitted parameters
                 - se: Standard errors (:obj:`None` if `skip_stats=True`)
