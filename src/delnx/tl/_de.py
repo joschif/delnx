@@ -357,10 +357,10 @@ def de(
     Notes
     -----
     - Method and data type compatibility:
-      - "deseq2" and "negbinom" require count data
-      - "binomial" requires binary data
-      - "lr" works best with log-normalized or binary data
-      - "anova" methods work best with log-normalized data
+        - "deseq2" and "negbinom" require count data
+        - "binomial" requires binary data
+        - "lr" works best with log-normalized or binary data
+        - "anova" methods work best with log-normalized data
     - Backend options:
         - "jax" provides batched, GPU-accelerated testing with the following methods: "lr", "negbinom", "anova", "anova_residual"
         - "statsmodels" uses [statsmodels](https://www.statsmodels.org/stable/index.html) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
