@@ -81,11 +81,11 @@ results = dx.tl.de(
 
 ## 🗺️ Roadmap
 - [x] Provide a common interface to standard GLM-based DE tests (inspired by [Seurat::FindMarkers](https://satijalab.org/seurat/reference/findmarkers))
-    - [x] Logistic regression with likelihood ratio test
+    - [x] Logistic regression and likelihood ratio test
         - [x] statsmodels
         - [x] JAX
         - [x] cuML
-    - [x] Negative binomial regression with dispersion estimates
+    - [x] Negative binomial regression
         - [x] statsmodels
         - [x] JAX
     - [x] ANOVA
@@ -97,8 +97,11 @@ results = dx.tl.de(
 - [x] Implement DESeq2 wrapper using [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
 - [x] Implement size factor estimation methods
 - [x] Add dispersion estimation methods
-- [ ] Take covariates into account for dispersion estimation
-- [ ] Add plotting functions to visualize DE results
+    - [x] Basic gene-wise dispersion estimation
+    - [x] DESeq2 and edgeR-inspired dispersion estimation with shrinkage
+    - [ ] Take design and covariates into account for dispersion estimation
+- [ ] Plotting functions to visualize DE results
+- [ ] Gene set enrichment analysis for DE results
 
 
 ## 📖 Documentation
