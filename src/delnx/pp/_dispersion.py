@@ -133,7 +133,7 @@ def dispersion(
 
     Parameters
     ----------
-    adata : AnnData
+    adata : :class:`~anndata.AnnData`
         Annotated data matrix containing expression data. The data should contain
         raw or normalized counts.
     layer : str | None, default=None
@@ -174,8 +174,9 @@ def dispersion(
 
     Returns
     -------
-    None
-        Dispersion estimates are stored in `adata.var[var_key_added]`.
+    Updates ``adata`` in place and sets the following fields:
+
+        - ``adata.var[var_key_added]``: Estimated dispersion values for each feature.
 
     Examples
     --------

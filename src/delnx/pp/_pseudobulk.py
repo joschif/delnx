@@ -34,7 +34,7 @@ def pseudobulk(
 
     Parameters
     ----------
-    adata : AnnData
+    adata : :class:`~anndata.AnnData`
         AnnData object containing single-cell expression data.
     sample_key : str, default="batch"
         Column name in `adata.obs` that contains the sample identifiers.
@@ -62,8 +62,7 @@ def pseudobulk(
 
     Returns
     -------
-    AnnData
-        AnnData object containing the pseudobulk data. The structure changes from
+        :class:`~anndata.AnnData` object containing the pseudobulk data. The structure changes from
         cell-level to sample-level, with each row representing a pseudobulk sample.
         Original sample and group identifiers are preserved in the observations.
 
