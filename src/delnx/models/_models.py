@@ -29,7 +29,7 @@ class Regression:
         (Iteratively Reweighted Least Squares) for GLM-type models.
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics (for faster computation).
-    offset : jnp.ndarray | None, default=None
+    offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
         Offset terms (on log scale for GLMs) to include in the model. Used for
         incorporating normalization factors like size factors in RNA-seq data.
     """
@@ -300,13 +300,13 @@ class LinearRegression(Regression):
 
         Returns
         -------
-        dict
-            Dictionary containing:
-            - coef: Parameter estimates
-            - llf: Log-likelihood at fitted parameters
-            - se: Standard errors (None if skip_stats=True)
-            - stat: Test statistics (None if skip_stats=True)
-            - pval: P-values (None if skip_stats=True)
+        Dictionary containing:
+
+                - coef: Parameter estimates
+                - llf: Log-likelihood at fitted parameters
+                - se: Standard errors (:obj:`None` if `skip_stats=True`)
+                - stat: Test statistics (:obj:`None` if `skip_stats=True`)
+                - pval: P-values (:obj:`None` if `skip_stats=True`)
         """
         # Fit model
         params = self._exact_solution(X, y, offset)
@@ -407,13 +407,13 @@ class LogisticRegression(Regression):
 
         Returns
         -------
-        dict
-            Dictionary containing:
-            - coef: Parameter estimates
-            - llf: Log-likelihood at fitted parameters
-            - se: Standard errors (None if skip_stats=True)
-            - stat: Test statistics (None if skip_stats=True)
-            - pval: P-values (None if skip_stats=True)
+        Dictionary containing:
+
+                - coef: Parameter estimates
+                - llf: Log-likelihood at fitted parameters
+                - se: Standard errors (:obj:`None` if `skip_stats=True`)
+                - stat: Test statistics (:obj:`None` if `skip_stats=True`)
+                - pval: P-values (:obj:`None` if `skip_stats=True`)
         """
         # Fit model
         init_params = jnp.zeros(X.shape[1])
@@ -466,7 +466,7 @@ class NegativeBinomialRegression(Regression):
         Offset terms (log scale) to include in the model. Typically log(size_factors)
         to account for differences in sequencing depth in RNA-seq analysis.
     dispersion : float | None, default=None
-        Fixed dispersion parameter. If None, dispersion is estimated from the data.
+        Fixed dispersion parameter. If :obj:`None`, dispersion is estimated from the data.
     dispersion_range : tuple[float, float], default=(1e-6, 10.0)
         Range for valid dispersion values to prevent numerical issues.
     dispersion_method : str, default="moments"
@@ -591,14 +591,14 @@ class NegativeBinomialRegression(Regression):
 
         Returns
         -------
-        dict
-            Dictionary containing:
-            - coef: Parameter estimates
-            - llf: Log-likelihood at fitted parameters
-            - se: Standard errors (None if skip_stats=True)
-            - stat: Test statistics (None if skip_stats=True)
-            - pval: P-values (None if skip_stats=True)
-            - dispersion: Estimated or provided dispersion parameter
+        Dictionary containing:
+
+                - coef: Parameter estimates
+                - llf: Log-likelihood at fitted parameters
+                - se: Standard errors (:obj:`None` if `skip_stats=True`)
+                - stat: Test statistics (:obj:`None` if `skip_stats=True`)
+                - pval: P-values (:obj:`None` if `skip_stats=True`)
+                - dispersion: Estimated or provided dispersion parameter
         """
         # Estimate dispersion parameter
         if self.dispersion is not None:
@@ -678,15 +678,14 @@ class DispersionEstimator:
             Raw expression counts for a single gene.
         method : str, optional
             Method to use for dispersion estimation:
-            - "moments": Method of moments.
-            - 'mle': Maximum likelihood estimation based an intercept-only model
+                - "moments": Method of moments.
+                - 'mle': Maximum likelihood estimation based an intercept-only model
         size_factors : jnp.ndarray, optional
             Size factors for normalization. If None, assumes all equal to 1.
 
         Returns
         -------
-        float
-            Estimated dispersion parameter.
+        Estimated dispersion parameter.
         """
         if size_factors is None:
             size_factors = jnp.ones_like(x)
@@ -712,15 +711,14 @@ class DispersionEstimator:
             Raw expression counts for multiple genes, shape (n_samples, n_genes).
         method : str, optional
             Method to use for dispersion estimation:
-            - "moments": Method of moments.
-            - "mle": Maximum likelihood estimation.
+                - "moments": Method of moments.
+                - "mle": Maximum likelihood estimation.
         size_factors : jnp.ndarray, optional
             Size factors for each sample, shape (n_samples,). If None, assumes all equal to 1.
 
         Returns
         -------
-        jnp.ndarray
-            Estimated dispersion parameters for each gene.
+        Estimated dispersion parameters for each gene.
         """
         if size_factors is None:
             size_factors = jnp.ones(X.shape[0])
@@ -814,15 +812,14 @@ class DispersionEstimator:
             Raw mean expression values for each gene.
         method : str, optional
             Shrinkage method to use:
-            - "edger": Empirical Bayes shrinkage towards a log-linear trend.
-            - "deseq2": Bayesian shrinkage towards a parametric trend.
+                - "edger": Empirical Bayes shrinkage towards a log-linear trend.
+                - "deseq2": Bayesian shrinkage towards a parametric trend.
         size_factors : jnp.ndarray, optional
             Size factors for normalization. Used to normalize mu for trend fitting.
 
         Returns
         -------
-        jnp.ndarray
-            Shrunk dispersion estimates.
+        Shrunk dispersion estimates.
         """
         # Normalize means for trend fitting
         if size_factors is not None:

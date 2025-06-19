@@ -217,7 +217,7 @@ def de(
     maxiter: int = 100,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Perform differential expression analysis between condition levels.
+    """Perform differential expression analysis.
 
     This function runs differential expression testing using various statistical methods
     and backends. It supports both single and grouped comparisons with multiple
@@ -236,9 +236,9 @@ def de(
         each group.
     reference : str | tuple[str, str] | None, default=None
         Reference condition for comparison. Can be:
-        - Single string: reference condition for all comparisons
-        - Tuple (reference, comparison): specific pair to compare
-        - None: automatically determined based on mode
+            - Single string: reference condition for all comparisons
+            - Tuple (reference, comparison): specific pair to compare
+            - :obj:`None`: automatically determined based on mode
     size_factor_key : str | None, default=None
         Column name in `adata.obs` containing size factors for normalization. When using a negative binomial model, this is used as an offset term to account for library size differences. If not provided, size are computed internally based on library size normalization.
     dispersion_key : str | None, default=None
@@ -247,32 +247,32 @@ def de(
     covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
-        Statistical method for differential expression testing:
-        - "lr": Logistic regression with likelihood ratio test
-        - "deseq2": DESeq2 method for count data (requires pydeseq2)
-        - "negbinom": Negative binomial GLM with Wald test
-        - "anova": ANOVA based on linear model
-        - "anova_residual": Linear model with residual F-test
-        - "binomial": Binomial GLM
+        Method for differential expression testing:
+            - "lr": Logistic regression with likelihood ratio test
+            - "deseq2": DESeq2 method for count data (requires pydeseq2)
+            - "negbinom": Negative binomial GLM with Wald test
+            - "anova": ANOVA based on linear model
+            - "anova_residual": Linear model with residual F-test
+            - "binomial": Binomial GLM
     backend : Backends, default='jax'
         Computational backend for linear model-based methods:
-        - "jax": Custom JAX implementation (batched, GPU-accelerated)
-        - "statsmodels": Standard statsmodels implementation
-        - "cuml": cuML for GPU-accelerated logistic regression
+            - "jax": Custom JAX implementation (batched, GPU-accelerated)
+            - "statsmodels": Standard statsmodels implementation
+            - "cuml": cuML for GPU-accelerated logistic regression
     mode : ComparisonMode, default='all_vs_all'
         Comparison strategy:
-        - "all_vs_all": Compare all pairs of condition levels
-        - "all_vs_ref": Compare all levels against reference
-        - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
+            - "all_vs_all": Compare all pairs of condition levels
+            - "all_vs_ref": Compare all levels against reference
+            - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
     layer : str | None, default=None
-        Layer name in `adata.layers` to use for expression data.
-        If None, uses `adata.X`.
+        Layer name in :attr:`~anndata.AnnData.layers` to use for expression data.
+        If :obj:`None`, uses :attr:`~anndata.AnnData.X`.
     data_type : DataType, default='auto'
         Type of expression data:
-        - "auto": Automatically infer from data
-        - "counts": Raw count data
-        - "lognorm": Log-normalized data (log1p of normalized counts)
-        - "binary": Binary expression data
+            - "auto": Automatically infer from data
+            - "counts": Raw count data
+            - "lognorm": Log-normalized data (log1p of normalized counts)
+            - "binary": Binary expression data
     log2fc_threshold : float, default=0.0
         Minimum absolute log2 fold change threshold for feature inclusion.
         Features below this threshold are excluded from testing.
@@ -281,13 +281,12 @@ def de(
         Comparisons with fewer samples are skipped.
     dispersion_method : str, default='mle'
         Method for estimating gene-wise dispersions for negative binomial models if not provided:
-        - 'mle': Maximum likelihood estimation based an intercept-only model
-        - 'moments': Method of moments
+            - 'mle': Maximum likelihood estimation based an intercept-only model
+            - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
-        Method for multiple testing correction. Accepts any method supported
-        by `statsmodels.stats.multipletests`. Common options include:
-        - "fdr_bh": Benjamini-Hochberg FDR correction
-        - "bonferroni": Bonferroni correction
+        Method for multiple testing correction. Accepts any method supported by :func:`statsmodels.stats.multipletests`. Common options include:
+            - "fdr_bh": Benjamini-Hochberg FDR correction
+            - "bonferroni": Bonferroni correction
     n_jobs : int, default=1
         Number of parallel jobs for non-JAX backends.
     batch_size : int, default=2048
@@ -295,8 +294,8 @@ def de(
         environments or very large datasets (>1M samples).
     optimizer : str, default='BFGS'
         Optimization algorithm for JAX backend:
-        - "BFGS": BFGS optimizer via jax.scipy.optimize
-        - "IRLS": Iteratively reweighted least squares (experimental)
+            - "BFGS": BFGS optimizer via :func:`jax.scipy.optimize.minimize`
+            - "IRLS": Iteratively reweighted least squares (experimental)
     maxiter : int, default=100
         Maximum number of optimization iterations.
     verbose : bool, default=True
@@ -304,17 +303,17 @@ def de(
 
     Returns
     -------
-    pd.DataFrame
-        Differential expression results with columns:
-        - "feature": Feature/gene names
-        - "test_condition": Test condition label
-        - "ref_condition": Reference condition label
-        - "log2fc": Log2 fold change (test vs reference)
-        - "auroc": Area under ROC curve
-        - "coef": Model coefficient
-        - "pval": Raw p-value
-        - "padj": Adjusted p-value (multiple testing corrected)
-        - "group": Group label (only for grouped DE)
+    :obj:`pandas.DataFrame` with differential expression results with columns:
+
+            - "feature": Feature/gene names
+            - "test_condition": Test condition label
+            - "ref_condition": Reference condition label
+            - "log2fc": Log2 fold change (test vs reference)
+            - "auroc": Area under ROC curve
+            - "coef": Model coefficient
+            - "pval": Raw p-value
+            - "padj": Adjusted p-value (multiple testing corrected)
+            - "group": Group label (only for grouped DE)
 
     Raises
     ------
@@ -329,6 +328,7 @@ def de(
     >>> results = de(adata, condition_key="treatment", reference="control", mode="all_vs_ref")
 
     Pairwise DE testing between all conditions:
+
     >>> results = de(adata, condition_key="treatment", mode="all_vs_all")
 
     Grouped DE by cell type with covariates:
@@ -349,6 +349,7 @@ def de(
     ... )
 
     Using other methods and backends:
+
     >>> results = de(adata, method="binomial", backend="statsmodels", condition_key="treatment")
     >>> results = de(adata, method="anova", condition_key="treatment", data_type="lognorm")
     >>> results = de(adata, method="lr", backend="cuml", condition_key="treatment")
@@ -357,13 +358,13 @@ def de(
     Notes
     -----
     - Method and data type compatibility:
-      - "deseq2" and "negbinom" require count data
-      - "binomial" requires binary data
-      - "lr" works best with log-normalized or binary data
-      - "anova" methods work best with log-normalized data
+        - "deseq2" and "negbinom" require count data
+        - "binomial" requires binary data
+        - "lr" works best with log-normalized or binary data
+        - "anova" methods work best with log-normalized data
     - Backend options:
         - "jax" provides batched, GPU-accelerated testing with the following methods: "lr", "negbinom", "anova", "anova_residual"
-        - "statsmodels" uses [statsmodels](https://www.statsmodels.org/stable/index.html) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
+        - "statsmodels" uses statsmodels (https://www.statsmodels.org/) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
         - "cuml" provides GPU-accelerated logistic regression with the "lr" method
     - The "deseq2" method ignores the `backend` parameter and always uses the PyDESeq2 implementation.
     - Size factors and dispersion parameters should be pre-computed for the "negbinom" method.

@@ -123,7 +123,7 @@ def dispersion(
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> None:
-    """Estimate dispersion parameters from RNA-seq data.
+    """Estimate dispersion parameters from (single-cell) RNA-seq data.
 
     This function estimates gene-specific dispersion parameters for negative binomial
     models from count data. These dispersion estimates are crucial for differential
@@ -133,12 +133,12 @@ def dispersion(
 
     Parameters
     ----------
-    adata : AnnData
+    adata : :class:`~anndata.AnnData`
         Annotated data matrix containing expression data. The data should contain
         raw or normalized counts.
     layer : str | None, default=None
         Layer in `adata.layers` containing count data to use for dispersion estimation.
-        If None, uses `adata.X`. Should contain raw counts or normalized counts.
+        If :obj:`None`, uses `adata.X`. Should contain raw counts or normalized counts.
     size_factor_key : str | None, default=None
         Key in `adata.obs` containing size factors for normalization. If provided,
         counts will be normalized by these factors before dispersion estimation.
@@ -146,12 +146,10 @@ def dispersion(
         variable sequencing depth.
     method : Method, default="deseq2"
         Method for dispersion estimation:
-        - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a
-          parametric trend based on a gamma distribution.
-        - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards
-          a log-linear trend.
-        - "mle": Maximum likelihood estimation without shrinkage.
-        - "moments": Simple method of moments estimation (faster but less accurate).
+            - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a parametric trend based on a gamma distribution.
+            - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards a log-linear trend.
+            - "mle": Maximum likelihood estimation without shrinkage.
+            - "moments": Simple method of moments estimation (faster but less accurate).
     var_key_added : str, default="dispersion"
         Key in `adata.var` where the estimated dispersion values will be stored.
         Existing values will be overwritten.
@@ -176,8 +174,9 @@ def dispersion(
 
     Returns
     -------
-    None
-        Dispersion estimates are stored in `adata.var[var_key_added]`.
+    Updates ``adata`` in place and sets the following fields:
+
+            - ``adata.var[var_key_added]``: Estimated dispersion values for each feature.
 
     Examples
     --------
@@ -200,8 +199,7 @@ def dispersion(
 
     Notes
     -----
-    - For accurate dispersion estimation, it's recommended to use raw counts and
-      provide size factors for normalization.
+    - Dispersion estimation should be performed on raw counts with size factors for normalization.
     - For very large datasets, consider increasing the batch size if memory allows,
       or decreasing it for memory-constrained environments.
     - The estimated dispersions can be used for differential expression analysis
