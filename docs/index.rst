@@ -22,7 +22,7 @@
    :alt: Documentation Status
 
 
-:mod:`delnx` (``"de-lo-nix"  | /dɪˈlɒnɪks/``) is a python package for differential expression analysis of (single-cell) genomics data. It enables scalable analyses of atlas-level datasets through GPU-accelerated regression models and statistical tests implemented in `JAX <https://docs.jax.dev/en/latest/>`_. It also provides a consistent interface to perform DE analysis with other methods, such as `statsmodels <https://www.statsmodels.org/stable/index.html>`_ and `PyDESeq2 <https://pydeseq2.readthedocs.io/en/stable/>`_.
+:mod:`delnx` (``/dɪˈlɒnɪks/ | "de-lo-nix"``) is a python package for differential expression analysis of (single-cell) genomics data. It enables scalable analyses of atlas-level datasets through GPU-accelerated regression models and statistical tests implemented in `JAX <https://docs.jax.dev/en/latest/>`_. It also provides a consistent interface to perform DE analysis with other methods, such as `statsmodels <https://www.statsmodels.org/stable/index.html>`_ and `PyDESeq2 <https://pydeseq2.readthedocs.io/en/stable/>`_.
 
 🚀 Installation
 ---------------
@@ -132,3 +132,13 @@ Development version
 ----------------
 
 For more information, check out the `documentation <https://delnx.readthedocs.io>`_ and the `API reference <https://delnx.readthedocs.io/en/latest/api.html>`_.
+
+
+.. toctree::
+    :maxdepth: 3
+    :hidden:
+
+    installation
+    api
+    contributing
+    notebooks/index
