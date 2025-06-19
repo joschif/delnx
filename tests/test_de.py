@@ -22,7 +22,7 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
         method=method,
         backend=backend,
         reference="control",
-        size_factors_key="size_factors",
+        size_factor_key="size_factors",
     )
 
     # Basic checks
@@ -38,7 +38,7 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
         method=method,
         backend=backend,
         reference="control",
-        size_factors_key=None,
+        size_factor_key=None,
     )
 
     # Basic checks

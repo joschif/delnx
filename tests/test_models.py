@@ -120,13 +120,13 @@ class TestLinearRegression:
         assert isinstance(reg.maxiter, int)
         assert isinstance(reg.tol, float)
         assert isinstance(reg.optimizer, str)
-        assert not reg.skip_wald
+        assert not reg.skip_stats
 
         # Custom initialization
-        reg_custom = LinearRegression(maxiter=50, tol=1e-8, skip_wald=True)
+        reg_custom = LinearRegression(maxiter=50, tol=1e-8, skip_stats=True)
         assert reg_custom.maxiter == 50
         assert reg_custom.tol == 1e-8
-        assert reg_custom.skip_wald
+        assert reg_custom.skip_stats
 
     def test_fit_basic(self, linear_data):
         """Test basic fitting functionality."""
@@ -151,9 +151,9 @@ class TestLinearRegression:
         assert result["se"].shape == (linear_data["n_features"],)
         assert jnp.all(result["se"] > 0)
 
-    def test_fit_skip_wald(self, linear_data):
+    def test_fit_skip_stats(self, linear_data):
         """Test fitting with Wald test skipped."""
-        reg = LinearRegression(skip_wald=True)
+        reg = LinearRegression(skip_stats=True)
         result = reg.fit(linear_data["X"], linear_data["y"])
 
         # Should have coefficients and log-likelihood
@@ -295,12 +295,12 @@ class TestNegativeBinomialRegression:
         reg = NegativeBinomialRegression()
         assert reg.dispersion is None
         assert isinstance(reg.dispersion_range, tuple)
-        assert isinstance(reg.estimation_method, str)
+        assert isinstance(reg.dispersion_method, str)
 
         # Custom initialization
-        reg_custom = NegativeBinomialRegression(dispersion=0.1, estimation_method="mle")
+        reg_custom = NegativeBinomialRegression(dispersion=0.1, dispersion_method="mle")
         assert reg_custom.dispersion == 0.1
-        assert reg_custom.estimation_method == "mle"
+        assert reg_custom.dispersion_method == "mle"
 
     def test_fit_with_fixed_dispersion(self, count_data):
         """Test fitting with fixed dispersion parameter."""
@@ -319,7 +319,7 @@ class TestNegativeBinomialRegression:
 
     def test_fit_with_estimated_dispersion(self, count_data):
         """Test fitting with estimated dispersion parameter."""
-        reg = NegativeBinomialRegression(dispersion=None, estimation_method="mle")
+        reg = NegativeBinomialRegression(dispersion=None, dispersion_method="mle")
         result = reg.fit(count_data["X"], count_data["y"])
 
         # Check return structure

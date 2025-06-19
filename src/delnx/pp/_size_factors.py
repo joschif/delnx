@@ -127,7 +127,7 @@ def _fit_lm(x, y, maxiter=100):
     jax.numpy.ndarray
         Predicted values from the linear model.
     """
-    model = LinearRegression(skip_wald=True, maxiter=maxiter)
+    model = LinearRegression(skip_stats=True, maxiter=maxiter)
     results = model.fit(x, y)
     pred = x @ results["coef"]
     return pred
