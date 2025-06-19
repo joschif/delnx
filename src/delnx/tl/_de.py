@@ -217,7 +217,7 @@ def de(
     maxiter: int = 100,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Perform differential expression analysis between condition levels.
+    """Perform differential expression analysis.
 
     This function runs differential expression testing using various statistical methods
     and backends. It supports both single and grouped comparisons with multiple

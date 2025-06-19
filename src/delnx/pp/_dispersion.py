@@ -123,7 +123,7 @@ def dispersion(
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> None:
-    """Estimate dispersion parameters from (signel-cell) RNA-seq data.
+    """Estimate dispersion parameters from (single-cell) RNA-seq data.
 
     This function estimates gene-specific dispersion parameters for negative binomial
     models from count data. These dispersion estimates are crucial for differential
