@@ -304,15 +304,16 @@ def de(
     Returns
     -------
     :obj:`pandas.DataFrame` with differential expression results with columns:
-        - "feature": Feature/gene names
-        - "test_condition": Test condition label
-        - "ref_condition": Reference condition label
-        - "log2fc": Log2 fold change (test vs reference)
-        - "auroc": Area under ROC curve
-        - "coef": Model coefficient
-        - "pval": Raw p-value
-        - "padj": Adjusted p-value (multiple testing corrected)
-        - "group": Group label (only for grouped DE)
+
+            - "feature": Feature/gene names
+            - "test_condition": Test condition label
+            - "ref_condition": Reference condition label
+            - "log2fc": Log2 fold change (test vs reference)
+            - "auroc": Area under ROC curve
+            - "coef": Model coefficient
+            - "pval": Raw p-value
+            - "padj": Adjusted p-value (multiple testing corrected)
+            - "group": Group label (only for grouped DE)
 
     Raises
     ------

@@ -230,7 +230,7 @@ def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor",
     -------
     Updates ``adata`` in place and sets the following fields:
 
-        - `adata.obs[obs_key_added]`: Size factors for each cell.
+            - `adata.obs[obs_key_added]`: Size factors for each cell.
 
     Examples
     --------

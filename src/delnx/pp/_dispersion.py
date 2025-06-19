@@ -176,7 +176,7 @@ def dispersion(
     -------
     Updates ``adata`` in place and sets the following fields:
 
-        - ``adata.var[var_key_added]``: Estimated dispersion values for each feature.
+            - ``adata.var[var_key_added]``: Estimated dispersion values for each feature.
 
     Examples
     --------
