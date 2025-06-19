@@ -17,7 +17,7 @@
 
 # 🌳 delnx
 
-**delnx** (`/dɪˈlɒnɪks/`) is a python package for differential expression analysis of single-cell genomics data.
+**delnx** (`/dɪˈlɒnɪks/`) is a python package for differential expression analysis of (single-cell) genomics data. It enables scalable analyses of atlas-level datasets through GPU-accelerated regression models and statistical tests implemented in [JAX](https://docs.jax.dev/en/latest/). It also provides a consistent interface to perform DE analysis with other methods, such as [statsmodels](https://www.statsmodels.org/stable/index.html) and [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/).
 
 ## 🚀 Installation
 
@@ -59,6 +59,7 @@ results = dx.tl.de(
 ```
 
 ## 💎 Features
+- **Pseudobulking**: Perform DE on large multi-sample datasets by using pseudobulk aggregation.
 - **Size factor estimation**: Compute size factors for normalization and DE analysis.
 - **Dispersion estimation**: Estimate dispersion parameters for negative binomial models.
 - **Differential expression analysis**: Consistent interface to perform DE analysis using various methods, including:
