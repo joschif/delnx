@@ -55,7 +55,6 @@ def pseudobulk(
         Method to aggregate cell-level data into pseudobulk samples:
         - "sum": Sum of counts (recommended for RNA-seq data)
         - "mean": Average of counts across cells
-        - "median": Median of counts across cells
     **kwargs
         Additional arguments to pass to `decoupler.pseudobulk()`, such as:
         - min_cells: Minimum number of cells required per pseudobulk sample
@@ -70,11 +69,8 @@ def pseudobulk(
 
     Notes
     -----
-    - The implementation uses the decoupler package for efficient aggregation
-    - For differential expression analysis, "sum" mode is generally recommended
-    - Pseudoreplicate generation uses random sampling and is not deterministic
-      unless random seed is set externally
-    - Missing or sparse values are handled appropriately by the underlying implementation
+    - Wrapper around the [decoupler](https://github.com/scverse/decoupler) pseudobulk function to support pseudo-replicates
+    - It's generally recommended to aggregate counts using the "sum" mode and then re-normalize rather than using "mean" directly on log-normalized data.
 
     Examples
     --------

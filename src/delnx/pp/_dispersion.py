@@ -123,7 +123,7 @@ def dispersion(
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> None:
-    """Estimate dispersion parameters from RNA-seq data.
+    """Estimate dispersion parameters from (signel-cell) RNA-seq data.
 
     This function estimates gene-specific dispersion parameters for negative binomial
     models from count data. These dispersion estimates are crucial for differential
@@ -146,10 +146,8 @@ def dispersion(
         variable sequencing depth.
     method : Method, default="deseq2"
         Method for dispersion estimation:
-        - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a
-          parametric trend based on a gamma distribution.
-        - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards
-          a log-linear trend.
+        - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a parametric trend based on a gamma distribution.
+        - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards a log-linear trend.
         - "mle": Maximum likelihood estimation without shrinkage.
         - "moments": Simple method of moments estimation (faster but less accurate).
     var_key_added : str, default="dispersion"
