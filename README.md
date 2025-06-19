@@ -39,6 +39,12 @@ pip install git+https://github.com/joschif/delnx.git@main
 ```python
 import delnx as dx
 
+# Compute size factors
+adata = dx.pp.size_factors(adata, method="ratio")
+
+# Estimate dispersion parameters
+adata = dx.pp.dispersion(adata, size_factor_key="size_factor", method="deseq2")
+
 # Run differential expression analysis
 results = dx.tl.de(
     adata,
@@ -47,13 +53,57 @@ results = dx.tl.de(
     mode="all_vs_ref",
     reference="control",
     method="negbinom",
-    backend="jax"
+    size_factor_key="size_factor",
+    dispersion_key="dispersion",
 )
 ```
+
+## 💎 Features
+- **Size factor estimation**: Compute size factors for normalization and DE analysis.
+- **Dispersion estimation**: Estimate dispersion parameters for negative binomial models.
+- **Differential expression analysis**: Consistent interface to perform DE analysis using various methods, including:
+  - **Negative binomial regression** with dispersion estimates.
+  - **Logistic regression** with a likelihood ratio test.
+  - **ANOVA** tests based on linear models.
+  - **DESeq2** through [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/), a widely used method for DE analysis of RNA-seq data.
+- **GPU acceleration**: Most methods are implemented in JAX, enabling GPU acceleration for scalable DE-analysis on large datasets.
+
+
+## ⚙️ Backends
+**delnx** implements DE tests using regression models and statistical tests from various backends:
+
+- [JAX](https://docs.jax.dev/en/latest/)
+- [statsmodels](https://www.statsmodels.org/stable/index.html)
+- [cuML](https://rapids.ai/cuml.html)
+- [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
+
+
+## 🗺️ Roadmap
+- [x] Provide a common interface to standard GLM-based DE tests (inspired by [Seurat::FindMarkers](https://satijalab.org/seurat/reference/findmarkers))
+    - [x] Logistic regression with likelihood ratio test
+        - [x] statsmodels
+        - [x] JAX
+        - [x] cuML
+    - [x] Negative binomial regression with dispersion estimates
+        - [x] statsmodels
+        - [x] JAX
+    - [x] ANOVA
+        - [x] statsmodels
+        - [x] JAX
+    - [x] Binomial regression for binary data
+        - [x] statsmodels
+        - [ ] JAX
+- [x] Implement DESeq2 wrapper using [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
+- [x] Implement size factor estimation methods
+- [x] Add dispersion estimation methods
+- [ ] Take covariates into account for dispersion estimation
+- [ ] Add plotting functions to visualize DE results
+
 
 ## 📖 Documentation
 
 For more information, check out the [documentation][documentation] and the [API reference][api documentation].
+
 
 
 [issue tracker]: https://github.com/joschif/delnx/issues

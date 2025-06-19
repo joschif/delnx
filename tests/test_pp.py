@@ -38,7 +38,7 @@ def test_pseudobulk(adata):
     assert X_flat.min() >= 0
 
 
-@pytest.mark.parametrize("method", ["median_ratio", "TMM", "quantile_regression", "library_size"])
+@pytest.mark.parametrize("method", ["ratio", "quantile_regression", "library_size"])
 def test_size_factors(adata_pb_counts, method):
     """Test size factor calculation."""
     import numpy as np
@@ -48,11 +48,34 @@ def test_size_factors(adata_pb_counts, method):
     # Test size factors calculation
     delnx.pp.size_factors(adata_pb_counts, method=method)
 
-    # Check if column with size_factor_* exists
-    assert adata_pb_counts.obs.columns.str.startswith("size_factor_").any()
+    # Check if size_factor column exists
+    assert any(adata_pb_counts.obs.columns.str.startswith("size_factor"))
 
     # Check that size factors are positive and normalized over mean
-    size_factor_col = adata_pb_counts.obs.columns[adata_pb_counts.obs.columns.str.startswith("size_factor_")][0]
+    size_factor_col = adata_pb_counts.obs.columns[adata_pb_counts.obs.columns.str.startswith("size_factor")][0]
     size_factors = adata_pb_counts.obs[size_factor_col].values
     assert np.all(size_factors > 0)
     assert np.isclose(np.mean(size_factors), 1.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("method", ["mle", "deseq2", "edger", "moments"])
+def test_dispersion_estimation(adata_pb_counts, method):
+    """Test dispersion estimation."""
+    import numpy as np
+
+    import delnx
+
+    # Test dispersion estimation
+    delnx.pp.dispersion(adata_pb_counts, method=method)
+
+    # Check if dispersion column exists
+    assert "dispersion" in adata_pb_counts.var.columns
+
+    # Check that dispersion values not NaN
+    assert not np.any(np.isnan(adata_pb_counts.var["dispersion"]))
+
+    # Check that dispersion values are non-negative
+    assert np.all(adata_pb_counts.var["dispersion"] >= 0)
+
+    # Check that dispersion is not constant across genes
+    assert not np.all(adata_pb_counts.var["dispersion"] == adata_pb_counts.var["dispersion"].iloc[0])

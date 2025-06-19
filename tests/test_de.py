@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from delnx.tl import de, grouped_de
+from delnx.tl import de
 
 
 @pytest.mark.parametrize(
@@ -22,13 +22,78 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
         method=method,
         backend=backend,
         reference="control",
+        size_factor_key="size_factors",
     )
 
     # Basic checks
     assert isinstance(de_results, pd.DataFrame)
     assert len(de_results) > 0
     assert len(de_results) > 50
-    assert all(col in de_results.columns for col in ["feature", "pval", "padj"])
+    assert all(col in de_results.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check against randomly generated size factors
+    # This is to ensure that the size factors are actually used in the DE analysis
+    adata_pb_counts.obs["rand_size_factors"] = np.random.uniform(0.5, 1.5, size=adata_pb_counts.n_obs)
+    de_results_rsf = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method=method,
+        backend=backend,
+        reference="control",
+        size_factor_key="rand_size_factors",
+    )
+
+    # Basic checks
+    assert isinstance(de_results_rsf, pd.DataFrame)
+    assert len(de_results_rsf) > 0
+    assert len(de_results_rsf) > 50
+    assert all(col in de_results_rsf.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check that results are different
+    assert not de_results[["pval", "padj", "coef"]].equals(de_results_rsf[["pval", "padj", "coef"]])
+
+    # Check against no size factors to see if they are computed internally
+    de_results_nosf = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method=method,
+        backend=backend,
+        reference="control",
+        size_factor_key=None,
+    )
+
+    # Basic checks
+    assert isinstance(de_results_nosf, pd.DataFrame)
+    assert len(de_results_nosf) > 0
+    assert len(de_results_nosf) > 50
+    assert all(col in de_results_nosf.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check that results are different
+    assert de_results[["pval", "padj", "coef"]].equals(de_results_nosf[["pval", "padj", "coef"]])
+
+    # Check with dispersion and size factors to see if they are actually used (only for jax backend)
+    de_results_disp = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method=method,
+        backend=backend,
+        reference="control",
+        size_factor_key="size_factors",
+        dispersion_key="dispersion",
+    )
+
+    # Basic checks
+    assert isinstance(de_results_disp, pd.DataFrame)
+    assert len(de_results_disp) > 0
+    assert len(de_results_disp) > 50
+    assert all(col in de_results_disp.columns for col in ["feature", "pval", "padj", "coef"])
+
+    if backend == "jax":
+        # Check that results are different
+        assert not de_results[["pval", "padj", "coef"]].equals(de_results_disp[["pval", "padj", "coef"]])
+    else:
+        # For statsmodels, dispersion is not used, so results should be the same
+        assert de_results[["pval", "padj", "coef"]].equals(de_results_disp[["pval", "padj", "coef"]])
 
 
 @pytest.mark.parametrize(
@@ -187,11 +252,12 @@ def test_de_errors(adata_pb_counts):
 
 def test_de_binomial_binary(adata_small):
     """Test binomial DE method with binary data."""
-    # Run binomial DE analysis
+    # Run binomial DE analysis (currently only with statsmodels)
     de_results = de(
         adata_small,
         condition_key="condition",
         method="binomial",
+        backend="statsmodels",
         reference="control",
         data_type="binary",
         layer="binary",
@@ -275,25 +341,6 @@ def test_de_data_type_validation(adata_pb_counts):
 )
 def test_grouped_de(adata_pb_lognorm, method, mode, reference):
     """Test grouped DE analysis."""
-    # Run DE analysis with grouping
-    de_results = grouped_de(
-        adata_pb_lognorm,
-        condition_key="condition_str",
-        group_key="cell_type",
-        method=method,
-        backend="statsmodels",
-        mode=mode,
-        reference=reference,
-    )
-
-    # Basic checks
-    assert isinstance(de_results, pd.DataFrame)
-    assert len(de_results) > 0
-    assert len(de_results) > 200
-    assert all(col in de_results.columns for col in ["feature", "pval", "padj", "group"])
-    assert len(de_results["group"].unique()) == 3
-    assert "cell_type_1" in de_results["group"].values.tolist()
-
     # Run DE analysis with grouping
     de_results = de(
         adata_pb_lognorm,

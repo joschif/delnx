@@ -1,3 +1,5 @@
+"""Pseudobulking of single-cell data."""
+
 import decoupler as dc
 import numpy as np
 from anndata import AnnData
