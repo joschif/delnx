@@ -16,7 +16,6 @@ from matplotlib.figure import SubplotParams as sppars
 from matplotlib.patches import Circle
 
 from .. import _logger as logg
-from .._compat import old_positionals
 from .._settings import settings
 from .._utils import NeighborsView, _empty
 from . import _palettes as palettes
@@ -69,18 +68,6 @@ class _AxesSubplot(Axes, axes.SubplotBase):
 # -------------------------------------------------------------------------------
 
 
-@old_positionals(
-    "xlabel",
-    "ylabel",
-    "xticks",
-    "yticks",
-    "title",
-    "colorbar_shrink",
-    "color_map",
-    "show",
-    "save",
-    "ax",
-)
 def matrix(
     matrix: ArrayLike | Image,
     *,

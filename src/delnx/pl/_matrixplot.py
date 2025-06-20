@@ -5,17 +5,13 @@ from typing import TYPE_CHECKING
 
 import matplotlib.patches as patches
 import numpy as np
-from matplotlib import colormaps, gridspec, rcParams
+from matplotlib import colormaps, rcParams
 from matplotlib.colors import to_rgba
 
 from .. import _logger as logg
-from .._compat import old_positionals
 from .._settings import settings
 from .._utils import _doc_params, _empty
-from ._anndata import (
-    _plot_dendrogram,
-    _plot_var_groups_brackets,
-)
+from ._anndata import _plot_dendrogram
 from ._baseplot_class import BasePlot, doc_common_groupby_plot_args
 from ._docs import (
     doc_common_plot_args,
@@ -105,26 +101,6 @@ class MatrixPlot(BasePlot):
     DEFAULT_EDGE_COLOR = "gray"
     DEFAULT_EDGE_LW = 0.1
 
-    @old_positionals(
-        "use_raw",
-        "log",
-        "num_categories",
-        "categories_order",
-        "title",
-        "figsize",
-        "gene_symbols",
-        "var_group_positions",
-        "var_group_labels",
-        "var_group_rotation",
-        "layer",
-        "standard_scale",
-        "ax",
-        "values_df",
-        "vmin",
-        "vmax",
-        "vcenter",
-        "norm",
-    )
     def __init__(
         self,
         adata: AnnData,
@@ -149,6 +125,7 @@ class MatrixPlot(BasePlot):
         vmax: float | None = None,
         vcenter: float | None = None,
         norm: Normalize | None = None,
+        dendrogram: bool | str = False,
         **kwds,
     ):
         BasePlot.__init__(
@@ -175,6 +152,7 @@ class MatrixPlot(BasePlot):
             **kwds,
         )
 
+        # In case values_df is not provided, we compute it
         if values_df is None:
             # compute mean value
             values_df = (
@@ -202,9 +180,15 @@ class MatrixPlot(BasePlot):
 
         # Width reserved for annotation tiles (in data units)
         self.annotation_width = self._group_annotation_df.shape[1] if hasattr(self, "_group_annotation_df") else 0
+        self.dendrogram = dendrogram
 
-        # Reserve width for group annotations (e.g., dendrogram or annotation tiles)
-        self.group_extra_size = self._group_annotation_df.shape[1] if hasattr(self, "_group_annotation_df") else 0
+        if self.dendrogram:
+            self.plot_group_extra = {
+                "kind": "dendrogram",
+                "dendrogram_key": self.dendrogram if isinstance(dendrogram, str) else None,
+            }
+        else:
+            self.plot_group_extra = None
 
     def style(
         self,
@@ -275,18 +259,6 @@ class MatrixPlot(BasePlot):
     def annotation_width(self):
         return self._group_annotation_df.shape[1] if self.has_annotations else 0
 
-    @property
-    def group_extra_size(self):
-        return (
-            self._group_extra_size
-            if hasattr(self, "_group_extra_size")
-            else (self._group_annotation_df.shape[1] if self.has_annotations else 0)
-        )
-
-    @group_extra_size.setter
-    def group_extra_size(self, value):
-        self._group_extra_size = value
-
     @annotation_width.setter
     def annotation_width(self, value):
         self._annotation_width = value
@@ -295,158 +267,118 @@ class MatrixPlot(BasePlot):
         category_height = self.DEFAULT_CATEGORY_HEIGHT
         category_width = self.DEFAULT_CATEGORY_WIDTH
 
+        # Compute dimensions
         if self.height is None:
             mainplot_height = len(self.categories) * category_height
-            mainplot_width = len(self.var_names) * category_width + self.group_extra_size
+            mainplot_width = len(self.var_names) * category_width
             if self.are_axes_swapped:
                 mainplot_height, mainplot_width = mainplot_width, mainplot_height
 
-            height = mainplot_height + 1  # +1 for labels
-
-            # if the number of categories is small use
-            # a larger height, otherwise the legends do not fit
-            self.height = max([self.min_figure_height, height])
+            height = mainplot_height + 1  # space for labels
+            self.height = max(self.min_figure_height, height)
             self.width = mainplot_width + self.legends_width
         else:
             self.min_figure_height = self.height
             mainplot_height = self.height
-
-            mainplot_width = self.width - (self.legends_width + self.group_extra_size)
+            mainplot_width = self.width - self.legends_width
 
         return_ax_dict = {}
-        # define a layout of 1 rows x 2 columns
-        #   first ax is for the main figure.
-        #   second ax is to plot legends
-        legends_width_spacer = 0.7 / self.width
 
+        # Heights: [spacer, var_groups, heatmap]
+        var_groups_height = category_height if self.var_groups else 0
+        if self.var_groups and not self.are_axes_swapped:
+            var_groups_height = category_height / 2
+
+        spacer_height = self.height - var_groups_height - mainplot_height
+        height_ratios = [spacer_height, var_groups_height, mainplot_height]
+
+        # Widths: build column structure conditionally
+        width_ratios = []
+        col_indices = {}  # map logical names to actual grid indices
+        col = 0
+
+        if self.has_annotations:
+            width_ratios.append(self.annotation_width)
+            col_indices["annotation"] = col
+            col += 1
+
+        width_ratios.append(mainplot_width)
+        col_indices["main"] = col
+        col += 1
+
+        if self.dendrogram:
+            dendrogram_width = 0.5
+            width_ratios.append(dendrogram_width)
+            col_indices["dendrogram"] = col
+            col += 1
+
+        width_ratios.append(self.legends_width)
+        col_indices["legend"] = col
+        ncols = len(width_ratios)
+
+        # Build unified grid
         self.fig, gs = make_grid_spec(
             self.ax or (self.width, self.height),
-            nrows=1,
-            ncols=2,
-            wspace=legends_width_spacer,
-            width_ratios=[mainplot_width + self.group_extra_size, self.legends_width],
-        )
-
-        if self.var_groups:
-            # add some space in case 'brackets' want to be plotted on top of the image
-            if self.are_axes_swapped:
-                var_groups_height = category_height
-            else:
-                var_groups_height = category_height / 2
-
-        else:
-            var_groups_height = 0
-
-        mainplot_width = mainplot_width - self.group_extra_size
-        spacer_height = self.height - var_groups_height - mainplot_height
-        if not self.are_axes_swapped:
-            height_ratios = [spacer_height, var_groups_height, mainplot_height]
-            width_ratios = [mainplot_width, self.group_extra_size]
-
-        else:
-            height_ratios = [spacer_height, self.group_extra_size, mainplot_height]
-            width_ratios = [mainplot_width, var_groups_height]
-            # gridspec is the same but rows and columns are swapped
-
-        if self.fig_title is not None and self.fig_title.strip() != "":
-            # for the figure title use the ax that contains
-            # all the main graphical elements (main plot, dendrogram etc)
-            # otherwise the title may overlay with the figure.
-            # also, this puts the title centered on the main figure and not
-            # centered between the main figure and the legends
-            _ax = self.fig.add_subplot(gs[0, 0])
-            _ax.axis("off")
-            _ax.set_title(self.fig_title)
-
-        # the main plot is divided into three rows and two columns
-        # first row is an spacer that is adjusted in case the
-        #           legends need more height than the main plot
-        # second row is for brackets (if needed),
-        # third row is for mainplot and dendrogram/totals (legend goes in gs[0,1]
-        # defined earlier)
-        # Add annotation column before main matrix if annotations are provided
-        spacing = 0.3  # increase this value for more space between annotation and main plot
-        ncols = 4 if self.has_annotations else 2
-        width_ratios = (
-            [self.annotation_width, spacing, mainplot_width, self.group_extra_size]
-            if self.has_annotations
-            else [mainplot_width, self.group_extra_size]
-        )
-
-        mainplot_gs = gridspec.GridSpecFromSubplotSpec(
             nrows=3,
             ncols=ncols,
-            wspace=self.wspace,
             hspace=0.0,
-            subplot_spec=gs[0, 0],
-            width_ratios=width_ratios,
+            wspace=0.1,
             height_ratios=height_ratios,
+            width_ratios=width_ratios,
         )
 
-        # Create optional annotation axis
-        if self.has_annotations:
-            annot_ax = self.fig.add_subplot(mainplot_gs[2, 0])
+        # Optional annotation axis
+        if "annotation" in col_indices:
+            annot_ax = self.fig.add_subplot(gs[2, col_indices["annotation"]])
+            annot_ax.set_xticks([])
+            annot_ax.set_yticks([])
             return_ax_dict["annotation_ax"] = annot_ax
-            main_ax = self.fig.add_subplot(mainplot_gs[2, 2])
-        else:
-            main_ax = self.fig.add_subplot(mainplot_gs[2, 0])
 
+        # Main plot axis
+        main_ax = self.fig.add_subplot(gs[2, col_indices["main"]])
         return_ax_dict["mainplot_ax"] = main_ax
 
-        if not self.are_axes_swapped:
-            if self.plot_group_extra is not None:
-                group_extra_ax = self.fig.add_subplot(mainplot_gs[2, 1], sharey=main_ax)
-                group_extra_orientation = "right"
-            if self.var_groups:
-                gene_groups_ax = self.fig.add_subplot(mainplot_gs[1, 0], sharex=main_ax)
-                var_group_orientation = "top"
-        else:
-            if self.plot_group_extra:
-                group_extra_ax = self.fig.add_subplot(mainplot_gs[1, 0], sharex=main_ax)
-                group_extra_orientation = "top"
-            if self.var_groups:
-                gene_groups_ax = self.fig.add_subplot(mainplot_gs[2, 1], sharey=main_ax)
-                var_group_orientation = "right"
-
-        if self.plot_group_extra is not None:
+        # Optional dendrogram axis
+        if "dendrogram" in col_indices and getattr(self, "plot_group_extra", None):
+            ax = self.fig.add_subplot(gs[2, col_indices["dendrogram"]], sharey=main_ax)
             if self.plot_group_extra["kind"] == "dendrogram":
                 _plot_dendrogram(
-                    group_extra_ax,
+                    ax,
                     self.adata,
                     self.groupby,
                     dendrogram_key=self.plot_group_extra["dendrogram_key"],
-                    ticks=self.plot_group_extra["dendrogram_ticks"],
-                    orientation=group_extra_orientation,
+                    orientation="right",
                 )
-            if self.plot_group_extra["kind"] == "group_totals":
-                self._plot_totals(group_extra_ax, group_extra_orientation)
+                return_ax_dict["dendrogram_ax"] = ax
+            elif self.plot_group_extra["kind"] == "group_totals":
+                self._plot_totals(ax, orientation="right")
+                return_ax_dict["group_totals_ax"] = ax
 
-            return_ax_dict["group_extra_ax"] = group_extra_ax
-
-        # plot group legends on top or left of main_ax (if given)
-        if self.var_groups:
-            _plot_var_groups_brackets(
-                gene_groups_ax,
-                var_groups=self.var_groups,
-                rotation=self.var_group_rotation,
-                left_adjustment=0.2,
-                right_adjustment=0.7,
-                orientation=var_group_orientation,
-                wide=True,
-            )
-            return_ax_dict["gene_group_ax"] = gene_groups_ax
-
-        # plot the mainplot
-        normalize = self._mainplot(main_ax, annotation_ax=return_ax_dict.get("annotation_ax"))
-
-        # code from pandas.plot in add_totals adds
-        # minor ticks that need to be removed
-        main_ax.yaxis.set_tick_params(which="minor", left=False, right=False)
-        main_ax.xaxis.set_tick_params(which="minor", top=False, bottom=False, length=0)
-        main_ax.set_zorder(100)
+        # Optional legend axis
         if self.legends_width > 0:
-            legend_ax = self.fig.add_subplot(gs[0, 1])
-            self._plot_legend(legend_ax, return_ax_dict, normalize)
+            legend_ax = self.fig.add_subplot(gs[2, col_indices["legend"]])
+            return_ax_dict["legend_ax"] = legend_ax
+
+        # Optional title
+        if self.fig_title and self.fig_title.strip():
+            title_ax = self.fig.add_subplot(gs[0, col_indices["main"]])
+            title_ax.axis("off")
+            title_ax.set_title(self.fig_title)
+
+        # Clean all axes
+        for ax in self.fig.axes:
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+
+        # Plot main content
+        normalize = self._mainplot(main_ax, annotation_ax=return_ax_dict.get("annotation_ax"))
+        main_ax.set_zorder(100)
+
+        # Plot legend (after getting normalization)
+        if self.legends_width > 0:
+            self._plot_legend(return_ax_dict["legend_ax"], return_ax_dict, normalize)
 
         self.ax_dict = return_ax_dict
 
@@ -471,7 +403,6 @@ class MatrixPlot(BasePlot):
             self.vboundnorm.norm,
         )
 
-        # 2. Matrix plot in main_ax
         for axis in ["top", "bottom", "left", "right"]:
             main_ax.spines[axis].set_linewidth(1.5)
 
@@ -495,12 +426,10 @@ class MatrixPlot(BasePlot):
         main_ax.set_xticks(x_ticks)
         main_ax.set_xticklabels(x_labels, rotation=90, ha="center", minor=False)
 
-        main_ax.tick_params(axis="both", labelsize="small")
         main_ax.grid(visible=False)
         main_ax.set_ylim(len(y_labels), 0)
         main_ax.set_xlim(0, len(x_labels))
 
-        # 3. Optional: plot annotation tiles in annotation_ax
         if annotation_ax is not None and hasattr(self, "_group_annotation_df"):
             annot_df = self._group_annotation_df
             annot_df = annot_df.reindex(y_labels)
@@ -541,23 +470,6 @@ class MatrixPlot(BasePlot):
         return normalize
 
 
-@old_positionals(
-    "use_raw",
-    "log",
-    "num_categories",
-    "figsize",
-    "dendrogram",
-    "title",
-    "cmap",
-    "colorbar_title",
-    "gene_symbols",
-    "var_group_positions",
-    "var_group_labels",
-    "var_group_rotation",
-    "layer",
-    "standard_scale",
-    # 17 positionals are enough for backwards compatibility
-)
 @_doc_params(
     show_save_ax=doc_show_save_ax,
     common_plot_args=doc_common_plot_args,
@@ -596,11 +508,10 @@ def matrixplot(
     norm: Normalize | None = None,
     **kwds,
 ) -> MatrixPlot | dict[str, Axes] | None:
-    """Create a heatmap of the mean expression values per group of each var_names.
+    """
+    Create a heatmap of mean expression values per group for each variable.
 
-    This function provides a convenient interface to the :class:`~scanpy.pl.MatrixPlot`
-    class. If you need more flexibility, you should use :class:`~scanpy.pl.MatrixPlot`
-    directly.
+    This function is a convenient wrapper for :class:`~scanpy.pl.MatrixPlot`, allowing visualization of grouped expression values as a matrix heatmap. For more customization, use :class:`~scanpy.pl.MatrixPlot` directly.
 
     Parameters
     ----------
@@ -608,55 +519,53 @@ def matrixplot(
     {groupby_plots_args}
     {show_save_ax}
     {vminmax}
+    cmap
+        Colormap to use for the heatmap.
+    colorbar_title
+        Title for the colorbar legend.
+    swap_axes
+        If True, swap the axes of the matrix plot.
+    values_df
+        Optional DataFrame with values to plot (index: groupby categories, columns: gene names).
     kwds
-        Are passed to :func:`matplotlib.pyplot.pcolor`.
+        Additional keyword arguments passed to :func:`matplotlib.pyplot.pcolor`.
 
     Returns
     -------
-    If `return_fig` is `True`, returns a :class:`~scanpy.pl.MatrixPlot` object,
-    else if `show` is false, return axes dict
+    MatrixPlot | dict[str, Axes] | None
+        If `return_fig` is True, returns a :class:`~scanpy.pl.MatrixPlot` object.
+        If `show` is False, returns a dictionary of matplotlib axes.
+        Otherwise, displays the plot and returns None.
 
     See Also
     --------
-    :class:`~scanpy.pl.MatrixPlot`: The MatrixPlot class can be used to to control
-        several visual parameters not available in this function.
-    :func:`~scanpy.pl.rank_genes_groups_matrixplot`: to plot marker genes
-        identified using the :func:`~scanpy.tl.rank_genes_groups` function.
+    :class:`~scanpy.pl.MatrixPlot`
+        The MatrixPlot class for advanced customization.
+    :func:`~scanpy.pl.rank_genes_groups_matrixplot`
+        Plot marker genes identified by :func:`~scanpy.tl.rank_genes_groups`.
 
     Examples
     --------
-
-    .. plot::
-        :context: close-figs
+    Basic usage:
 
         import scanpy as sc
         adata = sc.datasets.pbmc68k_reduced()
         markers = ['C1QA', 'PSAP', 'CD79A', 'CD79B', 'CST3', 'LYZ']
         sc.pl.matrixplot(adata, markers, groupby='bulk_labels', dendrogram=True)
 
-    Using var_names as dict:
-
-    .. plot::
-        :context: close-figs
+    Using `var_names` as a dictionary:
 
         markers = {{'T-cell': 'CD3D', 'B-cell': 'CD79A', 'myeloid': 'CST3'}}
         sc.pl.matrixplot(adata, markers, groupby='bulk_labels', dendrogram=True)
 
-    Get Matrix object for fine tuning:
-
-    .. plot::
-        :context: close-figs
+    Accessing the MatrixPlot object for further customization:
 
         mp = sc.pl.matrixplot(adata, markers, 'bulk_labels', return_fig=True)
         mp.add_totals().style(edge_color='black').show()
 
-    The axes used can be obtained using the get_axes() method
-
-    .. plot::
-        :context: close-figs
+    Getting the axes dictionary:
 
         axes_dict = mp.get_axes()
-
     """
     mp = MatrixPlot(
         adata,
@@ -680,14 +589,12 @@ def matrixplot(
         vmax=vmax,
         vcenter=vcenter,
         norm=norm,
+        dendrogram=dendrogram,
         **kwds,
     )
 
-    if dendrogram:
-        mp.add_dendrogram(dendrogram_key=_dk(dendrogram))
     if swap_axes:
         mp.swap_axes()
-
     mp = mp.style(cmap=cmap).legend(title=colorbar_title)
     if return_fig:
         return mp

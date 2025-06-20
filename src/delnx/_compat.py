@@ -25,7 +25,6 @@ __all__ = [
     "deprecated",
     "fullname",
     "njit",
-    "old_positionals",
     "pkg_metadata",
     "pkg_version",
 ]
@@ -85,17 +84,6 @@ def pkg_version(package: str) -> Version:
     from importlib.metadata import version
 
     return Version(version(package))
-
-
-if find_spec("legacy_api_wrap") or TYPE_CHECKING:
-    from legacy_api_wrap import legacy_api  # noqa: TID251
-
-    old_positionals = partial(legacy_api, category=FutureWarning)
-else:
-    # legacy_api_wrap is currently a hard dependency,
-    # but this code makes it possible to run scanpy without it.
-    def old_positionals(*old_positionals: str):
-        return lambda func: func
 
 
 if sys.version_info >= (3, 13):

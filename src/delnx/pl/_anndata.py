@@ -19,7 +19,7 @@ from pandas.api.types import CategoricalDtype, is_numeric_dtype
 
 from .. import _logger as logg
 from .. import get
-from .._compat import CSBase, old_positionals
+from .._compat import CSBase
 from .._settings import settings
 from .._utils import (
     _check_use_raw,
@@ -97,23 +97,6 @@ class VarGroups(NamedTuple):
         return None if len(labels) == 0 else cls(labels, positions)
 
 
-@old_positionals(
-    "color",
-    "use_raw",
-    "layers",
-    "sort_order",
-    "alpha",
-    "basis",
-    "groups",
-    "components",
-    "projection",
-    "legend_loc",
-    "legend_fontsize",
-    "legend_fontweight",
-    "legend_fontoutline",
-    "color_map",
-    # 17 positionals are enough for backwards compatibility
-)
 @_doc_params(scatter_temp=doc_scatter_basic, show_save_ax=doc_show_save_ax)
 def scatter(
     adata: AnnData,
@@ -561,17 +544,6 @@ def _scatter_obs(
         return axs
     return axs[0]
 
-
-@old_positionals(
-    "dictionary",
-    "indices",
-    "labels",
-    "color",
-    "n_points",
-    "log",
-    "include_lowest",
-    "show",
-)
 def ranking(
     adata: AnnData,
     attr: Literal["var", "obs", "uns", "varm", "obsm"],
@@ -685,23 +657,6 @@ def ranking(
     return gs
 
 
-@old_positionals(
-    "log",
-    "use_raw",
-    "stripplot",
-    "jitter",
-    "size",
-    "layer",
-    "scale",
-    "order",
-    "multi_panel",
-    "xlabel",
-    "ylabel",
-    "rotation",
-    "show",
-    "save",
-    "ax",
-)
 @_doc_params(show_save_ax=doc_show_save_ax)
 def violin(
     adata: AnnData,
@@ -970,7 +925,6 @@ def violin(
     return axs
 
 
-@old_positionals("use_raw", "show", "save")
 @_doc_params(show_save_ax=doc_show_save_ax)
 def clustermap(
     adata: AnnData,
@@ -1047,27 +1001,6 @@ def clustermap(
     return g
 
 
-@old_positionals(
-    "use_raw",
-    "log",
-    "num_categories",
-    "dendrogram",
-    "gene_symbols",
-    "var_group_positions",
-    "var_group_labels",
-    "var_group_rotation",
-    "layer",
-    "standard_scale",
-    "swap_axes",
-    "show_gene_labels",
-    "show",
-    "save",
-    "figsize",
-    "vmin",
-    "vmax",
-    "vcenter",
-    "norm",
-)
 @_doc_params(
     vminmax=doc_vboundnorm,
     show_save_ax=doc_show_save_ax,
@@ -1444,18 +1377,7 @@ def heatmap(
     return return_ax_dict
 
 
-@old_positionals(
-    "use_raw",
-    "log",
-    "dendrogram",
-    "gene_symbols",
-    "var_group_positions",
-    "var_group_labels",
-    "layer",
-    "show",
-    "save",
-    "figsize",
-)
+
 @_doc_params(show_save_ax=doc_show_save_ax, common_plot_args=doc_common_plot_args)
 def tracksplot(
     adata: AnnData,
@@ -1774,18 +1696,6 @@ def dendrogram(
     return ax
 
 
-@old_positionals(
-    "show_correlation_numbers",
-    "dendrogram",
-    "figsize",
-    "show",
-    "save",
-    "ax",
-    "vmin",
-    "vmax",
-    "vcenter",
-    "norm",
-)
 @_doc_params(show_save_ax=doc_show_save_ax, vminmax=doc_vboundnorm)
 def correlation_matrix(
     adata: AnnData,
@@ -2264,7 +2174,7 @@ def _get_dendrogram_key(
             raise AssertionError(msg)
 
     if dendrogram_key not in adata.uns:
-        from ..tools._dendrogram import dendrogram
+        from ..tl._dendrogram import dendrogram
 
         logg.warning(
             f"dendrogram data not found (using key={dendrogram_key}). "
