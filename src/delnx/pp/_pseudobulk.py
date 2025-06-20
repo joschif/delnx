@@ -96,10 +96,10 @@ def pseudobulk(
             replace=True,
         )
         # Create unique identifiers for each pseudoreplicate by combining sample ID with replicate number
-        adata.obs["psbulk_replicate"] = adata.obs[sample_key] + "_" + pseudoreps.astype(str)
+        adata.obs["psbulk_replicate"] = adata.obs[sample_key].astype(str) + "_" + pseudoreps.astype(str)
     else:
         # Use original sample IDs if no pseudoreplicates requested
-        adata.obs["psbulk_replicate"] = adata.obs[sample_key]
+        adata.obs["psbulk_replicate"] = adata.obs[sample_key].astype(str)
 
     # Call decoupler's pseudobulk function to perform the actual aggregation
     return dc.pp.pseudobulk(

@@ -18,6 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import tqdm
 from anndata import AnnData
+from scipy.sparse import csr_matrix, issparse
 
 from delnx._typing import Method
 from delnx._utils import _get_layer, _to_dense
@@ -217,6 +218,8 @@ def dispersion(
         X_norm = X / size_factors[:, None]
     else:
         X_norm = X
+
+    X_norm = csr_matrix(X_norm) if issparse(X) else X_norm
 
     # Estimate dispersions using the specified method
     dispersions = _estimate_dispersion_batched(
