@@ -144,7 +144,7 @@ html_theme_options = {
     "footer_icons": [
         {
             "name": "GitHub",
-            "url": "https://github.com/theislab/cellflow",
+            "url": "https://github.com/joschif/delnx",
             "html": "",
             "class": "fab fa-github",
         },
