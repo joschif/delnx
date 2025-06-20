@@ -23,19 +23,14 @@ from anndata import AnnData
 from scipy.sparse import csr_matrix, issparse
 
 import delnx as dx
+from delnx._constants import SUPPORTED_BACKENDS
 from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
 from ._effects import _batched_auroc, _log2fc
 from ._jax_tests import _run_batched_de
-from ._utils import (
-    _infer_data_type,
-    _prepare_model_data,
-    _validate_conditions,
-)
-
-SUPPORTED_BACKENDS = ["jax", "statsmodels", "cuml"]
+from ._utils import _check_method_and_data_type, _infer_data_type, _prepare_model_data, _validate_conditions
 
 
 def _grouped_de(
@@ -175,7 +170,7 @@ def _grouped_de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj"],
+        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns
@@ -248,12 +243,12 @@ def de(
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
         Method for differential expression testing:
-            - "lr": Logistic regression with likelihood ratio test
-            - "deseq2": DESeq2 method for count data (requires pydeseq2)
-            - "negbinom": Negative binomial GLM with Wald test
-            - "anova": ANOVA based on linear model
-            - "anova_residual": Linear model with residual F-test
-            - "binomial": Binomial GLM
+            - "lr": Constructs a logistic regression model predicting group membership based on each feature individually and compares this to a null model with a likelihood ratio test. Recommended for log-normalized single-cell data.
+            - "deseq2": DESeq2 method (through PyDESeq2) based on a model using the negative binomial distribution. Recommended for (pseudo-)bulk RNA-seq count data.
+            - "negbinom": Wald test based on a negative binomial regression model. Recommended for count single-cell and bulk RNA-seq data.
+            - "anova": ANOVA based on linear model. Recommended for log-normalized or scaled single-cell data.
+            - "anova_residual": Linear model with residual F-test. Recommended for log-normalized or scaled single-cell data
+            - "binomial": Likelihood ratio test based on a binomial regression model. Recommended for binary data such as single-cell and bulk ATAC-seq.
     backend : Backends, default='jax'
         Computational backend for linear model-based methods:
             - "jax": Custom JAX implementation (batched, GPU-accelerated)
@@ -273,6 +268,7 @@ def de(
             - "counts": Raw count data
             - "lognorm": Log-normalized data (log1p of normalized counts)
             - "binary": Binary expression data
+            - "scaled": Scaled data (e.g., z-scores)
     log2fc_threshold : float, default=0.0
         Minimum absolute log2 fold change threshold for feature inclusion.
         Features below this threshold are excluded from testing.
@@ -438,24 +434,7 @@ def de(
         print(f"Using specified data type: {data_type}")
 
     # Validate method and data type combinations
-    if method == "deseq2" and data_type != "counts":
-        raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
-    elif method == "negbinom" and data_type != "counts":
-        raise ValueError(f"Negative binomial models require count data. Current data type is {data_type}.")
-    elif method == "binomial" and data_type != "binary":
-        raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
-    elif method == "lr" and data_type not in ["lognorm", "binary"]:
-        warnings.warn(
-            "Logistic regression is designed for log-normalized or binary data. "
-            f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
-        )
-    elif (method == "anova" or method == "anova_residual") and data_type != "lognorm":
-        warnings.warn(
-            "ANOVA is designed for log-normalized data. "
-            f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
-        )
+    _check_method_and_data_type(method, data_type)
 
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
@@ -486,6 +465,7 @@ def de(
                     f"Skipping comparison {group1} vs {group2} with < {min_samples} samples",
                     stacklevel=2,
                 )
+            results.append(pd.DataFrame())
             continue
 
         all_mask = mask1 | mask2
@@ -510,6 +490,8 @@ def de(
 
         # Calculate log2 fold change
         log2fc = _log2fc(X=X_norm, condition_mask=condition_mask, data_type=data_type)
+        # Clip log2fc to avoid extreme values
+        log2fc = np.clip(log2fc, -10, 10)
 
         # Apply log2fc threshold
         feature_mask = np.abs(log2fc) > log2fc_threshold
@@ -584,10 +566,13 @@ def de(
     results = pd.concat(results, axis=0).reset_index(drop=True)
 
     # Check if any valid comparisons were found (length > 0 and not all pvals are NaN)
-    if len(results) == 0 or results["pval"].isna().all():
+    if (len(results) == 0 or results["pval"].isna().all()) and group_key is None:
         raise ValueError(
             "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
         )
+
+    # Clip p-values at 1e-15
+    results["pval"] = np.clip(results["pval"], 1e-50, 1)
 
     # Perform multiple testing correction
     padj = sm.stats.multipletests(
@@ -598,7 +583,7 @@ def de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj"],
+        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns

@@ -86,18 +86,25 @@ def _compute_median_ratio(adata, layer=None):
     """
     X = _get_layer(adata, layer)
 
+    if sparse.issparse(X):
+        raise ValueError(
+            "The median-of-ratios method requires a dense matrix. Please convert the sparse matrix to dense format before using this method."
+        )
+
     # Compute gene-wise mean log counts
     with np.errstate(divide="ignore"):  # ignore division by zero warnings
         log_X = np.log(X)
 
     log_means = log_X.mean(0)
 
-    # Filter out genes with -∞ log means (genes with all zero counts)
+    # Filter out genes with -∞ log means (genes with zero counts)
     filtered_genes = ~np.isinf(log_means)
 
     # Check if we have any genes left after filtering
     if not filtered_genes.any():
-        raise ValueError("All genes have all-zero counts. Cannot compute size factors with median-of-ratios method.")
+        raise ValueError(
+            "All genes have a least one zero count. Cannot compute size factors with median-of-ratios method."
+        )
 
     # Compute log ratios using only filtered genes
     log_ratios = log_X[:, filtered_genes] - log_means[filtered_genes]
@@ -201,7 +208,7 @@ def _compute_quantile_regression(adata, layer=None, min_counts=1, quantiles=np.l
     return size_factors / np.mean(size_factors)
 
 
-def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor", **kwargs):
+def size_factors(adata, method="library_size", layer=None, obs_key_added="size_factor", **kwargs):
     """Compute size factors for (single-cell) RNA-seq normalization.
 
     This function calculates sample/cell-specific normalization factors (size factors)
@@ -213,7 +220,7 @@ def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor",
     ----------
     adata : AnnData
         Annotated data matrix containing expression data.
-    method : str, default="ratio"
+    method : str, default="library_size"
         Method to compute size factors:
             - "ratio": DESeq2-style median-of-ratios size factors, robust to differential expression between samples. Recommended for bulk RNA-seq and well-covered single-cell data.
             - "quantile_regression": SCnorm-style quantile regression normalization, accounts for gene-specific count-depth relationships. Recommended for single-cell RNA-seq data with potential gene-dependent biases.

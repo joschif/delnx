@@ -21,6 +21,8 @@ def pseudobulk(
     group_key: str | None = None,
     n_pseudoreps: int | None = None,
     layer: str | None = None,
+    min_cells: int | None = 5,
+    min_counts: int | None = 5000,
     mode: str = "sum",
     **kwargs,
 ) -> AnnData:
@@ -51,10 +53,14 @@ def pseudobulk(
         Method to aggregate cell-level data into pseudobulk samples:
             - "sum": Sum of counts (recommended for RNA-seq data)
             - "mean": Average of counts across cells
+    min_cells : int | None, default=5
+        Minimum number of cells required in a pseudobulk sample to retain it.
+        Samples with fewer cells will be discarded.
+    min_counts : int | None, default=5000
+        Minimum total counts required in a pseudobulk sample to retain it.
+        Samples with fewer total counts will be discarded.
     **kwargs
-        Additional arguments to pass to :func:`decoupler.pp.pseudobulk`, such as:
-            - min_cells: Minimum number of cells required per pseudobulk sample
-            - min_counts: Minimum number of counts required per pseudobulk sample
+        Additional arguments to pass to :func:`decoupler.pp.pseudobulk`
 
     Returns
     -------
@@ -96,17 +102,27 @@ def pseudobulk(
             replace=True,
         )
         # Create unique identifiers for each pseudoreplicate by combining sample ID with replicate number
-        adata.obs["psbulk_replicate"] = adata.obs[sample_key] + "_" + pseudoreps.astype(str)
+        adata.obs["psbulk_replicate"] = adata.obs[sample_key].astype(str) + "_" + pseudoreps.astype(str)
     else:
         # Use original sample IDs if no pseudoreplicates requested
-        adata.obs["psbulk_replicate"] = adata.obs[sample_key]
+        adata.obs["psbulk_replicate"] = adata.obs[sample_key].astype(str)
 
     # Call decoupler's pseudobulk function to perform the actual aggregation
-    return dc.pp.pseudobulk(
+    adata_pb = dc.pp.pseudobulk(
         adata,
         sample_col="psbulk_replicate",  # Column containing our sample/pseudoreplicate IDs
         groups_col=group_key,  # Optional column for separate aggregation (e.g., cell types)
         layer=layer,  # Which data layer to use
         mode=mode,  # How to aggregate (sum, mean, median)
+        empty=True,  # Discard empty pseudobulk samples
         **kwargs,  # Pass additional parameters to decoupler
     )
+
+    # Filter out pseudobulk samples with too few cells or counts
+    if min_cells is not None:
+        adata_pb = adata_pb[adata_pb.obs["psbulk_cells"] >= min_cells, :].copy()
+
+    if min_counts is not None:
+        adata_pb = adata_pb[adata_pb.obs["psbulk_counts"] >= min_counts, :].copy()
+
+    return adata_pb

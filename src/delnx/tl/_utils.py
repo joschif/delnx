@@ -1,7 +1,10 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 
+from delnx._constants import COMPATIBLE_DATA_TYPES
 from delnx._typing import ComparisonMode, DataType
 from delnx._utils import _to_dense, _to_list
 
@@ -21,6 +24,7 @@ def _infer_data_type(X: np.ndarray) -> DataType:
         - counts: Raw count data (integers, potentially large values)
         - lognorm: Log-normalized data (floating point, typically between 0 and 10)
         - binary: Binary data (only 0s and 1s)
+        - scaled: Scaled data (floating point, can be negative or positive)
     """
     # Subsample cells if large
     if X.shape[0] > 300:
@@ -43,8 +47,10 @@ def _infer_data_type(X: np.ndarray) -> DataType:
     if is_integer and is_nonnegative:
         return "counts"
 
-    # Otherwise assume log-normalized
-    return "lognorm"
+    elif is_nonnegative:
+        return "lognorm"
+
+    return "scaled"
 
 
 def _validate_conditions(
@@ -130,3 +136,31 @@ def _prepare_model_data(
             model_data[cov] = adata.obs[cov].values
 
     return model_data
+
+
+def _check_method_and_data_type(
+    method: str,
+    data_type: DataType,
+) -> None:
+    """Check if the method is compatible with the data type. Raise warnings or errors as appropriate."""
+    if method not in COMPATIBLE_DATA_TYPES:
+        raise ValueError(f"Method '{method}' is not recognized or supported.")
+
+    if method == "deseq2" and data_type not in COMPATIBLE_DATA_TYPES["deseq2"]:
+        raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
+    elif method == "negbinom" and data_type not in COMPATIBLE_DATA_TYPES["negbinom"]:
+        raise ValueError(f"Negative binomial models require count data. Current data type is {data_type}.")
+    elif method == "binomial" and data_type not in COMPATIBLE_DATA_TYPES["binomial"]:
+        raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
+    elif method == "lr" and data_type not in COMPATIBLE_DATA_TYPES["lr"]:
+        warnings.warn(
+            f"Logistic regression is designed for {' or '.join(COMPATIBLE_DATA_TYPES['lr'])} data. "
+            f"Current data type is {data_type}, which may give unreliable results.",
+            stacklevel=2,
+        )
+    elif method.startswith("anova") and data_type not in COMPATIBLE_DATA_TYPES[method]:
+        warnings.warn(
+            f"ANOVA is designed for {' or '.join(COMPATIBLE_DATA_TYPES['anova'])} data. "
+            f"Current data type is {data_type}, which may give unreliable results.",
+            stacklevel=2,
+        )
