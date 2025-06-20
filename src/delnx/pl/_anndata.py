@@ -544,6 +544,7 @@ def _scatter_obs(
         return axs
     return axs[0]
 
+
 def ranking(
     adata: AnnData,
     attr: Literal["var", "obs", "uns", "varm", "obsm"],
@@ -1375,7 +1376,6 @@ def heatmap(
     if show:
         return None
     return return_ax_dict
-
 
 
 @_doc_params(show_save_ax=doc_show_save_ax, common_plot_args=doc_common_plot_args)
@@ -2287,7 +2287,7 @@ def _plot_dendrogram(
             xs = translate_pos(xs, ticks, orig_ticks)
         if orientation in ["right", "left"]:
             xs, ys = ys, xs
-        dendro_ax.plot(xs, ys, color="#555555")
+        dendro_ax.plot(xs, ys, color="black")
 
     dendro_ax.tick_params(bottom=False, top=False, left=False, right=False)
     ticks = ticks if ticks is not None else orig_ticks

@@ -161,7 +161,7 @@ class BasePlot:
             )
             return
 
-        if len(self.groupby) > 1:
+        if len(self.groupby) >= 1:
             group_df = adata.obs[self.groupby].copy().astype(str)
             group_df["__group__"] = group_df[self.groupby].agg(" | ".join, axis=1)
             # Store this for later use
@@ -170,7 +170,6 @@ class BasePlot:
             )
         else:
             self._group_annotation_df = None
-        print(self._group_annotation_df)
 
         self.adata = adata
         self.groupby = [groupby] if isinstance(groupby, str) else groupby

@@ -1,21 +1,13 @@
-from __future__ import annotations
-
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+from adjustText import adjust_text
 
-from .._settings import settings
-
-color_discrete_map = {
-    "NS": "#d1d5db",  # gray-300
-    "Up": "#ef4444",  # red-500
-    "Down": "#3b82f6",  # blue-500
-}
+from ..pp._get_top_de_genes import get_top_de_genes
 
 
 class VolcanoPlot:
-    """Scanpy-style interactive volcano plot using Plotly."""
+    """Static volcano plot using matplotlib."""
 
     DEFAULT_COLOR_LEGEND_TITLE = "-log10(p-value)"
     DEFAULT_SAVE_PREFIX = "volcanoplot_"
@@ -33,90 +25,130 @@ class VolcanoPlot:
         self.pval_thresh = pval_thresh
         self.color_legend_title = color_legend_title or self.DEFAULT_COLOR_LEGEND_TITLE
         self.save_path = save_path
-        self.fig: go.Figure | None = None
+        self.fig = None
+        self.ax = None
 
         if "-log10(pval)" not in self.df.columns:
             self.df["-log10(pval)"] = -np.log10(self.df["pval"])
 
-    def style(self, color_map: dict[str, str] | None = None) -> VolcanoPlot:
-        """Optional styling method (currently placeholder)."""
-        if color_map is not None:
-            global color_discrete_map
-            color_discrete_map = color_map
+        # Default color map
+        self.color_map = {
+            "NS": "#d1d5db",  # gray-300
+            "Up": "#ef4444",  # red-500
+            "Down": "#3b82f6",  # blue-500
+        }
+
+    def style(self, color_map: dict[str, str] | None = None) -> "VolcanoPlot":
+        if color_map:
+            self.color_map = color_map
         return self
 
-    def make_figure(self) -> VolcanoPlot:
-        """Creates the plotly volcano figure."""
-        fig = px.scatter(
-            self.df,
-            x="coef",
-            y="-log10(pval)",
-            color="significant",
-            hover_data=["feature"] if "feature" in self.df.columns else None,
-            template="simple_white",
-            color_discrete_map=color_discrete_map,
-            category_orders={"significant": ["NS", "Up", "Down"]},
-        )
-
-        fig.add_hline(y=-np.log10(self.pval_thresh), opacity=1, line_width=1, line_dash="dash", line_color="black")
-        fig.add_vline(x=self.coef_thresh, opacity=1, line_width=1, line_dash="dash", line_color="black")
-        fig.add_vline(x=-self.coef_thresh, opacity=1, line_width=1, line_dash="dash", line_color="black")
-
-        fig.update_layout(
-            xaxis_title="Estimated Coefficient",
-            yaxis_title="-log10(p-value)",
-            legend_title=self.color_legend_title,
-        )
+    def make_figure(self) -> "VolcanoPlot":
+        fig, ax = plt.subplots(figsize=(8, 6))
         self.fig = fig
+        self.ax = ax
+
+        # Plot each significance group
+        for label, color in self.color_map.items():
+            subset = self.df[self.df["significant"] == label]
+            ax.scatter(
+                subset["coef"],
+                subset["-log10(pval)"],
+                c=color,
+                label=label,
+                edgecolor="black",
+                linewidth=0.5,
+                s=20,
+                alpha=0.8,
+            )
+
+        # Threshold lines
+        ax.axhline(y=-np.log10(self.pval_thresh), color="black", linestyle="--", linewidth=1)
+        ax.axvline(x=self.coef_thresh, color="black", linestyle="--", linewidth=1)
+        ax.axvline(x=-self.coef_thresh, color="black", linestyle="--", linewidth=1)
+
+        # Labels and grid
+        ax.set_xlabel("Estimated Coefficient")
+        ax.set_ylabel("-log10(p-value)")
+        ax.legend(title=self.color_legend_title)
+        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+
         return self
+
+    def add_labels(self, top_up: list[str], top_down: list[str]) -> None:
+        if self.ax is None:
+            raise RuntimeError("Plot must be initialized before adding labels.")
+        texts = []
+        for feature in top_up + top_down:
+            row = self.df[self.df["feature"] == feature].iloc[0]
+            texts.append(
+                self.ax.text(
+                    row["coef"],
+                    row["-log10(pval)"],
+                    feature,
+                    fontsize=8,
+                    ha="right" if row["coef"] > 0 else "left",
+                    va="bottom",
+                    bbox=dict(
+                        boxstyle="round,pad=0.3",  # Rounded box
+                        facecolor="white",  # Background color
+                        edgecolor="black",  # Border color
+                        linewidth=0.5,
+                    ),
+                )
+            )
+        adjust_text(texts, ax=self.ax, arrowprops=dict(arrowstyle="-", color="gray", lw=0.5))
 
     def show(self):
         if self.fig is None:
             self.make_figure()
-        self.fig.show()
+        plt.show()
 
     def save(self):
         if self.fig and self.save_path:
-            self.fig.write_image(self.save_path)
+            self.fig.savefig(self.save_path, bbox_inches="tight", dpi=300)
 
-    def get_figure(self) -> go.Figure:
+    def get_figure(self):
         if self.fig is None:
             self.make_figure()
-        return self.fig
+        return self.fig, self.ax
 
 
 def volcanoplot(
     df: pd.DataFrame,
     coef_thresh: float = 1.0,
     pval_thresh: float = 0.05,
+    label_top: int = 0,
     color_legend_title: str | None = None,
-    show: bool | None = None,
+    show: bool | None = True,
     save: str | bool | None = None,
     return_fig: bool = False,
-) -> VolcanoPlot | go.Figure | None:
+):
     """
-    Volcano plot of coefficient vs. -log10(p-value), colored by significance.
+    Create a volcano plot using matplotlib.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Must contain columns 'coef', 'pval', 'significant', and optionally 'feature'.
+        Must contain 'coef', 'pval', 'significant', and optionally 'feature'.
     coef_thresh : float
-        Threshold for coefficient cutoff (vertical lines).
+        Coefficient threshold for vertical cutoff lines.
     pval_thresh : float
-        P-value threshold (horizontal line).
+        P-value threshold for horizontal cutoff line.
+    label_top : int
+        If > 0, label top N up/down genes by effect size.
     color_legend_title : str or None
-        Title for the legend. Defaults to "-log10(p-value)".
+        Title for the legend. Default: "-log10(p-value)".
     show : bool or None
-        Whether to show the figure interactively.
+        Whether to display the figure interactively.
     save : str or bool or None
-        If str, path to save the image. If True, saves with default filename.
+        If str, path to save the image. If True, uses default name.
     return_fig : bool
-        Whether to return the Plotly figure object.
+        Whether to return the matplotlib Figure and Axes.
 
     Returns
     -------
-    VolcanoPlot | plotly.graph_objs.Figure | None
+    VolcanoPlot or tuple[Figure, Axes] or None
     """
     save_path = None
     if isinstance(save, str):
@@ -132,14 +164,14 @@ def volcanoplot(
         save_path=save_path,
     ).make_figure()
 
+    if label_top > 0 and "feature" in df.columns:
+        top_up, top_down = get_top_de_genes(df, top_n=label_top)
+        vp.add_labels(top_up, top_down)
+
     if save_path:
         vp.save()
-
-    show = settings.autoshow if show is None else show
     if show:
         vp.show()
-
     if return_fig:
         return vp.get_figure()
-
     return vp

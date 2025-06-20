@@ -98,8 +98,6 @@ class MatrixPlot(BasePlot):
 
     # default style parameters
     DEFAULT_COLORMAP = rcParams["image.cmap"]
-    DEFAULT_EDGE_COLOR = "gray"
-    DEFAULT_EDGE_LW = 0.1
 
     def __init__(
         self,
@@ -109,6 +107,8 @@ class MatrixPlot(BasePlot):
         *,
         use_raw: bool | None = None,
         log: bool = False,
+        show_row_names: bool = True,
+        show_col_names: bool = True,
         num_categories: int = 7,
         categories_order: Sequence[str] | None = None,
         title: str | None = None,
@@ -175,12 +175,13 @@ class MatrixPlot(BasePlot):
         self.values_df = values_df
 
         self.cmap = self.DEFAULT_COLORMAP
-        self.edge_color = self.DEFAULT_EDGE_COLOR
-        self.edge_lw = self.DEFAULT_EDGE_LW
 
         # Width reserved for annotation tiles (in data units)
         self.annotation_width = self._group_annotation_df.shape[1] if hasattr(self, "_group_annotation_df") else 0
         self.dendrogram = dendrogram
+
+        self.show_row_names = show_row_names
+        self.show_col_names = show_col_names
 
     def style(
         self,
@@ -239,9 +240,16 @@ class MatrixPlot(BasePlot):
 
         return self
 
-    def add_annotations(self, df: pd.DataFrame) -> Self:
-        self._group_annotation_df = df
-        return self
+    def add_annotations(
+        self,
+        df: pd.DataFrame | None = None,
+        palette: dict[str, dict[str, ColorLike] | Colormap] | None = None,
+    ) -> None:
+        r"""Add annotations to the matrix plot."""
+        if df is not None:
+            self._group_annotation_df = df
+        if palette is not None:
+            self._group_annotation_palette = palette
 
     @property
     def has_annotations(self):
@@ -342,18 +350,16 @@ class MatrixPlot(BasePlot):
         category_height = self.DEFAULT_CATEGORY_HEIGHT
         category_width = self.DEFAULT_CATEGORY_WIDTH
 
-        # Compute dimensions
+        # Compute mainplot dimensions
         if self.height is None:
             mainplot_height = len(self.categories) * category_height
             mainplot_width = len(self.var_names) * category_width
             if self.are_axes_swapped:
                 mainplot_height, mainplot_width = mainplot_width, mainplot_height
 
-            height = mainplot_height + 1  # space for labels
-            self.height = max(self.min_figure_height, height)
+            self.height = max(self.min_figure_height, mainplot_height + 1)
             self.width = mainplot_width + self.legends_width
         else:
-            self.min_figure_height = self.height
             mainplot_height = self.height
             mainplot_width = self.width - self.legends_width
 
@@ -367,79 +373,100 @@ class MatrixPlot(BasePlot):
         spacer_height = self.height - var_groups_height - mainplot_height
         height_ratios = [spacer_height, var_groups_height, mainplot_height]
 
-        # Widths: build column structure conditionally
-        width_ratios = []
-        col_indices = {}  # map logical names to actual grid indices
-        col = 0
+        # == Outer grid for annotation + mid block (main+dendrogram) + legend ==
+        ncols_outer = 3 if self.has_annotations else 2
+        width_ratios_outer = []
+        col_indices_outer = {}
 
+        col = 0
         if self.has_annotations:
-            width_ratios.append(self.annotation_width)
-            col_indices["annotation"] = col
+            width_ratios_outer.append(self.annotation_width)
+            col_indices_outer["annotation"] = col
             col += 1
 
-        width_ratios.append(mainplot_width)
-        col_indices["main"] = col
+        mid_width = (
+            self.width - self.annotation_width - self.legends_width
+            if self.has_annotations
+            else self.width - self.legends_width
+        )
+        width_ratios_outer.append(mid_width)
+        col_indices_outer["mid"] = col
         col += 1
 
-        if self.dendrogram:
-            dendrogram_width = 0.5
-            width_ratios.append(dendrogram_width)
-            col_indices["dendrogram"] = col
-            col += 1
+        width_ratios_outer.append(self.legends_width)
+        col_indices_outer["legend"] = col
 
-        width_ratios.append(self.legends_width)
-        col_indices["legend"] = col
-        ncols = len(width_ratios)
-
-        # Build unified grid
-        self.fig, gs = make_grid_spec(
+        self.fig, outer_gs = make_grid_spec(
             self.ax or (self.width, self.height),
             nrows=3,
-            ncols=ncols,
+            ncols=ncols_outer,
+            height_ratios=height_ratios,
+            width_ratios=width_ratios_outer,
             hspace=0.0,
             wspace=0.1,
-            height_ratios=height_ratios,
-            width_ratios=width_ratios,
         )
 
-        # Optional annotation axis
-        if "annotation" in col_indices:
-            annot_ax = self.fig.add_subplot(gs[2, col_indices["annotation"]])
-            annot_ax.set_xticks([])
-            annot_ax.set_yticks([])
-            return_ax_dict["annotation_ax"] = annot_ax
+        # Annotation axis in outer grid
+        annotation_ax = None
+        if "annotation" in col_indices_outer:
+            annotation_ax = self.fig.add_subplot(outer_gs[2, col_indices_outer["annotation"]])
+            return_ax_dict["annotation_ax"] = annotation_ax
 
-        # Main plot axis
-        main_ax = self.fig.add_subplot(gs[2, col_indices["main"]])
+        # == Mid grid inside outer grid for main plot + dendrogram ==
+        ncols_mid = 2 if self.dendrogram else 1
+        width_ratios_mid = [mainplot_width]
+        col_indices_mid = {"main": 0}
+        col = 1
+
+        if self.dendrogram:
+            width_ratios_mid.append(0.5)
+            col_indices_mid["dendrogram"] = col
+
+        mid_gs = outer_gs[2, col_indices_outer["mid"]].subgridspec(
+            nrows=1,
+            ncols=ncols_mid,
+            width_ratios=width_ratios_mid,
+            wspace=0.0,
+        )
+
+        # Main axis
+        main_ax = self.fig.add_subplot(mid_gs[0, col_indices_mid["main"]])
         return_ax_dict["mainplot_ax"] = main_ax
 
-        if self.plot_group_extra is not None:
-            group_extra_orientation = "right"
+        # Dendrogram axis
+        if "dendrogram" in col_indices_mid:
+            group_extra_ax = self.fig.add_subplot(mid_gs[0, col_indices_mid["dendrogram"]], sharey=main_ax)
             if self.plot_group_extra["kind"] == "dendrogram":
-                group_extra_ax = self.fig.add_subplot(gs[2, col_indices["dendrogram"]], sharey=main_ax)
                 _plot_dendrogram(
                     group_extra_ax,
                     self.adata,
                     self.groupby,
                     dendrogram_key=self.plot_group_extra["dendrogram_key"],
                     ticks=self.plot_group_extra["dendrogram_ticks"],
-                    orientation=group_extra_orientation,
+                    orientation="right" if not self.are_axes_swapped else "top",
                 )
-            if self.plot_group_extra["kind"] == "group_totals":
-                self._plot_totals(group_extra_ax, group_extra_orientation)
-
+            elif self.plot_group_extra["kind"] == "group_totals":
+                self._plot_totals(group_extra_ax, orientation="right")
             return_ax_dict["group_extra_ax"] = group_extra_ax
 
-        # Optional legend axis
-        if self.legends_width > 0:
-            legend_ax = self.fig.add_subplot(gs[2, col_indices["legend"]])
-            return_ax_dict["legend_ax"] = legend_ax
+        # Legend axis
+        legend_ax = self.fig.add_subplot(outer_gs[2, col_indices_outer["legend"]])
+        self._plot_legend(legend_ax, return_ax_dict, None)
 
-        # Optional title
-        if self.fig_title and self.fig_title.strip():
-            title_ax = self.fig.add_subplot(gs[0, col_indices["main"]])
-            title_ax.axis("off")
-            title_ax.set_title(self.fig_title)
+        # Variable group brackets (top middle panel)
+        if self.var_groups:
+            brackets_ax = self.fig.add_subplot(outer_gs[1, col_indices_outer["mid"]])
+            orientation = "right" if self.are_axes_swapped else "top"
+            _plot_var_groups_brackets(
+                brackets_ax,
+                var_groups=self.var_groups,
+                rotation=self.var_group_rotation,
+                left_adjustment=0.2,
+                right_adjustment=0.7,
+                orientation=orientation,
+                wide=True,
+            )
+            return_ax_dict["gene_group_ax"] = brackets_ax
 
         # Clean all axes
         for ax in self.fig.axes:
@@ -448,13 +475,14 @@ class MatrixPlot(BasePlot):
             ax.set_xticklabels([])
             ax.set_yticklabels([])
 
-        # Plot main content
-        normalize = self._mainplot(main_ax, annotation_ax=return_ax_dict.get("annotation_ax"))
+        # Main matrix plot (heatmap + optional annotation)
+        normalize = self._mainplot(main_ax, annotation_ax=annotation_ax)
         main_ax.set_zorder(100)
 
-        # Plot legend (after getting normalization)
-        if self.legends_width > 0:
-            self._plot_legend(return_ax_dict["legend_ax"], return_ax_dict, normalize)
+        if self.fig_title and self.fig_title.strip():
+            title_ax = self.fig.add_subplot(outer_gs[0, col_indices_outer["mid"]])
+            title_ax.axis("off")
+            title_ax.set_title(self.fig_title)
 
         self.ax_dict = return_ax_dict
 
@@ -485,8 +513,8 @@ class MatrixPlot(BasePlot):
         kwds = fix_kwds(
             self.kwds,
             cmap=cmap,
-            edgecolor=self.edge_color,
-            linewidth=self.edge_lw,
+            edgecolor="none",
+            linewidth=0.0,
             norm=normalize,
         )
         main_ax.pcolor(_color_df, **kwds)
@@ -498,9 +526,22 @@ class MatrixPlot(BasePlot):
         x_ticks = np.arange(len(x_labels)) + 0.5
 
         # Only set y-ticks on annotation_ax
-        main_ax.set_yticks([])
         main_ax.set_xticks(x_ticks)
         main_ax.set_xticklabels(x_labels, rotation=90, ha="center", minor=False)
+
+        if self.show_row_names and annotation_ax is None:
+            main_ax.set_yticks(y_ticks)
+            main_ax.set_yticklabels(y_labels)
+        else:
+            main_ax.set_yticks([])
+            main_ax.set_yticklabels([])
+
+        if self.show_col_names:
+            main_ax.set_xticks(x_ticks)
+            main_ax.set_xticklabels(x_labels)
+        else:
+            main_ax.set_xticks([])
+            main_ax.set_xticklabels([])
 
         main_ax.grid(visible=False)
         main_ax.set_ylim(len(y_labels), 0)
@@ -518,24 +559,42 @@ class MatrixPlot(BasePlot):
             annotation_ax.set_ylim(0, len(annot_df))
 
             for i, col in enumerate(annot_df.columns):
-                categories = annot_df[col].astype("category").cat.categories
-                palette = {cat: to_rgba(colormaps.get_cmap("tab10")(j)) for j, cat in enumerate(categories)}
+                col_palette_raw = (
+                    self._group_annotation_palette.get(col) if hasattr(self, "_group_annotation_palette") else None
+                )
+                # Get observed values in order
+                cats = annot_df[col].astype("category").cat.categories
+
+                if isinstance(col_palette_raw, dict):
+                    col_palette = {cat: to_rgba(col_palette_raw.get(cat, "grey")) for cat in cats}
+                elif callable(col_palette_raw):  # likely a colormap
+                    cmap = col_palette_raw
+                    col_palette = {cat: to_rgba(cmap(i / max(len(cats) - 1, 1))) for i, cat in enumerate(cats)}
+                else:
+                    # Default fallback: tab10
+                    col_palette = {cat: to_rgba(colormaps.get_cmap("tab10")(i)) for i, cat in enumerate(cats)}
+
                 for y, value in enumerate(annot_df[col]):
                     annotation_ax.add_patch(
                         patches.Rectangle(
                             (i, len(annot_df) - y - 1),
                             1,
                             1,
-                            facecolor=palette.get(value, "grey"),
+                            facecolor=col_palette.get(value, "grey"),
                             linewidth=1.0,
+                            edgecolor=None,
                         )
                     )
 
             annotation_ax.set_xticks(np.arange(n_annots) + 0.5)
             annotation_ax.set_xticklabels(annot_df.columns, rotation=90, fontsize="x-small")
 
-            annotation_ax.set_yticks(y_ticks)
-            annotation_ax.set_yticklabels(y_labels)
+            if self.show_row_names:
+                annotation_ax.set_yticks(y_ticks)
+                annotation_ax.set_yticklabels(y_labels)
+            else:
+                annotation_ax.set_yticks([])
+                annotation_ax.set_yticklabels([])
 
             annotation_ax.tick_params(axis="both", labelsize="small")
             annotation_ax.set_xlim(0, n_annots)
@@ -559,12 +618,15 @@ def matrixplot(
     *,
     use_raw: bool | None = None,
     log: bool = False,
+    show_row_names: bool = True,
+    show_col_names: bool = True,
     num_categories: int = 7,
     categories_order: Sequence[str] | None = None,
     figsize: tuple[float, float] | None = None,
     dendrogram: bool | str = False,
     title: str | None = None,
     cmap: Colormap | str | None = MatrixPlot.DEFAULT_COLORMAP,
+    annotation_palette: dict[str, dict[str, ColorLike] | Colormap] | None = None,
     colorbar_title: str | None = MatrixPlot.DEFAULT_COLOR_LEGEND_TITLE,
     gene_symbols: str | None = None,
     var_group_positions: Sequence[tuple[int, int]] | None = None,
@@ -633,6 +695,8 @@ def matrixplot(
         groupby=groupby,
         use_raw=use_raw,
         log=log,
+        show_row_names=show_row_names,
+        show_col_names=show_col_names,
         num_categories=num_categories,
         categories_order=categories_order,
         standard_scale=standard_scale,
@@ -657,6 +721,8 @@ def matrixplot(
         mp.add_dendrogram(dendrogram_key=_dk(dendrogram))
     if swap_axes:
         mp.swap_axes()
+    if annotation_palette is not None:
+        mp.add_annotations(palette=annotation_palette)
     mp = mp.style(cmap=cmap).legend(title=colorbar_title)
     if return_fig:
         return mp
