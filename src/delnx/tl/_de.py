@@ -592,8 +592,6 @@ def de(
             "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
         )
 
-    # Clip coef at -10 and 10
-    results["coef"] = np.clip(results["coef"], -10, 10)
     # Clip p-values at 1e-15
     results["pval"] = np.clip(results["pval"], 1e-50, 1)
 
