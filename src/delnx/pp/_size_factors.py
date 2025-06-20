@@ -102,7 +102,9 @@ def _compute_median_ratio(adata, layer=None):
 
     # Check if we have any genes left after filtering
     if not filtered_genes.any():
-        raise ValueError("All genes have all-zero counts. Cannot compute size factors with median-of-ratios method.")
+        raise ValueError(
+            "All genes have a least one zero count. Cannot compute size factors with median-of-ratios method."
+        )
 
     # Compute log ratios using only filtered genes
     log_ratios = log_X[:, filtered_genes] - log_means[filtered_genes]
