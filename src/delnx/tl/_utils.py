@@ -24,6 +24,7 @@ def _infer_data_type(X: np.ndarray) -> DataType:
         - counts: Raw count data (integers, potentially large values)
         - lognorm: Log-normalized data (floating point, typically between 0 and 10)
         - binary: Binary data (only 0s and 1s)
+        - scaled: Scaled data (floating point, can be negative or positive)
     """
     # Subsample cells if large
     if X.shape[0] > 300:
@@ -46,8 +47,10 @@ def _infer_data_type(X: np.ndarray) -> DataType:
     if is_integer and is_nonnegative:
         return "counts"
 
-    # Otherwise assume log-normalized
-    return "lognorm"
+    elif is_nonnegative:
+        return "lognorm"
+
+    return "scaled"
 
 
 def _validate_conditions(
@@ -151,7 +154,7 @@ def _check_method_and_data_type(
         raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
     elif method == "lr" and data_type not in COMPATIBLE_DATA_TYPES["lr"]:
         warnings.warn(
-            f"Logistic regression is designed {COMPATIBLE_DATA_TYPES['lr'].joined(' or ')} data. "
+            f"Logistic regression is designed for {COMPATIBLE_DATA_TYPES['lr'].joined(' or ')} data. "
             f"Current data type is {data_type}, which may give unreliable results.",
             stacklevel=2,
         )
