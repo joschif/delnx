@@ -1,7 +1,10 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 
+from delnx._constants import COMPATIBLE_DATA_TYPES
 from delnx._typing import ComparisonMode, DataType
 from delnx._utils import _to_dense, _to_list
 
@@ -130,3 +133,31 @@ def _prepare_model_data(
             model_data[cov] = adata.obs[cov].values
 
     return model_data
+
+
+def _check_method_and_data_type(
+    method: str,
+    data_type: DataType,
+) -> None:
+    """Check if the method is compatible with the data type. Raise warnings or errors as appropriate."""
+    if method not in COMPATIBLE_DATA_TYPES:
+        raise ValueError(f"Method '{method}' is not recognized or supported.")
+
+    if method == "deseq2" and data_type not in COMPATIBLE_DATA_TYPES["deseq2"]:
+        raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
+    elif method == "negbinom" and data_type not in COMPATIBLE_DATA_TYPES["negbinom"]:
+        raise ValueError(f"Negative binomial models require count data. Current data type is {data_type}.")
+    elif method == "binomial" and data_type not in COMPATIBLE_DATA_TYPES["binomial"]:
+        raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
+    elif method == "lr" and data_type not in COMPATIBLE_DATA_TYPES["lr"]:
+        warnings.warn(
+            f"Logistic regression is designed {COMPATIBLE_DATA_TYPES['lr'].joined(' or ')} data. "
+            f"Current data type is {data_type}, which may give unreliable results.",
+            stacklevel=2,
+        )
+    elif method.startswith("anova") and data_type not in COMPATIBLE_DATA_TYPES[method]:
+        warnings.warn(
+            f"ANOVA is designed for {COMPATIBLE_DATA_TYPES['anova'].joined(' or ')} data. "
+            f"Current data type is {data_type}, which may give unreliable results.",
+            stacklevel=2,
+        )

@@ -23,19 +23,14 @@ from anndata import AnnData
 from scipy.sparse import csr_matrix, issparse
 
 import delnx as dx
+from delnx._constants import SUPPORTED_BACKENDS
 from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
 from ._effects import _batched_auroc, _log2fc
 from ._jax_tests import _run_batched_de
-from ._utils import (
-    _infer_data_type,
-    _prepare_model_data,
-    _validate_conditions,
-)
-
-SUPPORTED_BACKENDS = ["jax", "statsmodels", "cuml"]
+from ._utils import _check_method_and_data_type, _infer_data_type, _prepare_model_data, _validate_conditions
 
 
 def _grouped_de(
@@ -248,11 +243,11 @@ def de(
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
         Method for differential expression testing:
-            - "lr": Logistic regression. Constructs a logistic regression model predicting group membership based on each feature individually and compares this to a null model with a likelihood ratio test. Recommended for log-normalized single-cell data.
+            - "lr": Constructs a logistic regression model predicting group membership based on each feature individually and compares this to a null model with a likelihood ratio test. Recommended for log-normalized single-cell data.
             - "deseq2": DESeq2 method (through PyDESeq2) based on a model using the negative binomial distribution. Recommended for (pseudo-)bulk RNA-seq count data.
             - "negbinom": Wald test based on a negative binomial regression model. Recommended for count single-cell and bulk RNA-seq data.
-            - "anova": ANOVA based on linear model. Recommended for log-normalized single-cell data.
-            - "anova_residual": Linear model with residual F-test. Recommended for log-normalized single-cell data
+            - "anova": ANOVA based on linear model. Recommended for log-normalized or scaled single-cell data.
+            - "anova_residual": Linear model with residual F-test. Recommended for log-normalized or scaled single-cell data
             - "binomial": Likelihood ratio test based on a binomial regression model. Recommended for binary data such as single-cell and bulk ATAC-seq.
     backend : Backends, default='jax'
         Computational backend for linear model-based methods:
@@ -273,6 +268,7 @@ def de(
             - "counts": Raw count data
             - "lognorm": Log-normalized data (log1p of normalized counts)
             - "binary": Binary expression data
+            - "scaled": Scaled data (e.g., z-scores)
     log2fc_threshold : float, default=0.0
         Minimum absolute log2 fold change threshold for feature inclusion.
         Features below this threshold are excluded from testing.
@@ -438,24 +434,7 @@ def de(
         print(f"Using specified data type: {data_type}")
 
     # Validate method and data type combinations
-    if method == "deseq2" and data_type != "counts":
-        raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
-    elif method == "negbinom" and data_type != "counts":
-        raise ValueError(f"Negative binomial models require count data. Current data type is {data_type}.")
-    elif method == "binomial" and data_type != "binary":
-        raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
-    elif method == "lr" and data_type not in ["lognorm", "binary"]:
-        warnings.warn(
-            "Logistic regression is designed for log-normalized or binary data. "
-            f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
-        )
-    elif (method == "anova" or method == "anova_residual") and data_type != "lognorm":
-        warnings.warn(
-            "ANOVA is designed for log-normalized data. "
-            f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
-        )
+    _check_method_and_data_type(method, data_type)
 
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
