@@ -75,7 +75,7 @@ results = dx.tl.de(
 
 - [JAX](https://docs.jax.dev/en/latest/)
 - [statsmodels](https://www.statsmodels.org/stable/index.html)
-- [cuML](https://rapids.ai/cuml.html)
+- [cuML](https://github.com/rapidsai/cuml)
 - [PyDESeq2](https://pydeseq2.readthedocs.io/en/stable/)
 
 

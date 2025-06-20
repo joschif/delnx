@@ -88,7 +88,7 @@ Development version
 
 - `JAX <https://docs.jax.dev/en/latest/>`_
 - `statsmodels <https://www.statsmodels.org/stable/index.html>`_
-- `cuML <https://rapids.ai/cuml.html>`_
+- `cuML <https://github.com/rapidsai/cuml>`_
 - `PyDESeq2 <https://pydeseq2.readthedocs.io/en/stable/>`_
 
 🗺️ Roadmap
