@@ -248,12 +248,12 @@ def de(
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
         Method for differential expression testing:
-            - "lr": Logistic regression with likelihood ratio test
-            - "deseq2": DESeq2 method for count data (requires pydeseq2)
-            - "negbinom": Negative binomial GLM with Wald test
-            - "anova": ANOVA based on linear model
-            - "anova_residual": Linear model with residual F-test
-            - "binomial": Binomial GLM
+            - "lr": Logistic regression. Constructs a logistic regression model predicting group membership based on each feature individually and compares this to a null model with a likelihood ratio test. Recommended for log-normalized single-cell data.
+            - "deseq2": DESeq2 method (through PyDESeq2) based on a model using the negative binomial distribution. Recommended for (pseudo-)bulk RNA-seq count data.
+            - "negbinom": Wald test based on a negative binomial regression model. Recommended for count single-cell and bulk RNA-seq data.
+            - "anova": ANOVA based on linear model. Recommended for log-normalized single-cell data.
+            - "anova_residual": Linear model with residual F-test. Recommended for log-normalized single-cell data
+            - "binomial": Likelihood ratio test based on a binomial regression model. Recommended for binary data such as single-cell and bulk ATAC-seq.
     backend : Backends, default='jax'
         Computational backend for linear model-based methods:
             - "jax": Custom JAX implementation (batched, GPU-accelerated)
