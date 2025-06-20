@@ -201,7 +201,7 @@ def _compute_quantile_regression(adata, layer=None, min_counts=1, quantiles=np.l
     return size_factors / np.mean(size_factors)
 
 
-def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor", **kwargs):
+def size_factors(adata, method="library_size", layer=None, obs_key_added="size_factor", **kwargs):
     """Compute size factors for (single-cell) RNA-seq normalization.
 
     This function calculates sample/cell-specific normalization factors (size factors)
@@ -213,7 +213,7 @@ def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor",
     ----------
     adata : AnnData
         Annotated data matrix containing expression data.
-    method : str, default="ratio"
+    method : str, default="library_size"
         Method to compute size factors:
             - "ratio": DESeq2-style median-of-ratios size factors, robust to differential expression between samples. Recommended for bulk RNA-seq and well-covered single-cell data.
             - "quantile_regression": SCnorm-style quantile regression normalization, accounts for gene-specific count-depth relationships. Recommended for single-cell RNA-seq data with potential gene-dependent biases.
