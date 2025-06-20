@@ -114,5 +114,7 @@ def pseudobulk(
         groups_col=group_key,  # Optional column for separate aggregation (e.g., cell types)
         layer=layer,  # Which data layer to use
         mode=mode,  # How to aggregate (sum, mean, median)
+        min_cells=min_cells,  # Minimum cells per pseudobulk sample
+        min_counts=min_counts,  # Minimum total counts per pseudobulk sample
         **kwargs,  # Pass additional parameters to decoupler
     )
