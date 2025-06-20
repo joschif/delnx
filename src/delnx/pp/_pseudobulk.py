@@ -108,13 +108,21 @@ def pseudobulk(
         adata.obs["psbulk_replicate"] = adata.obs[sample_key].astype(str)
 
     # Call decoupler's pseudobulk function to perform the actual aggregation
-    return dc.pp.pseudobulk(
+    adata_pb = dc.pp.pseudobulk(
         adata,
         sample_col="psbulk_replicate",  # Column containing our sample/pseudoreplicate IDs
         groups_col=group_key,  # Optional column for separate aggregation (e.g., cell types)
         layer=layer,  # Which data layer to use
         mode=mode,  # How to aggregate (sum, mean, median)
-        min_cells=min_cells,  # Minimum cells per pseudobulk sample
-        min_counts=min_counts,  # Minimum total counts per pseudobulk sample
+        empty=True,  # Discard empty pseudobulk samples
         **kwargs,  # Pass additional parameters to decoupler
     )
+
+    # Filter out pseudobulk samples with too few cells or counts
+    if min_cells is not None:
+        adata_pb = adata_pb[adata_pb.obs["psbulk_cells"] >= min_cells, :]
+
+    if min_counts is not None:
+        adata_pb = adata_pb[adata_pb.obs["psbulk_counts"] >= min_counts, :]
+
+    return adata_pb
