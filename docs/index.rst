@@ -128,11 +128,6 @@ Development version
 - ⬜ Plotting functions to visualize DE results
 - ⬜ Gene set enrichment analysis for DE results
 
-📖 Documentation
-----------------
-
-For more information, check out the `documentation <https://delnx.readthedocs.io>`_ and the `API reference <https://delnx.readthedocs.io/en/latest/api.html>`_.
-
 
 .. toctree::
     :maxdepth: 3
