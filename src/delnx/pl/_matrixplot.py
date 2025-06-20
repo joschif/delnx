@@ -182,14 +182,6 @@ class MatrixPlot(BasePlot):
         self.annotation_width = self._group_annotation_df.shape[1] if hasattr(self, "_group_annotation_df") else 0
         self.dendrogram = dendrogram
 
-        if self.dendrogram:
-            self.plot_group_extra = {
-                "kind": "dendrogram",
-                "dendrogram_key": self.dendrogram if isinstance(dendrogram, str) else None,
-            }
-        else:
-            self.plot_group_extra = None
-
     def style(
         self,
         cmap: Colormap | str | None | Empty = _empty,
@@ -262,6 +254,89 @@ class MatrixPlot(BasePlot):
     @annotation_width.setter
     def annotation_width(self, value):
         self._annotation_width = value
+
+    def add_dendrogram(
+        self,
+        *,
+        show: bool | None = True,
+        dendrogram_key: str | None = None,
+        size: float | None = 0.8,
+    ) -> Self:
+        r"""Show dendrogram based on the hierarchical clustering between the `groupby` categories.
+
+        Categories are reordered to match the dendrogram order.
+
+        The dendrogram information is computed using :func:`scanpy.tl.dendrogram`.
+        If `sc.tl.dendrogram` has not been called previously the function is called
+        with default parameters.
+
+        The dendrogram is by default shown on the right side of the plot or on top
+        if the axes are swapped.
+
+        `var_names` are reordered to produce a more pleasing output if:
+            * The data contains `var_groups`
+            * the `var_groups` match the categories.
+
+        The previous conditions happen by default when using Plot
+        to show the results from :func:`~scanpy.tl.rank_genes_groups` (aka gene markers), by
+        calling `scanpy.tl.rank_genes_groups_(plot_name)`.
+
+
+        Parameters
+        ----------
+        show
+            Boolean to turn on (True) or off (False) 'add_dendrogram'
+        dendrogram_key
+            Needed if `sc.tl.dendrogram` saved the dendrogram using a key different
+            than the default name.
+        size
+            size of the dendrogram. Corresponds to width when dendrogram shown on
+            the right of the plot, or height when shown on top. The unit is the same
+            as in matplotlib (inches).
+
+        Returns
+        -------
+        Returns `self` for method chaining.
+
+
+        Examples
+        --------
+        >>> import scanpy as sc
+        >>> adata = sc.datasets.pbmc68k_reduced()
+        >>> markers = {"T-cell": "CD3D", "B-cell": "CD79A", "myeloid": "CST3"}
+        >>> plot = sc.pl._baseplot_class.BasePlot(adata, markers, groupby="bulk_labels").add_dendrogram()
+        >>> plot.plot_group_extra  # doctest: +NORMALIZE_WHITESPACE
+        {'kind': 'dendrogram',
+         'width': 0.8,
+         'dendrogram_key': None,
+         'dendrogram_ticks': array([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5])}
+
+        """
+        if not show:
+            self.plot_group_extra = None
+            return self
+
+        if self.groupby is None or len(self.categories) <= 2:
+            # dendrogram can only be computed  between groupby categories
+            logg.warning("Dendrogram not added. Dendrogram is added only when the number of categories to plot > 2")
+            return self
+
+        self.group_extra_size = size
+
+        # to correctly plot the dendrogram the categories need to be ordered
+        # according to the dendrogram ordering.
+        self._reorder_categories_after_dendrogram(dendrogram_key)
+
+        dendro_ticks = np.arange(len(self.categories)) + 0.5
+
+        self.group_extra_size = size
+        self.plot_group_extra = {
+            "kind": "dendrogram",
+            "width": size,
+            "dendrogram_key": dendrogram_key,
+            "dendrogram_ticks": dendro_ticks,
+        }
+        return self
 
     def make_figure(self) -> None:
         category_height = self.DEFAULT_CATEGORY_HEIGHT
@@ -338,21 +413,22 @@ class MatrixPlot(BasePlot):
         main_ax = self.fig.add_subplot(gs[2, col_indices["main"]])
         return_ax_dict["mainplot_ax"] = main_ax
 
-        # Optional dendrogram axis
-        if "dendrogram" in col_indices and getattr(self, "plot_group_extra", None):
-            ax = self.fig.add_subplot(gs[2, col_indices["dendrogram"]], sharey=main_ax)
+        if self.plot_group_extra is not None:
+            group_extra_orientation = "right"
             if self.plot_group_extra["kind"] == "dendrogram":
+                group_extra_ax = self.fig.add_subplot(gs[2, col_indices["dendrogram"]], sharey=main_ax)
                 _plot_dendrogram(
-                    ax,
+                    group_extra_ax,
                     self.adata,
                     self.groupby,
                     dendrogram_key=self.plot_group_extra["dendrogram_key"],
-                    orientation="right",
+                    ticks=self.plot_group_extra["dendrogram_ticks"],
+                    orientation=group_extra_orientation,
                 )
-                return_ax_dict["dendrogram_ax"] = ax
-            elif self.plot_group_extra["kind"] == "group_totals":
-                self._plot_totals(ax, orientation="right")
-                return_ax_dict["group_totals_ax"] = ax
+            if self.plot_group_extra["kind"] == "group_totals":
+                self._plot_totals(group_extra_ax, group_extra_orientation)
+
+            return_ax_dict["group_extra_ax"] = group_extra_ax
 
         # Optional legend axis
         if self.legends_width > 0:
@@ -511,7 +587,7 @@ def matrixplot(
     """
     Create a heatmap of mean expression values per group for each variable.
 
-    This function is a convenient wrapper for :class:`~scanpy.pl.MatrixPlot`, allowing visualization of grouped expression values as a matrix heatmap. For more customization, use :class:`~scanpy.pl.MatrixPlot` directly.
+    This function is a convenient wrapper for :class:`~dx.pl.MatrixPlot`, allowing visualization of grouped expression values as a matrix heatmap. For more customization, use :class:`~dx.pl.MatrixPlot` directly.
 
     Parameters
     ----------
@@ -533,16 +609,14 @@ def matrixplot(
     Returns
     -------
     MatrixPlot | dict[str, Axes] | None
-        If `return_fig` is True, returns a :class:`~scanpy.pl.MatrixPlot` object.
+        If `return_fig` is True, returns a :class:`~dx.pl.MatrixPlot` object.
         If `show` is False, returns a dictionary of matplotlib axes.
         Otherwise, displays the plot and returns None.
 
     See Also
     --------
-    :class:`~scanpy.pl.MatrixPlot`
+    :class:`~dx.pl.MatrixPlot`
         The MatrixPlot class for advanced customization.
-    :func:`~scanpy.pl.rank_genes_groups_matrixplot`
-        Plot marker genes identified by :func:`~scanpy.tl.rank_genes_groups`.
 
     Examples
     --------
@@ -552,20 +626,6 @@ def matrixplot(
         adata = sc.datasets.pbmc68k_reduced()
         markers = ['C1QA', 'PSAP', 'CD79A', 'CD79B', 'CST3', 'LYZ']
         sc.pl.matrixplot(adata, markers, groupby='bulk_labels', dendrogram=True)
-
-    Using `var_names` as a dictionary:
-
-        markers = {{'T-cell': 'CD3D', 'B-cell': 'CD79A', 'myeloid': 'CST3'}}
-        sc.pl.matrixplot(adata, markers, groupby='bulk_labels', dendrogram=True)
-
-    Accessing the MatrixPlot object for further customization:
-
-        mp = sc.pl.matrixplot(adata, markers, 'bulk_labels', return_fig=True)
-        mp.add_totals().style(edge_color='black').show()
-
-    Getting the axes dictionary:
-
-        axes_dict = mp.get_axes()
     """
     mp = MatrixPlot(
         adata,
@@ -593,6 +653,8 @@ def matrixplot(
         **kwds,
     )
 
+    if dendrogram:
+        mp.add_dendrogram(dendrogram_key=_dk(dendrogram))
     if swap_axes:
         mp.swap_axes()
     mp = mp.style(cmap=cmap).legend(title=colorbar_title)
