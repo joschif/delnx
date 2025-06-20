@@ -86,13 +86,18 @@ def _compute_median_ratio(adata, layer=None):
     """
     X = _get_layer(adata, layer)
 
+    if sparse.issparse(X):
+        raise ValueError(
+            "The median-of-ratios method requires a dense matrix. Please convert the sparse matrix to dense format before using this method."
+        )
+
     # Compute gene-wise mean log counts
     with np.errstate(divide="ignore"):  # ignore division by zero warnings
         log_X = np.log(X)
 
     log_means = log_X.mean(0)
 
-    # Filter out genes with -∞ log means (genes with all zero counts)
+    # Filter out genes with -∞ log means (genes with zero counts)
     filtered_genes = ~np.isinf(log_means)
 
     # Check if we have any genes left after filtering
