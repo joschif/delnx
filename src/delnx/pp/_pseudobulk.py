@@ -120,9 +120,9 @@ def pseudobulk(
 
     # Filter out pseudobulk samples with too few cells or counts
     if min_cells is not None:
-        adata_pb = adata_pb[adata_pb.obs["psbulk_cells"] >= min_cells, :]
+        adata_pb = adata_pb[adata_pb.obs["psbulk_cells"] >= min_cells, :].copy()
 
     if min_counts is not None:
-        adata_pb = adata_pb[adata_pb.obs["psbulk_counts"] >= min_counts, :]
+        adata_pb = adata_pb[adata_pb.obs["psbulk_counts"] >= min_counts, :].copy()
 
     return adata_pb
