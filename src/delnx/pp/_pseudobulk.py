@@ -21,6 +21,8 @@ def pseudobulk(
     group_key: str | None = None,
     n_pseudoreps: int | None = None,
     layer: str | None = None,
+    min_cells: int | None = 5,
+    min_counts: int | None = 5000,
     mode: str = "sum",
     **kwargs,
 ) -> AnnData:
@@ -51,10 +53,14 @@ def pseudobulk(
         Method to aggregate cell-level data into pseudobulk samples:
             - "sum": Sum of counts (recommended for RNA-seq data)
             - "mean": Average of counts across cells
+    min_cells : int | None, default=5
+        Minimum number of cells required in a pseudobulk sample to retain it.
+        Samples with fewer cells will be discarded.
+    min_counts : int | None, default=5000
+        Minimum total counts required in a pseudobulk sample to retain it.
+        Samples with fewer total counts will be discarded.
     **kwargs
-        Additional arguments to pass to :func:`decoupler.pp.pseudobulk`, such as:
-            - min_cells: Minimum number of cells required per pseudobulk sample
-            - min_counts: Minimum number of counts required per pseudobulk sample
+        Additional arguments to pass to :func:`decoupler.pp.pseudobulk`
 
     Returns
     -------
