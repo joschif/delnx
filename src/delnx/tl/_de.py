@@ -175,7 +175,7 @@ def _grouped_de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj"],
+        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns
@@ -486,6 +486,7 @@ def de(
                     f"Skipping comparison {group1} vs {group2} with < {min_samples} samples",
                     stacklevel=2,
                 )
+            results.append(pd.DataFrame())
             continue
 
         all_mask = mask1 | mask2
@@ -510,6 +511,8 @@ def de(
 
         # Calculate log2 fold change
         log2fc = _log2fc(X=X_norm, condition_mask=condition_mask, data_type=data_type)
+        # Clip log2fc to avoid extreme values
+        log2fc = np.clip(log2fc, -10, 10)
 
         # Apply log2fc threshold
         feature_mask = np.abs(log2fc) > log2fc_threshold
@@ -584,10 +587,15 @@ def de(
     results = pd.concat(results, axis=0).reset_index(drop=True)
 
     # Check if any valid comparisons were found (length > 0 and not all pvals are NaN)
-    if len(results) == 0 or results["pval"].isna().all():
+    if (len(results) == 0 or results["pval"].isna().all()) and group_key is None:
         raise ValueError(
             "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
         )
+
+    # Clip coef at -10 and 10
+    results["coef"] = np.clip(results["coef"], -10, 10)
+    # Clip p-values at 1e-15
+    results["pval"] = np.clip(results["pval"], 1e-50, 1)
 
     # Perform multiple testing correction
     padj = sm.stats.multipletests(
@@ -598,7 +606,7 @@ def de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj"],
+        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns
