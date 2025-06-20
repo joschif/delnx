@@ -154,13 +154,13 @@ def _check_method_and_data_type(
         raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
     elif method == "lr" and data_type not in COMPATIBLE_DATA_TYPES["lr"]:
         warnings.warn(
-            f"Logistic regression is designed for {COMPATIBLE_DATA_TYPES['lr'].joined(' or ')} data. "
+            f"Logistic regression is designed for {' or '.join(COMPATIBLE_DATA_TYPES['lr'])} data. "
             f"Current data type is {data_type}, which may give unreliable results.",
             stacklevel=2,
         )
     elif method.startswith("anova") and data_type not in COMPATIBLE_DATA_TYPES[method]:
         warnings.warn(
-            f"ANOVA is designed for {COMPATIBLE_DATA_TYPES['anova'].joined(' or ')} data. "
+            f"ANOVA is designed for {' or '.join(COMPATIBLE_DATA_TYPES['anova'])} data. "
             f"Current data type is {data_type}, which may give unreliable results.",
             stacklevel=2,
         )
