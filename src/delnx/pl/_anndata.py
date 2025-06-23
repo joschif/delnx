@@ -10,8 +10,8 @@ import pandas as pd
 import scanpy as sc
 from pandas.api.types import is_numeric_dtype
 
-from .. import _logger as logg
-from .._utils import (
+from delnx import _logger as logg
+from delnx._utils import (
     _check_use_raw,
     sanitize_anndata,
 )
@@ -226,8 +226,8 @@ def _format_first_three_categories(categories):
 
 def _get_dendrogram_key(
     adata: AnnData,
-    dendrogram_key: Union[str, None],
-    groupby: Union[str, Sequence[str]],
+    dendrogram_key: str | None,
+    groupby: str | Sequence[str],
     *,
     use_rep: str = "pca",
     validate_groupby: bool = False,

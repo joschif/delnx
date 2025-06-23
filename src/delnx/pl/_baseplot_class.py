@@ -10,15 +10,15 @@ import numpy as np
 from matplotlib import colormaps, gridspec
 from matplotlib import pyplot as plt
 
-from .. import _logger as logg
-from .._utils import _empty
-from ._anndata import (
+from delnx import _logger as logg
+from delnx._utils import _empty
+from delnx.pl._anndata import (
     VarGroups,
     _plot_dendrogram,
     _prepare_dataframe,
     _reorder_categories_after_dendrogram,
 )
-from ._utils import check_colornorm, make_grid_spec
+from delnx.pl._utils import check_colornorm, make_grid_spec
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -29,8 +29,8 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.colors import Colormap, Normalize
 
-    from .._utils import Empty
-    from ._utils import ColorLike, _AxesSubplot
+    from delnx._utils import Empty
+    from delnx.pl._utils import ColorLike, _AxesSubplot
 
     _VarNames = str | Sequence[str]
 
@@ -730,16 +730,10 @@ class BasePlot:
             if self.plot_group_extra is not None:
                 group_extra_ax = self.fig.add_subplot(mainplot_gs[2, 1], sharey=main_ax)
                 group_extra_orientation = "right"
-            if self.var_groups:
-                gene_groups_ax = self.fig.add_subplot(mainplot_gs[1, 0], sharex=main_ax)
-                var_group_orientation = "top"
         else:
             if self.plot_group_extra:
                 group_extra_ax = self.fig.add_subplot(mainplot_gs[1, 0], sharex=main_ax)
                 group_extra_orientation = "top"
-            if self.var_groups:
-                gene_groups_ax = self.fig.add_subplot(mainplot_gs[2, 1], sharey=main_ax)
-                var_group_orientation = "right"
 
         if self.plot_group_extra is not None:
             if self.plot_group_extra["kind"] == "dendrogram":

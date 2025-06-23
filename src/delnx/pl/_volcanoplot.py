@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from adjustText import adjust_text
 
-from ..pp._get_de_genes import get_de_genes
+from delnx.pp._get_de_genes import get_de_genes
 
 
 class VolcanoPlot:
@@ -89,15 +89,23 @@ class VolcanoPlot:
                     fontsize=8,
                     ha="right" if row["coef"] > 0 else "left",
                     va="bottom",
-                    bbox=dict(
-                        boxstyle="round,pad=0.3",  # Rounded box
-                        facecolor="white",  # Background color
-                        edgecolor="black",  # Border color
-                        linewidth=0.5,
-                    ),
+                    bbox={
+                        "boxstyle": "round,pad=0.3",
+                        "facecolor": "white",
+                        "edgecolor": "black",
+                        "linewidth": 0.5,
+                    },
                 )
             )
-        adjust_text(texts, ax=self.ax, arrowprops=dict(arrowstyle="-", color="gray", lw=0.5))
+        adjust_text(
+            texts,
+            ax=self.ax,
+            arrowprops={
+                "arrowstyle": "-",
+                "color": "gray",
+                "lw": 0.5,
+            },
+        )
 
     def show(self):
         if self.fig is None:

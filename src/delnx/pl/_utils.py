@@ -12,8 +12,8 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from scipy.spatial.distance import squareform
 
-from .. import _logger as logg
-from .._settings import settings
+from delnx import _logger as logg
+from delnx._settings import settings
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -131,12 +131,12 @@ def make_grid_spec(
     width_ratios: Sequence[float] | None = None,
     height_ratios: Sequence[float] | None = None,
 ) -> tuple[Figure, gridspec.GridSpecBase]:
-    kw = dict(
-        wspace=wspace,
-        hspace=hspace,
-        width_ratios=width_ratios,
-        height_ratios=height_ratios,
-    )
+    kw = {
+        "wspace": wspace,
+        "hspace": hspace,
+        "width_ratios": width_ratios,
+        "height_ratios": height_ratios,
+    }
     if isinstance(ax_or_figsize, tuple):
         fig = plt.figure(figsize=ax_or_figsize)
         return fig, gridspec.GridSpec(nrows, ncols, **kw)

@@ -3,7 +3,7 @@ from typing import Any
 import gseapy as gp
 import pandas as pd
 
-from ..pp._get_de_genes import get_de_genes
+from delnx.pp._get_de_genes import get_de_genes
 
 
 def run_single_enrichment_analysis(

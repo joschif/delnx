@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
     # Collected from the print_* functions in matplotlib.backends
     _Format = (
-        Literal["png", "jpg", "tif", "tiff"]  # noqa: PYI030
+        Literal["png", "jpg", "tif", "tiff"]
         | Literal["pdf", "ps", "eps", "svg", "svgz", "pgf"]
         | Literal["raw", "rgba"]
     )
@@ -57,9 +57,7 @@ class Verbosity(IntEnum):
         return getLevelName(_VERBOSITY_TO_LOGLEVEL[self.name])
 
     @contextmanager
-    def override(
-        self, verbosity: Verbosity | str | int
-    ) -> Generator[Verbosity, None, None]:
+    def override(self, verbosity: Verbosity | str | int) -> Generator[Verbosity, None, None]:
         """Temporarily override verbosity."""
         settings.verbosity = verbosity
         yield self
@@ -88,7 +86,7 @@ class ScanpyConfig:
     N_PCS: int
     """Default number of principal components to use."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         verbosity: Verbosity | int | str = Verbosity.warning,
@@ -163,9 +161,7 @@ class ScanpyConfig:
 
     @verbosity.setter
     def verbosity(self, verbosity: Verbosity | int | str):
-        verbosity_str_options = [
-            v for v in _VERBOSITY_TO_LOGLEVEL if isinstance(v, str)
-        ]
+        verbosity_str_options = [v for v in _VERBOSITY_TO_LOGLEVEL if isinstance(v, str)]
         if isinstance(verbosity, Verbosity):
             self._verbosity = verbosity
         elif isinstance(verbosity, int):
@@ -173,10 +169,7 @@ class ScanpyConfig:
         elif isinstance(verbosity, str):
             verbosity = verbosity.lower()
             if verbosity not in verbosity_str_options:
-                msg = (
-                    f"Cannot set verbosity to {verbosity}. "
-                    f"Accepted string values are: {verbosity_str_options}"
-                )
+                msg = f"Cannot set verbosity to {verbosity}. Accepted string values are: {verbosity_str_options}"
                 raise ValueError(msg)
             else:
                 self._verbosity = Verbosity(verbosity_str_options.index(verbosity))
@@ -208,10 +201,7 @@ class ScanpyConfig:
         _type_check(file_format, "file_format_data", str)
         file_format_options = {"txt", "csv", "h5ad"}
         if file_format not in file_format_options:
-            msg = (
-                f"Cannot set file_format_data to {file_format}. "
-                f"Must be one of {file_format_options}"
-            )
+            msg = f"Cannot set file_format_data to {file_format}. Must be one of {file_format_options}"
             raise ValueError(msg)
         self._file_format_data = file_format
 
@@ -306,10 +296,7 @@ class ScanpyConfig:
     @cache_compression.setter
     def cache_compression(self, cache_compression: str | None):
         if cache_compression not in {"lzf", "gzip", None}:
-            msg = (
-                f"`cache_compression` ({cache_compression}) "
-                "must be in {'lzf', 'gzip', None}"
-            )
+            msg = f"`cache_compression` ({cache_compression}) must be in {{'lzf', 'gzip', None}}"
             raise ValueError(msg)
         self._cache_compression = cache_compression
 
@@ -350,7 +337,7 @@ class ScanpyConfig:
     def logpath(self, logpath: Path | str | None):
         _type_check(logpath, "logfile", (str, Path))
         # set via “file object” branch of logfile.setter
-        self.logfile = Path(logpath).open("a")  # noqa: SIM115
+        self.logfile = Path(logpath).open("a")
         self._logpath = Path(logpath)
 
     @property
@@ -392,7 +379,7 @@ class ScanpyConfig:
     # Functions
     # --------------------------------------------------------------------------------
 
-    def set_figure_params(  # noqa: PLR0913
+    def set_figure_params(
         self,
         *,
         scanpy: bool = True,
@@ -482,11 +469,7 @@ class ScanpyConfig:
         return getattr(builtins, "__IPYTHON__", False)
 
     def __str__(self) -> str:
-        return "\n".join(
-            f"{k} = {v!r}"
-            for k, v in inspect.getmembers(self)
-            if not k.startswith("_") and k != "getdoc"
-        )
+        return "\n".join(f"{k} = {v!r}" for k, v in inspect.getmembers(self) if not k.startswith("_") and k != "getdoc")
 
 
 settings = ScanpyConfig()

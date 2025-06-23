@@ -11,7 +11,31 @@ def gsea_barplot(
     save_path: str | None = None,
     show: bool = True,
 ) -> tuple[plt.Figure, plt.Axes]:
-    """Barplot showing top UP and DOWN enriched terms separately."""
+    """
+    Create a horizontal bar plot of top GSEA enrichment terms, split by UP and DOWN regulation.
+
+    This function selects the top N significantly enriched terms separately for UP- and DOWN-regulated categories,
+    based on the adjusted p-value. The selected terms are visualized as horizontal bars colored by regulation status.
+
+    Parameters
+    ----------
+    enrichment_results : pd.DataFrame
+        DataFrame containing GSEA results with at least the columns: "Term", "Adjusted P-value", and "UP_DW"
+        (which should contain either "UP" or "DOWN" for each term).
+    top_n : int, default=10
+        Number of top enriched terms to include for each of the UP and DOWN categories.
+    figsize : tuple, default=(4, 5)
+        Size of the matplotlib figure (width, height in inches).
+    save_path : str or None, default=None
+        If provided, the plot will be saved to the given file path.
+    show : bool, default=True
+        If True, the plot will be displayed using `plt.show()`.
+
+    Returns
+    -------
+    tuple[plt.Figure, plt.Axes]
+        A tuple containing the matplotlib figure and axes objects of the generated plot.
+    """
     df = enrichment_results.copy()
 
     top_up = df[df["UP_DW"] == "UP"].sort_values("Adjusted P-value").head(top_n)
@@ -42,7 +66,7 @@ def gsea_barplot(
 
 def gsea_dotplot(
     enrichment_results: pd.DataFrame,
-    x_order: list[str] = ["UP", "DOWN"],
+    x_order: list[str] | None = None,
     top_n: int = 10,
     title: str = "GO_BP",
     cmap: str = "Blues",
@@ -51,8 +75,45 @@ def gsea_dotplot(
     show_all: bool = False,
 ) -> plt.Axes:
     """
-    Plot dotplot for enrichment results using GSEApy.
+    Create a dot plot visualization of top GSEA enrichment terms using GSEApy.
+
+    This function selects the top N enriched terms from both UP- and DOWN-regulated categories
+    based on adjusted p-values, and visualizes them using a dot plot where the x-axis reflects
+    the direction of regulation and dot size/intensity encodes enrichment statistics.
+
+    Parameters
+    ----------
+    enrichment_results : pd.DataFrame
+        DataFrame containing GSEA results with at least the columns: "Term", "Adjusted P-value", and "UP_DW"
+        (with values "UP" or "DOWN" indicating the direction of enrichment).
+    x_order : list of str or None, default=["UP", "DOWN"]
+        Order of categories to display along the x-axis. If None, defaults to ["UP", "DOWN"].
+    top_n : int, default=10
+        Number of top terms to include from each category (UP and DOWN).
+    title : str, default="GO_BP"
+        Title of the plot.
+    cmap : str, default="Blues"
+        Colormap to use for dot color intensity.
+    figsize : tuple, default=(4, 5)
+        Size of the matplotlib figure (width, height in inches).
+    cutoff : float, default=0.05
+        Adjusted p-value cutoff for filtering enriched terms. (Currently only used in error message.)
+    show_all : bool, default=False
+        Reserved for future use. Currently has no effect.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The matplotlib Axes object of the generated plot.
+
+    Raises
+    ------
+    ValueError
+        If no enriched terms are available for plotting.
     """
+    if x_order is None:
+        x_order = ["UP", "DOWN"]
+
     df = enrichment_results.copy()
 
     top_up = df[df["UP_DW"] == "UP"].sort_values("Adjusted P-value").head(top_n)
@@ -76,4 +137,4 @@ def gsea_dotplot(
         plt.show()
         return ax
     except ValueError as e:
-        raise ValueError(f"No enriched terms to plot (cutoff = {cutoff}): {e}")
+        raise ValueError(f"No enriched terms to plot (cutoff = {cutoff}): {e}") from e

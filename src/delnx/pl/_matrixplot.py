@@ -8,12 +8,12 @@ import numpy as np
 from matplotlib import colormaps, rcParams
 from matplotlib.colors import to_rgba
 
-from .. import _logger as logg
-from .._settings import settings
-from .._utils import _empty
-from ._anndata import _plot_dendrogram
-from ._baseplot_class import BasePlot
-from ._utils import (
+from delnx import _logger as logg
+from delnx._settings import settings
+from delnx._utils import _empty
+from delnx.pl._anndata import _plot_dendrogram
+from delnx.pl._baseplot_class import BasePlot
+from delnx.pl._utils import (
     _dk,
     check_colornorm,
     cluster_and_reorder_expression_matrix,
@@ -31,11 +31,9 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.colors import Colormap, Normalize
 
-    from .._utils import Empty
-    from ._baseplot_class import _VarNames
-    from ._utils import ColorLike, _AxesSubplot
-
-    _VarNames = str | Sequence[str]
+    from delnx._utils import Empty
+    from delnx.pl._baseplot_class import _VarNames
+    from delnx.pl._utils import ColorLike, _AxesSubplot
 
 
 class MatrixPlot(BasePlot):
@@ -458,21 +456,6 @@ class MatrixPlot(BasePlot):
         legend_ax = self.fig.add_subplot(outer_gs[2, col_indices_outer["legend"]])
         self._plot_legend(legend_ax, return_ax_dict, None)
 
-        # Variable group brackets (top middle panel)
-        if self.var_groups:
-            brackets_ax = self.fig.add_subplot(outer_gs[1, col_indices_outer["mid"]])
-            orientation = "right" if self.are_axes_swapped else "top"
-            _plot_var_groups_brackets(
-                brackets_ax,
-                var_groups=self.var_groups,
-                rotation=self.var_group_rotation,
-                left_adjustment=0.2,
-                right_adjustment=0.7,
-                orientation=orientation,
-                wide=True,
-            )
-            return_ax_dict["gene_group_ax"] = brackets_ax
-
         # Clean all axes
         for ax in self.fig.axes:
             ax.set_xticks([])
@@ -481,7 +464,7 @@ class MatrixPlot(BasePlot):
             ax.set_yticklabels([])
 
         # Main matrix plot (heatmap + optional annotation)
-        normalize = self._mainplot(main_ax, annotation_ax=annotation_ax)
+        self._mainplot(main_ax, annotation_ax=annotation_ax)
         main_ax.set_zorder(100)
 
         if self.fig_title and self.fig_title.strip():
