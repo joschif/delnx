@@ -13,7 +13,14 @@ from .._settings import settings
 from .._utils import _empty
 from ._anndata import _plot_dendrogram
 from ._baseplot_class import BasePlot
-from ._utils import _dk, check_colornorm, fix_kwds, make_grid_spec, savefig_or_show
+from ._utils import (
+    _dk,
+    check_colornorm,
+    cluster_and_reorder_expression_matrix,
+    fix_kwds,
+    make_grid_spec,
+    savefig_or_show,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -120,6 +127,7 @@ class MatrixPlot(BasePlot):
         vcenter: float | None = None,
         norm: Normalize | None = None,
         dendrogram: bool | str = False,
+        cluster_genes: bool = True,
         **kwds,
     ):
         BasePlot.__init__(
@@ -154,6 +162,8 @@ class MatrixPlot(BasePlot):
                 .mean()
                 .loc[self.categories_order if self.categories_order is not None else self.categories]
             )
+            if cluster_genes:
+                values_df = cluster_and_reorder_expression_matrix(values_df)
 
             if standard_scale == "group":
                 values_df = values_df.sub(values_df.min(1), axis=0)

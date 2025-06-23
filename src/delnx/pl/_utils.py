@@ -3,10 +3,14 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Literal
 
+import numpy as np
+import pandas as pd
+import scipy.cluster.hierarchy as sch
 from cycler import Cycler, cycler
 from matplotlib import axes, gridspec, rcParams
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
+from scipy.spatial.distance import squareform
 
 from .. import _logger as logg
 from .._settings import settings
@@ -200,3 +204,52 @@ def check_colornorm(vmin=None, vmax=None, vcenter=None, norm=None):
 def _dk(dendrogram: bool | str | None) -> str | None:
     """Convert the `dendrogram` parameter to a `dendrogram_key` parameter."""
     return None if isinstance(dendrogram, bool) else dendrogram
+
+
+def cluster_and_reorder_expression_matrix(
+    values_df: pd.DataFrame, clustering_method: Literal["ward", "average", "complete", "single"] = "ward"
+) -> pd.DataFrame:
+    """
+    Cluster and reorder an expression matrix based on gene similarity and dominant group expression.
+
+    This function performs:
+    1. Hierarchical clustering of genes (columns) using Pearson correlation distance.
+    2. Reordering of genes based on clustering.
+    3. Grouping of genes by the group (row) with highest average expression.
+
+    Parameters
+    ----------
+    values_df : pd.DataFrame
+        Expression matrix with shape (groups × genes).
+    clustering_method : str, default="ward"
+        Linkage method to use for hierarchical clustering.
+
+    Returns
+    -------
+    pd.DataFrame
+        Reordered expression matrix with same shape as input.
+    """
+    # Transpose to have genes as rows, groups as columns
+    expr_mat = values_df.T  # shape: (genes × groups)
+
+    # Compute Pearson correlation distance matrix between genes
+    corr_matrix = np.corrcoef(expr_mat.values)
+    dist_matrix = 1 - corr_matrix
+    np.fill_diagonal(dist_matrix, 0)
+    dist_matrix = np.clip(dist_matrix, 0, np.inf)
+
+    # Hierarchical clustering
+    linkage_matrix = sch.linkage(squareform(dist_matrix, checks=False), method=clustering_method)
+    dendro = sch.dendrogram(linkage_matrix, no_plot=True)
+    row_order = [expr_mat.index[i] for i in dendro["leaves"]]
+    expr_mat = expr_mat.loc[row_order]
+
+    # Group genes by the group with maximum expression
+    max_ct = expr_mat.idxmax(axis=1)
+    ordered_rows = []
+    for col in expr_mat.columns:
+        idx = max_ct[max_ct == col].index.tolist()
+        ordered_rows.extend(idx)
+
+    # Final reordered matrix (back to group × gene)
+    return expr_mat.loc[ordered_rows].T
