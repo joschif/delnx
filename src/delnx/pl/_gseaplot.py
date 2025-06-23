@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-def plot_gsea_barplot(
+def gsea_barplot(
     enrichment_results: pd.DataFrame,
     top_n: int = 10,
     figsize=(4, 5),
@@ -40,7 +40,7 @@ def plot_gsea_barplot(
     return fig, ax
 
 
-def plot_gsea_dotplot(
+def gsea_dotplot(
     enrichment_results: pd.DataFrame,
     x_order: list[str] = ["UP", "DOWN"],
     top_n: int = 10,
