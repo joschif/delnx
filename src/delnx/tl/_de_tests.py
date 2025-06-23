@@ -353,6 +353,7 @@ def _run_deseq2(
     )[1]
     results["padj"] = np.nan  # Initialize with NaN
     results.loc[results["pval"].notna(), "padj"] = padj
+    results["coef"] = results["log2fc"].copy()  # Rename log2fc to coef for consistency
 
     results = results.sort_values(
         by=["test_condition", "ref_condition", "padj"],
