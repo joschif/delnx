@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from functools import partial, update_wrapper
 from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING
 from typing import TYPE_CHECKING, overload
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from session_info2 import SessionInfo
 
     from ._settings import ScanpyConfig
-    
+
 # This is currently the only documented API
 __all__ = ["print_versions"]
 
@@ -42,7 +42,7 @@ class _RootLogger(logging.RootLogger):
     ) -> datetime:
         from ._settings import settings
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         time_passed: timedelta = None if time is None else now - time
         extra = {
             **(extra or {}),
@@ -91,9 +91,7 @@ def _set_log_level(settings: ScanpyConfig, level: int):
 
 
 class _LogFormatter(logging.Formatter):
-    def __init__(
-        self, fmt="{levelname}: {message}", datefmt="%Y-%m-%d %H:%M", style="{"
-    ):
+    def __init__(self, fmt="{levelname}: {message}", datefmt="%Y-%m-%d %H:%M", style="{"):
         super().__init__(fmt, datefmt, style)
 
     def format(self, record: logging.LogRecord):
@@ -107,13 +105,9 @@ class _LogFormatter(logging.Formatter):
         if record.time_passed:
             # strip microseconds
             if record.time_passed.microseconds:
-                record.time_passed = timedelta(
-                    seconds=int(record.time_passed.total_seconds())
-                )
+                record.time_passed = timedelta(seconds=int(record.time_passed.total_seconds()))
             if "{time_passed}" in record.msg:
-                record.msg = record.msg.replace(
-                    "{time_passed}", str(record.time_passed)
-                )
+                record.msg = record.msg.replace("{time_passed}", str(record.time_passed))
             else:
                 self._style._fmt += " ({time_passed})"
         if record.deep:

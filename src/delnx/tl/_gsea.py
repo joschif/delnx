@@ -15,17 +15,32 @@ def run_single_enrichment_analysis(
     return_object: bool = False,
 ) -> pd.DataFrame | Any:
     """
-    Run enrichment for a single gene list.
+    Run enrichment analysis for a single gene list using Enrichr.
 
     Parameters
     ----------
-    ...
-    return_object : bool
-        If True, return the enrichment object. Otherwise, return results table.
+    genes : list of str
+        List of gene symbols to analyze.
+    background : list of str or None, optional
+        Optional background gene list. If None, default background is used.
+    organism : str, optional
+        Organism name for enrichment (e.g., "Human").
+    method : str, optional
+        Enrichment method. Only "enrichr" is supported.
+    library : str, optional
+        Enrichment gene set library (e.g., "GO_Biological_Process_2021").
+    return_object : bool, optional
+        If True, return the enrichment result object. If False, return the results DataFrame.
 
     Returns
     -------
-    Union[pd.DataFrame, object]
+    pd.DataFrame or Any
+        Enrichment results as a DataFrame, or the enrichment object if return_object is True.
+
+    Raises
+    ------
+    ValueError
+        If an unsupported enrichment method is specified.
     """
     if method != "enrichr":
         raise ValueError(f"Unsupported method: {method}")

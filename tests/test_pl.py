@@ -1,43 +1,33 @@
 import matplotlib.pyplot as plt
 
 import delnx as dx
-from delnx.pl._utils import process_de, select_top_genes
 
 
-def test_plot_matrixplot(adata_small):
+def test_plot_volcanoplot(adata_pb_counts):
     """Test plotting of matrixplot."""
-    """Test that matrixplot generates a figure without error."""
-    de_results = dx.tl.de(
-        adata_small,
+
+    # Compute size factors
+    dx.pp.size_factors(adata_pb_counts, method="ratio")
+
+    # Estimate dispersion parameters
+    dx.pp.dispersion(adata_pb_counts, size_factor_key="size_factor", method="deseq2")
+
+    # Run differential expression analysis
+    results = dx.tl.de(
+        adata_pb_counts,
         condition_key="condition",
-        method="binomial",
-        backend="statsmodels",
-        reference="control",
-        data_type="binary",
-        layer="binary",
-        log2fc_threshold=0.0,
+        group_key="cell_type",
+        mode="all_vs_ref",
+        reference="False",
+        method="negbinom",
+        layer="counts",
+        size_factor_key="size_factor",
+        dispersion_key="dispersion",
     )
-    de_results = process_de(de_results)
-    top_up, top_down = select_top_genes(de_results, top_n=50)
 
-    var_names = top_up["feature"].tolist() + top_down["feature"].tolist()
+    dx.pp.label_de_genes(results, coef_thresh=0.5)
 
-    # Close any preexisting figures
-    plt.close("all")
-
-    # Call the plotting function
-    fig = dx.pl.matrixplot(
-        adata,
-        var_names=var_names,
-        groupby=["condition", "cell_type"],
-        layer="binary",
-        cmap="viridis",
-        standard_scale="var",
-        vmin=0,
-        vmax=1,
-        return_fig=True,  # required for testability
-        show=False,  # prevent blocking
-    )
+    fig = dx.pl.volcanoplot(results, label_top=5, coef_thresh=0.5)
 
     assert fig is not None
     assert isinstance(fig.fig, plt.Figure)

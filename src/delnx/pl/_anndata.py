@@ -226,46 +226,59 @@ def _format_first_three_categories(categories):
 
 def _get_dendrogram_key(
     adata: AnnData,
-    dendrogram_key: str | None,
-    groupby: str | Sequence[str],
+    dendrogram_key: Union[str, None],
+    groupby: Union[str, Sequence[str]],
     *,
+    use_rep: str = "pca",
     validate_groupby: bool = False,
 ) -> str:
-    # the `dendrogram_key` can be a bool an NoneType or the name of the
-    # dendrogram key. By default the name of the dendrogram key is 'dendrogram'
+    # Determine default dendrogram key based on groupby
     if dendrogram_key is None:
         if isinstance(groupby, str):
             dendrogram_key = f"dendrogram_{groupby}"
-        elif isinstance(groupby, Sequence):
+        elif isinstance(groupby, Sequence) and all(isinstance(g, str) for g in groupby):
             dendrogram_key = f"dendrogram_{'_'.join(groupby)}"
         else:
-            msg = f"groupby has wrong type: {type(groupby).__name__}."
-            raise AssertionError(msg)
+            raise TypeError(f"groupby must be a string or sequence of strings, got {type(groupby).__name__}")
 
+    # Check if dendrogram exists; if not, generate it
     if dendrogram_key not in adata.uns:
-        from ..tl._dendrogram import dendrogram
-
         logg.warning(
             f"dendrogram data not found (using key={dendrogram_key}). "
             "Running `sc.tl.dendrogram` with default parameters. For fine "
             "tuning it is recommended to run `sc.tl.dendrogram` independently."
         )
-        dendrogram(adata, groupby, key_added=dendrogram_key)
 
-    if "dendrogram_info" not in adata.uns[dendrogram_key]:
-        msg = f"The given dendrogram key ({dendrogram_key!r}) does not contain valid dendrogram information."
-        raise ValueError(msg)
+        # If groupby is a list, create compound category in adata.obs
+        if isinstance(groupby, Sequence) and not isinstance(groupby, str):
+            compound_key = "_".join(groupby)
+            if compound_key not in adata.obs:
+                adata.obs[compound_key] = adata.obs[groupby[0]].astype(str)
+                for g in groupby[1:]:
+                    adata.obs[compound_key] += " | " + adata.obs[g].astype(str)
+                adata.obs[compound_key] = adata.obs[compound_key].astype("category")
+            groupby = compound_key  # update groupby to compound key
+
+        sc.tl.dendrogram(adata, groupby=groupby, key_added=dendrogram_key, use_rep=use_rep)
 
     if validate_groupby:
-        existing_groupby = adata.uns[dendrogram_key]["groupby"]
-        if groupby != existing_groupby:
-            msg = (
-                "Incompatible observations. The precomputed dendrogram contains "
-                f"information for the observation: {groupby!r} while the plot is "
-                f"made for the observation: {existing_groupby!r}. "
-                "Please run `sc.tl.dendrogram` using the right observation.'"
+        existing_groupby = adata.uns[dendrogram_key].get("groupby")
+
+        # If groupby was originally a compound of multiple columns, we created a single string key
+        effective_groupby = groupby
+        if isinstance(groupby, Sequence) and not isinstance(groupby, str):
+            effective_groupby = "_".join(groupby)
+
+        # Always compare as list of strings
+        existing_norm = [existing_groupby] if isinstance(existing_groupby, str) else list(existing_groupby)
+        effective_norm = [effective_groupby] if isinstance(effective_groupby, str) else list(effective_groupby)
+
+        if effective_norm != existing_norm:
+            raise ValueError(
+                f"Incompatible observations. The precomputed dendrogram contains "
+                f"information for the observation: {existing_groupby!r} while the plot is "
+                f"made for: {groupby!r}. Please rerun `sc.tl.dendrogram` with the correct groupby."
             )
-            raise ValueError(msg)
 
     return dendrogram_key
 
