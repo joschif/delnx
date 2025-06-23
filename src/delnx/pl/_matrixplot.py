@@ -10,14 +10,9 @@ from matplotlib.colors import to_rgba
 
 from .. import _logger as logg
 from .._settings import settings
-from .._utils import _doc_params, _empty
+from .._utils import _empty
 from ._anndata import _plot_dendrogram
 from ._baseplot_class import BasePlot, doc_common_groupby_plot_args
-from ._docs import (
-    doc_common_plot_args,
-    doc_show_save_ax,
-    doc_vboundnorm,
-)
 from ._utils import _dk, check_colornorm, fix_kwds, make_grid_spec, savefig_or_show
 
 if TYPE_CHECKING:
@@ -36,7 +31,6 @@ if TYPE_CHECKING:
     _VarNames = str | Sequence[str]
 
 
-@_doc_params(common_plot_args=doc_common_plot_args)
 class MatrixPlot(BasePlot):
     """Allows the visualization of values using a color map.
 
@@ -605,12 +599,6 @@ class MatrixPlot(BasePlot):
         return normalize
 
 
-@_doc_params(
-    show_save_ax=doc_show_save_ax,
-    common_plot_args=doc_common_plot_args,
-    groupby_plots_args=doc_common_groupby_plot_args,
-    vminmax=doc_vboundnorm,
-)
 def matrixplot(
     adata: AnnData,
     var_names: _VarNames | Mapping[str, _VarNames],

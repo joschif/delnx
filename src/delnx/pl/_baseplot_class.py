@@ -15,7 +15,6 @@ from .._utils import _empty
 from ._anndata import (
     VarGroups,
     _plot_dendrogram,
-    _plot_var_groups_brackets,
     _prepare_dataframe,
     _reorder_categories_after_dendrogram,
 )
@@ -756,19 +755,6 @@ class BasePlot:
                 self._plot_totals(group_extra_ax, group_extra_orientation)
 
             return_ax_dict["group_extra_ax"] = group_extra_ax
-
-        # plot group legends on top or left of main_ax (if given)
-        if self.var_groups:
-            _plot_var_groups_brackets(
-                gene_groups_ax,
-                var_groups=self.var_groups,
-                rotation=self.var_group_rotation,
-                left_adjustment=0.2,
-                right_adjustment=0.7,
-                orientation=var_group_orientation,
-                wide=True,
-            )
-            return_ax_dict["gene_group_ax"] = gene_groups_ax
 
         # plot the mainplot
         normalize = self._mainplot(main_ax)
