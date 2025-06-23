@@ -12,7 +12,7 @@ from .. import _logger as logg
 from .._settings import settings
 from .._utils import _empty
 from ._anndata import _plot_dendrogram
-from ._baseplot_class import BasePlot, doc_common_groupby_plot_args
+from ._baseplot_class import BasePlot
 from ._utils import _dk, check_colornorm, fix_kwds, make_grid_spec, savefig_or_show
 
 if TYPE_CHECKING:
