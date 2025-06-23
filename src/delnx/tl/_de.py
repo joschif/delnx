@@ -237,8 +237,7 @@ def de(
     size_factor_key : str | None, default=None
         Column name in `adata.obs` containing size factors for normalization. When using a negative binomial model, this is used as an offset term to account for library size differences. If not provided, size are computed internally based on library size normalization.
     dispersion_key : str | None, default=None
-        Column name in `adata.var` containing precomputed dispersions.
-        Only used for negative binomial methods.
+        Column name in `adata.var` containing precomputed dispersions. Only used for negative binomial methods. If not provided, the function will estimate gene-wise dispersions using the specified `dispersion_method`.
     covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
