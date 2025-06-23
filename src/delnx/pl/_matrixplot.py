@@ -162,19 +162,20 @@ class MatrixPlot(BasePlot):
                 .mean()
                 .loc[self.categories_order if self.categories_order is not None else self.categories]
             )
-            if cluster_genes:
-                values_df = cluster_and_reorder_expression_matrix(values_df)
 
-            if standard_scale == "group":
-                values_df = values_df.sub(values_df.min(1), axis=0)
-                values_df = values_df.div(values_df.max(1), axis=0).fillna(0)
-            elif standard_scale == "var":
-                values_df -= values_df.min(0)
-                values_df = (values_df / values_df.max(0)).fillna(0)
-            elif standard_scale is None:
-                pass
-            else:
-                logg.warning("Unknown type for standard_scale, ignored")
+        if cluster_genes:
+            values_df = cluster_and_reorder_expression_matrix(values_df)
+
+        if standard_scale == "group":
+            values_df = values_df.sub(values_df.min(1), axis=0)
+            values_df = values_df.div(values_df.max(1), axis=0).fillna(0)
+        elif standard_scale == "var":
+            values_df -= values_df.min(0)
+            values_df = (values_df / values_df.max(0)).fillna(0)
+        elif standard_scale is None:
+            pass
+        else:
+            logg.warning("Unknown type for standard_scale, ignored")
 
         self.values_df = values_df
 

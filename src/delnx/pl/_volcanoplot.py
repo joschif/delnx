@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from adjustText import adjust_text
 
-from ..pp._get_top_de_genes import get_top_de_genes
+from ..pp._get_de_genes import get_de_genes
 
 
 class VolcanoPlot:
@@ -150,6 +150,12 @@ def volcanoplot(
     -------
     VolcanoPlot or tuple[Figure, Axes] or None
     """
+    # Check group uniqueness if group column exists
+    if "group" in df.columns:
+        unique_groups = df["group"].unique()
+        if len(unique_groups) > 1:
+            raise ValueError(f"Volcano plot expects a single group, but found multiple: {unique_groups}")
+
     save_path = None
     if isinstance(save, str):
         save_path = save
@@ -165,7 +171,9 @@ def volcanoplot(
     ).make_figure()
 
     if label_top > 0 and "feature" in df.columns:
-        top_up, top_down = get_top_de_genes(df, top_n=label_top)
+        de_genes_dict = get_de_genes(df, top_n=label_top)
+        de_genes_dict = de_genes_dict[list(de_genes_dict.keys())[0]]
+        top_up, top_down = de_genes_dict["up"], de_genes_dict["down"]
         vp.add_labels(top_up, top_down)
 
     if save_path:
