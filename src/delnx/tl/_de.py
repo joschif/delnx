@@ -47,7 +47,7 @@ def _grouped_de(
     layer: str | None = None,
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
-    min_samples: int = 2,
+    min_samples: int = 1,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
     n_cpus: int = 1,
@@ -190,7 +190,7 @@ def de(
     layer: str | None = None,
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
-    min_samples: int = 2,
+    min_samples: int = 1,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
     n_cpus: int = 1,
@@ -552,7 +552,7 @@ def de(
     results = pd.concat(results, axis=0).reset_index(drop=True)
 
     # Check if any valid comparisons were found (length > 0 and not all pvals are NaN)
-    if (len(results) == 0 or results["pval"].isna().all()) and group_key is None:
+    if len(results) == 0 or results["pval"].isna().all():
         raise ValueError(
             "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
         )
