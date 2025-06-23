@@ -126,30 +126,42 @@ def _grouped_de(
                 )
             continue
 
-        # Run DE for group
-        group_results = de(
-            adata=adata[mask, :],
-            condition_key=condition_key,
-            reference=reference,
-            group_key=None,
-            method=method,
-            backend=backend,
-            size_factor_key=size_factor_key,
-            dispersion_key=dispersion_key,
-            covariate_keys=covariate_keys,
-            mode=mode,
-            layer=layer,
-            data_type=data_type,
-            log2fc_threshold=log2fc_threshold,
-            min_samples=min_samples,
-            dispersion_method=dispersion_method,
-            multitest_method=multitest_method,
-            n_cpus=n_cpus,
-            batch_size=batch_size,
-            optimizer=optimizer,
-            maxiter=maxiter,
-            verbose=verbose,
-        )
+        # Run DE for group with error handling
+        try:
+            group_results = de(
+                adata=adata[mask, :],
+                condition_key=condition_key,
+                reference=reference,
+                group_key=None,
+                method=method,
+                backend=backend,
+                size_factor_key=size_factor_key,
+                dispersion_key=dispersion_key,
+                covariate_keys=covariate_keys,
+                mode=mode,
+                layer=layer,
+                data_type=data_type,
+                log2fc_threshold=log2fc_threshold,
+                min_samples=min_samples,
+                dispersion_method=dispersion_method,
+                multitest_method=multitest_method,
+                n_cpus=n_cpus,
+                batch_size=batch_size,
+                optimizer=optimizer,
+                maxiter=maxiter,
+                verbose=verbose,
+            )
+            group_results["group"] = group
+            results.append(group_results)
+
+        except ValueError as e:
+            if verbose:
+                warnings.warn(
+                    f"Differential expression analysis failed for group '{group}': {str(e)}. Skipping this group.",
+                    stacklevel=2,
+                )
+            continue
+
         group_results["group"] = group
         results.append(group_results)
 
