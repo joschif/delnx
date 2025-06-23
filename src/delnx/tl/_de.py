@@ -47,10 +47,10 @@ def _grouped_de(
     layer: str | None = None,
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
-    min_samples: int = 2,
+    min_samples: int = 1,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
-    n_jobs: int = 1,
+    n_cpus: int = 1,
     batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -99,7 +99,7 @@ def _grouped_de(
         - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction.
-    n_jobs : int, default=1
+    n_cpus : int, default=1
         Number of parallel jobs.
     batch_size : int, default=2048
         Number of features to process per batch.
@@ -126,30 +126,42 @@ def _grouped_de(
                 )
             continue
 
-        # Run DE for group
-        group_results = de(
-            adata=adata[mask, :],
-            condition_key=condition_key,
-            reference=reference,
-            group_key=None,
-            method=method,
-            backend=backend,
-            size_factor_key=size_factor_key,
-            dispersion_key=dispersion_key,
-            covariate_keys=covariate_keys,
-            mode=mode,
-            layer=layer,
-            data_type=data_type,
-            log2fc_threshold=log2fc_threshold,
-            min_samples=min_samples,
-            dispersion_method=dispersion_method,
-            multitest_method=multitest_method,
-            n_jobs=n_jobs,
-            batch_size=batch_size,
-            optimizer=optimizer,
-            maxiter=maxiter,
-            verbose=verbose,
-        )
+        # Run DE for group with error handling
+        try:
+            group_results = de(
+                adata=adata[mask, :],
+                condition_key=condition_key,
+                reference=reference,
+                group_key=None,
+                method=method,
+                backend=backend,
+                size_factor_key=size_factor_key,
+                dispersion_key=dispersion_key,
+                covariate_keys=covariate_keys,
+                mode=mode,
+                layer=layer,
+                data_type=data_type,
+                log2fc_threshold=log2fc_threshold,
+                min_samples=min_samples,
+                dispersion_method=dispersion_method,
+                multitest_method=multitest_method,
+                n_cpus=n_cpus,
+                batch_size=batch_size,
+                optimizer=optimizer,
+                maxiter=maxiter,
+                verbose=verbose,
+            )
+            group_results["group"] = group
+            results.append(group_results)
+
+        except ValueError as e:
+            if verbose:
+                warnings.warn(
+                    f"Differential expression analysis failed for group '{group}': {str(e)}. Skipping this group.",
+                    stacklevel=2,
+                )
+            continue
+
         group_results["group"] = group
         results.append(group_results)
 
@@ -170,23 +182,10 @@ def _grouped_de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
+        by=["test_condition", "ref_condition", "padj", "log2fc"],
     ).reset_index(drop=True)
 
-    # Reorder columns
-    return results[
-        [
-            "feature",
-            "test_condition",
-            "ref_condition",
-            "group",
-            "log2fc",
-            "auroc",
-            "coef",
-            "pval",
-            "padj",
-        ]
-    ]
+    return results
 
 
 def de(
@@ -203,10 +202,10 @@ def de(
     layer: str | None = None,
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
-    min_samples: int = 2,
+    min_samples: int = 1,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
-    n_jobs: int = 1,
+    n_cpus: int = 1,
     batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -237,8 +236,7 @@ def de(
     size_factor_key : str | None, default=None
         Column name in `adata.obs` containing size factors for normalization. When using a negative binomial model, this is used as an offset term to account for library size differences. If not provided, size are computed internally based on library size normalization.
     dispersion_key : str | None, default=None
-        Column name in `adata.var` containing precomputed dispersions.
-        Only used for negative binomial methods.
+        Column name in `adata.var` containing precomputed dispersions. Only used for negative binomial methods. If not provided, the function will estimate gene-wise dispersions using the specified `dispersion_method`.
     covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
@@ -283,8 +281,8 @@ def de(
         Method for multiple testing correction. Accepts any method supported by :func:`statsmodels.stats.multipletests`. Common options include:
             - "fdr_bh": Benjamini-Hochberg FDR correction
             - "bonferroni": Bonferroni correction
-    n_jobs : int, default=1
-        Number of parallel jobs for non-JAX backends.
+    n_cpus : int, default=1
+        Number of CPUs for parallel processing with non-JAX backends.
     batch_size : int, default=2048
         Number of features to process per batch. Reduce for memory-constrained
         environments or very large datasets (>1M samples).
@@ -415,7 +413,7 @@ def de(
             min_samples=min_samples,
             dispersion_method=dispersion_method,
             multitest_method=multitest_method,
-            n_jobs=n_jobs,
+            n_cpus=n_cpus,
             batch_size=batch_size,
             optimizer=optimizer,
             maxiter=maxiter,
@@ -448,7 +446,7 @@ def de(
             covariate_keys=covariate_keys,
             multitest_method=multitest_method,
             layer=layer,
-            n_cpus=n_jobs,
+            n_cpus=n_cpus,
             verbose=verbose,
         )
 
@@ -530,7 +528,7 @@ def de(
                 condition_key=condition_key,
                 size_factors=sf_comp,
                 covariate_keys=covariate_keys,
-                n_jobs=n_jobs,
+                n_cpus=n_cpus,
                 verbose=verbose,
             )
 
@@ -566,7 +564,7 @@ def de(
     results = pd.concat(results, axis=0).reset_index(drop=True)
 
     # Check if any valid comparisons were found (length > 0 and not all pvals are NaN)
-    if (len(results) == 0 or results["pval"].isna().all()) and group_key is None:
+    if len(results) == 0 or results["pval"].isna().all():
         raise ValueError(
             "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
         )
@@ -583,7 +581,7 @@ def de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
+        by=["test_condition", "ref_condition", "padj", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns

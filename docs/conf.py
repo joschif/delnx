@@ -17,6 +17,7 @@ sys.path.insert(0, str(HERE / "extensions"))
 # -- Project information -----------------------------------------------------
 info = metadata("delnx")
 project_name = info["Name"]
+project = info["Name"]
 author = info["Author"]
 copyright = f"{datetime.now():%Y}, {author}."
 version = info["Version"]
