@@ -173,20 +173,7 @@ def _grouped_de(
         by=["test_condition", "ref_condition", "padj", "log2fc"],
     ).reset_index(drop=True)
 
-    # Reorder columns
-    return results[
-        [
-            "feature",
-            "test_condition",
-            "ref_condition",
-            "group",
-            "log2fc",
-            "auroc",
-            "coef",
-            "pval",
-            "padj",
-        ]
-    ]
+    return results
 
 
 def de(

@@ -359,7 +359,7 @@ def _run_deseq2(
         by=["test_condition", "ref_condition", "padj"],
     ).reset_index(drop=True)
 
-    return results[["feature", "test_condition", "ref_condition", "log2fc", "stat", "pval", "padj"]]
+    return results[["feature", "test_condition", "ref_condition", "log2fc", "coef", "stat", "pval", "padj"]]
 
 
 def _run_lrt_cuml(
