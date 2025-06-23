@@ -28,7 +28,7 @@ from delnx.models import DispersionEstimator
 def _estimate_dispersion_batched(
     X: jnp.ndarray,
     method: str = "deseq2",
-    dispersion_range: tuple[float, float] = (1e-8, 10.0),
+    dispersion_range: tuple[float, float] = (1e-8, 100.0),
     shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
     prior_variance: float = 0.1,
     prior_df: float = 5.0,
@@ -117,7 +117,7 @@ def dispersion(
     size_factor_key: str | None = None,
     method: Method = "deseq2",
     var_key_added: str = "dispersion",
-    dispersion_range: tuple[float, float] = (1e-8, 10.0),
+    dispersion_range: tuple[float, float] = (1e-8, 100.0),
     shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
     prior_variance: float = 0.1,
     prior_df: float = 5.0,
