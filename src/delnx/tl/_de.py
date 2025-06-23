@@ -170,7 +170,7 @@ def _grouped_de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
+        by=["test_condition", "ref_condition", "padj", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns
@@ -582,7 +582,7 @@ def de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj", "coef", "log2fc"],
+        by=["test_condition", "ref_condition", "padj", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns
