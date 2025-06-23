@@ -471,7 +471,7 @@ def _run_de(
     backend: str = "statsmodels",
     size_factors: np.ndarray | None = None,
     covariate_keys: list[str] | None = None,
-    n_jobs: int = 1,
+    n_cpus: int = 1,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """Run parallel GLM-based differential expression analysis for all features.
@@ -506,7 +506,7 @@ def _run_de(
         Size factors for normalization, shape (n_samples,). Used only for "negbinom" method.
     covariate_keys : list[str] | None, default=None
         Column names in model_data to include as covariates in all models.
-    n_jobs : int, default=1
+    n_cpus : int, default=1
         Number of parallel processes for feature testing. Use -1 to use all processors.
     verbose : bool, default=False
         Whether to show progress bar and warning messages.
@@ -522,7 +522,7 @@ def _run_de(
     Notes
     -----
     - Failed tests are tracked and reported if verbose=True, but do not stop the process
-    - For large datasets, adjust n_jobs and consider using a GPU-compatible backend
+    - For large datasets, adjust n_cpus and consider using a GPU-compatible backend
     - This function is called by the higher-level `de` function and shouldn't typically
       be used directly
     """
@@ -574,7 +574,7 @@ def _run_de(
     # Process all features in parallel with a progress bar using joblib's generator return
     feature_results = list(
         tqdm.tqdm(
-            Parallel(n_jobs=n_jobs, return_as="generator")(delayed(_process_feature)(i) for i in range(n_features)),
+            Parallel(n_cpus=n_cpus, return_as="generator")(delayed(_process_feature)(i) for i in range(n_features)),
             total=n_features,
             disable=not verbose,
         )

@@ -50,7 +50,7 @@ def _grouped_de(
     min_samples: int = 2,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
-    n_jobs: int = 1,
+    n_cpus: int = 1,
     batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -99,7 +99,7 @@ def _grouped_de(
         - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction.
-    n_jobs : int, default=1
+    n_cpus : int, default=1
         Number of parallel jobs.
     batch_size : int, default=2048
         Number of features to process per batch.
@@ -144,7 +144,7 @@ def _grouped_de(
             min_samples=min_samples,
             dispersion_method=dispersion_method,
             multitest_method=multitest_method,
-            n_jobs=n_jobs,
+            n_cpus=n_cpus,
             batch_size=batch_size,
             optimizer=optimizer,
             maxiter=maxiter,
@@ -206,7 +206,7 @@ def de(
     min_samples: int = 2,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
-    n_jobs: int = 1,
+    n_cpus: int = 1,
     batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -282,8 +282,8 @@ def de(
         Method for multiple testing correction. Accepts any method supported by :func:`statsmodels.stats.multipletests`. Common options include:
             - "fdr_bh": Benjamini-Hochberg FDR correction
             - "bonferroni": Bonferroni correction
-    n_jobs : int, default=1
-        Number of parallel jobs for non-JAX backends.
+    n_cpus : int, default=1
+        Number of CPUs for parallel processing with non-JAX backends.
     batch_size : int, default=2048
         Number of features to process per batch. Reduce for memory-constrained
         environments or very large datasets (>1M samples).
@@ -414,7 +414,7 @@ def de(
             min_samples=min_samples,
             dispersion_method=dispersion_method,
             multitest_method=multitest_method,
-            n_jobs=n_jobs,
+            n_cpus=n_cpus,
             batch_size=batch_size,
             optimizer=optimizer,
             maxiter=maxiter,
@@ -447,7 +447,7 @@ def de(
             covariate_keys=covariate_keys,
             multitest_method=multitest_method,
             layer=layer,
-            n_cpus=n_jobs,
+            n_cpus=n_cpus,
             verbose=verbose,
         )
 
@@ -529,7 +529,7 @@ def de(
                 condition_key=condition_key,
                 size_factors=sf_comp,
                 covariate_keys=covariate_keys,
-                n_jobs=n_jobs,
+                n_cpus=n_cpus,
                 verbose=verbose,
             )
 
