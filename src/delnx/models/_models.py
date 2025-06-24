@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
+from typing import Literal
 
 import jax
 import jax.numpy as jnp
@@ -486,7 +487,7 @@ class NegativeBinomialRegression(Regression):
     """
 
     dispersion: float | None = None
-    dispersion_range: tuple[float, float] = (1e-6, 10.0)
+    dispersion_range: tuple[float, float] = (1e-8, 100.0)
     dispersion_method: str = "mle"
 
     def _negative_log_likelihood(
@@ -662,7 +663,7 @@ class DispersionEstimator:
         Prior degrees of freedom for empirical Bayes methods.
     """
 
-    dispersion_range: tuple[float, float] = (1e-6, 10.0)
+    dispersion_range: tuple[float, float] = (1e-8, 100.0)
     shrinkage_weight_range: tuple[float, float] = (0.1, 0.95)
     prior_variance: float = 0.1
     prior_df: float = 5.0
@@ -939,3 +940,404 @@ class DispersionEstimator:
         log_shrunk = shrinkage_weight * log_trend + (1 - shrinkage_weight) * log_genewise
 
         return jnp.clip(jnp.exp(log_shrunk), self.dispersion_range[0], self.dispersion_range[1])
+
+
+@dataclass(frozen=True)
+class PyDESeq2DispersionEstimator:
+    """Dispersion estimator following PyDESeq2 methodology with JIT support.
+
+    This implementation follows the PyDESeq2 approach more closely, including:
+    - Method of moments and rough dispersion initialization
+    - Proper trend fitting with outlier filtering
+    - DESeq2-style shrinkage parameters
+    - JIT-compatible functions for performance
+    """
+
+    min_disp: float = 1e-8
+    max_disp: float = 100.0
+
+    @partial(jax.jit, static_argnums=(0,))
+    def estimate_rough_dispersions_single_gene(
+        self, normed_counts: jnp.ndarray, design_matrix: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Estimate rough dispersions using linear model residuals (JIT-compiled)."""
+        num_samples, num_vars = design_matrix.shape
+
+        # Fit linear model
+        model = LinearRegression(skip_stats=True)
+        results = model.fit(design_matrix, normed_counts)
+
+        y_hat = results["coef"] @ design_matrix.T  # (num_samples, num_genes)
+        y_hat = jnp.maximum(y_hat, 1.0)  # Threshold as in PyDESeq2
+
+        nominator = (normed_counts - y_hat) ** 2 - y_hat
+        denom = (num_samples - num_vars) * y_hat**2
+
+        dispersions = (nominator / denom).sum(0)
+
+        return jnp.clip(dispersions, self.min_disp, self.max_disp)
+
+    def estimate_rough_dispersions(self, normed_counts: jnp.ndarray, design_matrix: jnp.ndarray) -> jnp.ndarray:
+        """Estimate rough dispersions for multiple genes."""
+        return jax.vmap(
+            self.estimate_rough_dispersions_single_gene,
+            in_axes=(1, None),
+        )(normed_counts, design_matrix)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def estimate_moments_dispersions(self, normed_counts: jnp.ndarray, size_factors: jnp.ndarray) -> jnp.ndarray:
+        """Estimate dispersions using method of moments (JIT-compiled)."""
+        # Mean inverse size factor
+        s_mean_inv = jnp.mean(1.0 / size_factors)
+
+        # Gene-wise means and variances
+        mu = jnp.mean(normed_counts, axis=0)
+        sigma_sq = jnp.var(normed_counts, axis=0, ddof=1)  # Unbiased estimator
+
+        # Dispersion: alpha = (sigma^2 - s_mean_inv * mu) / mu^2
+        # Handle division by zero and NaN
+        dispersions = jnp.where(mu > 1e-10, (sigma_sq - s_mean_inv * mu) / (mu**2), 0.0)
+        dispersions = jnp.nan_to_num(dispersions, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return jnp.clip(dispersions, self.min_disp, self.max_disp)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def estimate_initial_dispersions(
+        self, normed_counts: jnp.ndarray, design_matrix: jnp.ndarray, size_factors: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Estimate initial dispersions as minimum of rough and moments estimates (JIT-compiled)."""
+        rough_disp = self.estimate_rough_dispersions(normed_counts, design_matrix)
+        moments_disp = self.estimate_moments_dispersions(normed_counts, size_factors)
+
+        # Take minimum as in PyDESeq2
+        initial_disp = jnp.minimum(rough_disp, moments_disp)
+        return jnp.clip(initial_disp, self.min_disp, self.max_disp)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def estimate_dispersion_mle_single_gene(
+        self,
+        x: jnp.ndarray,
+        size_factors: jnp.ndarray,
+        mu: jnp.ndarray,
+        alpha_init: float,
+        prior_disp_var: float = 1.0,
+        use_prior: bool = False,
+    ) -> float:
+        """Estimate dispersion for single gene using MLE with optional prior."""
+        log_alpha_init = jnp.log(jnp.clip(alpha_init, self.min_disp, self.max_disp))
+
+        def objective(log_alpha):
+            alpha = jnp.exp(log_alpha)
+
+            # Negative binomial log-likelihood
+            r = 1.0 / alpha
+
+            # Use log-sum-exp for numerical stability
+            ll = (
+                jsp.special.gammaln(r + x)
+                - jsp.special.gammaln(r)
+                - jsp.special.gammaln(x + 1)
+                + r * jnp.log(r / (r + mu))
+                + x * jnp.log(mu / (r + mu))
+            )
+
+            nll = -jnp.sum(ll)
+
+            # Add prior regularization if specified
+            prior_penalty = jax.lax.cond(
+                use_prior,
+                lambda x: jnp.squeeze((x - log_alpha_init) ** 2 / (2 * prior_disp_var)),
+                lambda _: 0.0,
+                log_alpha,
+            )
+            nll += prior_penalty
+
+            # Cox-Reid adjustment (simplified for intercept-only)
+            W = mu / (1 + mu * alpha)
+            cr_adjustment = 0.5 * jnp.sum(jnp.log(jnp.maximum(W, 1e-8)))
+            nll += cr_adjustment
+
+            return nll
+
+        # Optimize using BFGS
+        result = optimize.minimize(objective, jnp.array([log_alpha_init]), method="BFGS", options={"maxiter": 100})
+
+        # Extract result with fallback
+        log_alpha_opt = jax.lax.cond(result.success, lambda x: x[0], lambda _: log_alpha_init, result.x)
+
+        alpha_opt = jnp.exp(log_alpha_opt)
+        return jnp.clip(alpha_opt, self.min_disp, self.max_disp)
+
+    def estimate_dispersion_mle(
+        self,
+        counts: jnp.ndarray,
+        size_factors: jnp.ndarray,
+        mu: jnp.ndarray,
+        alpha_init: jnp.ndarray | float,
+        prior_disp_var: float = 1.0,
+        use_prior: bool = False,
+    ) -> jnp.ndarray:
+        """Estimate gene-wise dispersion using MLE with optional prior."""
+
+        def estimate_disp_single(counts, mu, alpha_init):
+            return self.estimate_dispersion_mle_single_gene(
+                counts, size_factors, mu, alpha_init, prior_disp_var, use_prior
+            )
+
+        return jax.vmap(
+            estimate_disp_single,
+            in_axes=(1, 1, 0),
+        )(counts, mu, alpha_init)
+
+    def fit_trend_parametric_deseq2(
+        self, dispersions: jnp.ndarray, means: jnp.ndarray, max_iterations: int = 5
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Fit parametric trend following PyDESeq2's iterative outlier filtering approach."""
+        # Initial filtering
+        valid_mask = (
+            (dispersions >= self.min_disp)
+            & (dispersions <= self.max_disp)
+            & (means > 1e-6)
+            & jnp.isfinite(dispersions)
+            & jnp.isfinite(means)
+        )
+
+        if jnp.sum(valid_mask) < 10:
+            median_disp = jnp.median(dispersions[jnp.isfinite(dispersions)])
+            return jnp.full_like(dispersions, median_disp), jnp.array([median_disp, 0.0])
+
+        # Start with all valid genes
+        current_dispersions = dispersions[valid_mask]
+        current_means = means[valid_mask]
+
+        # Initial coefficients from simple moments
+        mean_disp = jnp.mean(current_dispersions)
+        mean_inv_mu = jnp.mean(1.0 / current_means)
+        coeffs = jnp.array([mean_disp * 0.1, mean_disp * mean_inv_mu * 0.9])
+
+        # Iterative fitting with outlier removal
+        for _iteration in range(max_iterations):
+            if len(current_dispersions) < 5:
+                break
+
+            # Moment-based coefficient update (more stable than full gamma GLM in JAX)
+            # Estimate a0 as lower quantile (baseline dispersion)
+            a0_est = jnp.quantile(current_dispersions, 0.1)
+            a0_est = jnp.maximum(a0_est, 1e-8)
+
+            # Estimate a1 from weighted least squares: (disp - a0) ≈ a1/mean
+            residuals = current_dispersions - a0_est
+            weights = 1.0 / current_means
+
+            numerator = jnp.sum(residuals * weights)
+            denominator = jnp.sum(weights**2)
+            a1_est = jnp.where(denominator > 1e-10, numerator / denominator, 0.0)
+            a1_est = jnp.maximum(a1_est, 1e-8)
+
+            new_coeffs = jnp.array([a0_est, a1_est])
+
+            # Filter outliers using PyDESeq2's criteria
+            mu_pred = new_coeffs[0] + new_coeffs[1] / current_means
+            pred_ratios = current_dispersions / jnp.maximum(mu_pred, 1e-8)
+
+            # Keep genes with reasonable prediction ratios
+            good_genes = (pred_ratios >= 1e-4) & (pred_ratios < 15.0)
+
+            # Check convergence
+            if jnp.sum((new_coeffs - coeffs) ** 2) < 1e-6:
+                coeffs = new_coeffs
+                break
+
+            coeffs = new_coeffs
+            current_dispersions = current_dispersions[good_genes]
+            current_means = current_means[good_genes]
+
+        # Generate predictions for all genes
+        trend_predictions = coeffs[0] + coeffs[1] / jnp.maximum(means, 1e-6)
+        trend_predictions = jnp.clip(trend_predictions, self.min_disp, self.max_disp)
+
+        return trend_predictions, coeffs
+
+    @partial(jax.jit, static_argnums=(0,))
+    def fit_trend_mean(self, dispersions: jnp.ndarray) -> tuple[jnp.ndarray, float]:
+        """Fit mean trend (constant dispersion)."""
+        valid_genes = dispersions > 10 * self.min_disp
+
+        mean_disp = jax.lax.cond(
+            jnp.sum(valid_genes) == 0,
+            lambda: jnp.median(dispersions),
+            lambda: self._compute_trimmed_mean(dispersions[valid_genes]),
+        )
+
+        trend_predictions = jnp.full_like(dispersions, mean_disp)
+        return trend_predictions, mean_disp
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_trimmed_mean(self, values: jnp.ndarray) -> float:
+        """Compute trimmed mean (0.1% from each end)."""
+        sorted_vals = jnp.sort(values)
+        n = len(sorted_vals)
+        trim_count = jnp.maximum(1, jnp.round(0.001 * n).astype(int))
+
+        # Use dynamic slicing for JIT compatibility
+        start_idx = trim_count
+        end_idx = n - trim_count
+        end_idx = jnp.maximum(end_idx, start_idx + 1)  # Ensure we have at least one element
+
+        trimmed = jax.lax.dynamic_slice(sorted_vals, (start_idx,), (end_idx - start_idx,))
+        return jnp.mean(trimmed)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def estimate_prior_variance(
+        self, genewise_dispersions: jnp.ndarray, fitted_dispersions: jnp.ndarray, num_samples: int, num_design_vars: int
+    ) -> float:
+        """Estimate prior variance following PyDESeq2's approach (JIT-compiled)."""
+        log_genewise = jnp.log(jnp.maximum(genewise_dispersions, 1e-8))
+        log_fitted = jnp.log(jnp.maximum(fitted_dispersions, 1e-8))
+        log_residuals = log_genewise - log_fitted
+
+        above_min_disp = genewise_dispersions >= (100 * self.min_disp)
+
+        prior_var = jax.lax.cond(
+            jnp.sum(above_min_disp) < 5,
+            lambda: 0.25,
+            lambda: self._compute_prior_var_from_residuals(log_residuals[above_min_disp], num_samples, num_design_vars),
+        )
+
+        return prior_var
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_prior_var_from_residuals(
+        self, residuals: jnp.ndarray, num_samples: int, num_design_vars: int
+    ) -> float:
+        """Compute prior variance from log residuals (JIT-compiled)."""
+        center = jnp.median(residuals)
+        mad = jnp.median(jnp.abs(residuals - center)) / 0.6745  # Scale for normal distribution
+        squared_mad = mad**2
+
+        # Degrees of freedom adjustment
+        dof_adjustment = jsp.special.polygamma(1, (num_samples - num_design_vars) / 2)
+        return jnp.maximum(squared_mad - dof_adjustment, 0.25)
+
+    def estimate_dispersions_full_pipeline(
+        self,
+        counts: jnp.ndarray,
+        size_factors: jnp.ndarray,
+        design_matrix: jnp.ndarray | None = None,
+        fit_type: Literal["parametric", "mean"] = "parametric",
+    ) -> dict:
+        """Full dispersion estimation pipeline following PyDESeq2."""
+        n_samples, n_genes = counts.shape
+
+        # Use intercept-only design if none provided
+        if design_matrix is None:
+            design_matrix = jnp.ones((n_samples, 1))
+
+        # Normalize counts
+        normed_counts = counts / size_factors[:, None]
+
+        # Filter out all-zero genes
+        non_zero_mask = ~jnp.all(counts == 0, axis=0)
+        n_active_genes = jnp.sum(non_zero_mask)
+
+        if n_active_genes == 0:
+            # All genes are zero
+            return {
+                "genewise_dispersions": jnp.full(n_genes, jnp.nan),
+                "fitted_dispersions": jnp.full(n_genes, jnp.nan),
+                "final_dispersions": jnp.full(n_genes, jnp.nan),
+                "trend_coeffs": jnp.array([jnp.nan, jnp.nan]),
+                "prior_variance": jnp.nan,
+                "non_zero_mask": non_zero_mask,
+                "outlier_genes": jnp.full(n_genes, False),
+                "fit_type": fit_type,
+            }
+
+        active_counts = counts[:, non_zero_mask]
+        active_normed = normed_counts[:, non_zero_mask]
+
+        # Step 1: Initial dispersion estimates (JIT-compiled)
+        initial_dispersions = self.estimate_initial_dispersions(active_normed, design_matrix, size_factors)
+
+        # Step 2: Estimate means (simple approach for intercept-only)
+        mu_estimates = jnp.maximum(size_factors[:, None] * jnp.mean(active_normed, axis=0)[None, :], 0.5)
+
+        # Step 3: MLE dispersion estimates (gene by gene due to optimization)
+        def estimate_single_gene(i):
+            return self.estimate_dispersion_single_gene_mle(
+                active_counts[:, i], size_factors, mu_estimates[:, i], initial_dispersions[i]
+            )
+
+        genewise_dispersions = jax.vmap(estimate_single_gene)(jnp.arange(n_active_genes))
+
+        # Step 4: Fit trend curve
+        gene_means = jnp.mean(active_normed, axis=0)
+
+        if fit_type == "parametric":
+            fitted_dispersions, trend_coeffs = self.fit_trend_parametric_deseq2(genewise_dispersions, gene_means)
+        else:
+            fitted_dispersions, mean_disp = self.fit_trend_mean(genewise_dispersions)
+            trend_coeffs = jnp.array([mean_disp, 0.0])  # For consistency
+
+        # Step 5: Estimate prior variance (JIT-compiled)
+        prior_variance = self.estimate_prior_variance(
+            genewise_dispersions, fitted_dispersions, n_samples, design_matrix.shape[1]
+        )
+
+        # Step 6: MAP estimation (using fitted dispersions as priors)
+        def estimate_map_single_gene(i):
+            return self.estimate_dispersion_single_gene_mle(
+                active_counts[:, i],
+                size_factors,
+                mu_estimates[:, i],
+                fitted_dispersions[i],
+                prior_variance,
+                use_prior=True,
+            )
+
+        map_dispersions = jax.vmap(estimate_map_single_gene)(jnp.arange(n_active_genes))
+
+        # Step 7: Outlier detection (JIT-compiled)
+        log_genewise = jnp.log(jnp.maximum(genewise_dispersions, 1e-8))
+        log_fitted = jnp.log(jnp.maximum(fitted_dispersions, 1e-8))
+        log_residuals = log_genewise - log_fitted
+
+        residual_var = jnp.var(log_residuals, ddof=1)
+        residual_var = jnp.maximum(residual_var, 1e-8)  # Avoid sqrt of negative
+
+        outlier_threshold = log_fitted + 2 * jnp.sqrt(residual_var)
+        outlier_genes = log_genewise > outlier_threshold
+
+        # Final dispersions: use MAP for non-outliers, genewise for outliers
+        final_dispersions = jnp.where(outlier_genes, genewise_dispersions, map_dispersions)
+
+        # Expand results back to full gene set
+        full_genewise = jnp.full(n_genes, jnp.nan)
+        full_fitted = jnp.full(n_genes, jnp.nan)
+        full_final = jnp.full(n_genes, jnp.nan)
+        full_outliers = jnp.full(n_genes, False)
+
+        full_genewise = full_genewise.at[non_zero_mask].set(genewise_dispersions)
+        full_fitted = full_fitted.at[non_zero_mask].set(fitted_dispersions)
+        full_final = full_final.at[non_zero_mask].set(final_dispersions)
+        full_outliers = full_outliers.at[non_zero_mask].set(outlier_genes)
+
+        return {
+            "genewise_dispersions": full_genewise,
+            "fitted_dispersions": full_fitted,
+            "final_dispersions": full_final,
+            "trend_coeffs": trend_coeffs,
+            "prior_variance": prior_variance,
+            "non_zero_mask": non_zero_mask,
+            "outlier_genes": full_outliers,
+            "fit_type": fit_type,
+        }
+
+
+# Convenience function for PyDESeq2-style dispersion estimation
+def estimate_dispersions_pydeseq2_style(
+    counts: jnp.ndarray, size_factors: jnp.ndarray, fit_type: Literal["parametric", "mean"] = "parametric"
+) -> dict:
+    """Convenience function for PyDESeq2-style dispersion estimation."""
+    estimator = PyDESeq2DispersionEstimator()
+    return estimator.estimate_dispersions_full_pipeline(counts, size_factors, fit_type=fit_type)
