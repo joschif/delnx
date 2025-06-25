@@ -1013,57 +1013,169 @@ class PyDESeq2DispersionEstimator:
         initial_disp = jnp.minimum(rough_disp, moments_disp)
         return jnp.clip(initial_disp, self.min_disp, self.max_disp)
 
-    @partial(jax.jit, static_argnums=(0,))
     def estimate_dispersion_mle_single_gene(
         self,
-        x: jnp.ndarray,
+        counts: jnp.ndarray,
         size_factors: jnp.ndarray,
         mu: jnp.ndarray,
         alpha_init: float,
+        design_matrix: jnp.ndarray,
         prior_disp_var: float = 1.0,
         use_prior: bool = False,
+        use_cr_reg: bool = True,
+        max_iter: int = 100,
+        use_optax: bool = True,
     ) -> float:
-        """Estimate dispersion for single gene using MLE with optional prior."""
-        log_alpha_init = jnp.log(jnp.clip(alpha_init, self.min_disp, self.max_disp))
+        """Estimate dispersion using either Optax (preferred) or scipy optimize."""
+        if use_optax:
+            try:
+                import optax
+            except ImportError:
+                print("Optax not available, falling back to scipy optimize")
+                use_optax = False
 
-        def objective(log_alpha):
+        log_alpha_init = jnp.log(jnp.clip(alpha_init, self.min_disp, self.max_disp))
+        log_min = jnp.log(self.min_disp)
+        log_max = jnp.log(self.max_disp)
+
+        @jax.jit
+        def nb_nll(counts, mu, alpha):
+            """Negative binomial negative log-likelihood matching PyDESeq2."""
+            size = 1.0 / alpha
+            ll = (
+                jsp.special.gammaln(size + counts)
+                - jsp.special.gammaln(size)
+                - jsp.special.gammaln(counts + 1)
+                + size * jnp.log(size / (size + mu))
+                + counts * jnp.log(mu / (size + mu))
+            )
+            return -jnp.sum(ll)
+
+        @jax.jit
+        def loss_fn(log_alpha):
+            """Loss function with all regularization terms."""
+            # Ensure log_alpha is scalar
+            if log_alpha.ndim > 0:
+                log_alpha = log_alpha[0] if len(log_alpha) == 1 else log_alpha
+
             alpha = jnp.exp(log_alpha)
 
-            # Negative binomial log-likelihood
-            r = 1.0 / alpha
+            # Negative log-likelihood
+            nll = nb_nll(counts, mu, alpha)
 
-            # Use log-sum-exp for numerical stability
-            ll = (
-                jsp.special.gammaln(r + x)
-                - jsp.special.gammaln(r)
-                - jsp.special.gammaln(x + 1)
-                + r * jnp.log(r / (r + mu))
-                + x * jnp.log(mu / (r + mu))
+            # Cox-Reid regularization
+            cr_reg = 0.0
+            if use_cr_reg:
+                W = mu / (1 + mu * alpha)
+                # Add small ridge term for numerical stability
+                XtWX = design_matrix.T * W[None, :] @ design_matrix + 1e-6 * jnp.eye(design_matrix.shape[1])
+                _, logdet = jnp.linalg.slogdet(XtWX)
+                cr_reg = 0.5 * logdet
+
+            # Prior regularization
+            prior_reg = 0.0
+            if use_prior:
+                prior_reg = (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
+
+            # Soft bounds penalty
+            bound_penalty = jnp.where(log_alpha < log_min, 1000 * (log_min - log_alpha) ** 2, 0.0) + jnp.where(
+                log_alpha > log_max, 1000 * (log_alpha - log_max) ** 2, 0.0
             )
 
-            nll = -jnp.sum(ll)
+            return nll + cr_reg + prior_reg + bound_penalty
 
-            # Add prior regularization if specified
-            prior_penalty = jax.lax.cond(
-                use_prior,
-                lambda x: jnp.squeeze((x - log_alpha_init) ** 2 / (2 * prior_disp_var)),
-                lambda _: 0.0,
-                log_alpha,
-            )
-            nll += prior_penalty
+        if use_optax:
+            import optax
 
-            # Cox-Reid adjustment (simplified for intercept-only)
-            W = mu / (1 + mu * alpha)
-            cr_adjustment = 0.5 * jnp.sum(jnp.log(jnp.maximum(W, 1e-8)))
-            nll += cr_adjustment
+            # Use Adam optimizer (L-BFGS has interface issues in Optax)
+            optimizer = optax.adam(learning_rate=0.01)
 
-            return nll
+            # Initialize optimizer state
+            params = jnp.array([log_alpha_init])
+            opt_state = optimizer.init(params)
 
-        # Optimize using BFGS
-        result = optimize.minimize(objective, jnp.array([log_alpha_init]), method="BFGS", options={"maxiter": 100})
+            # Define update step with JAX control flow
+            def body_fn(state):
+                i, params, opt_state, best_params, best_loss, prev_loss, patience_counter = state
 
-        # Extract result with fallback
-        log_alpha_opt = jax.lax.cond(result.success, lambda x: x[0], lambda _: log_alpha_init, result.x)
+                # Compute loss and gradients
+                loss_val, grads = jax.value_and_grad(loss_fn)(params)
+
+                # Update parameters
+                updates, new_opt_state = optimizer.update(grads, opt_state)
+                new_params = optax.apply_updates(params, updates)
+
+                # Update best parameters using JAX operations
+                is_better = loss_val < best_loss
+                new_best_loss = jnp.where(is_better, loss_val, best_loss)
+                new_best_params = jnp.where(is_better, new_params, best_params)
+                new_patience_counter = jnp.where(is_better, 0, patience_counter + 1)
+
+                return (
+                    i + 1,
+                    new_params,
+                    new_opt_state,
+                    new_best_params,
+                    new_best_loss,
+                    loss_val,
+                    new_patience_counter,
+                )
+
+            def cond_fn(state):
+                i, params, opt_state, best_params, best_loss, prev_loss, patience_counter = state
+
+                # Multiple stopping conditions
+                not_max_iter = i < max_iter
+                loss_change_big = jnp.abs(prev_loss - best_loss) >= 1e-8
+                patience_ok = patience_counter < 10
+
+                # Only check gradient after some iterations
+                grad_condition = jax.lax.cond(
+                    i > 10, lambda: jnp.linalg.norm(jax.grad(loss_fn)(params)) >= 1e-6, lambda: True
+                )
+
+                return not_max_iter & (loss_change_big | (i <= 10)) & patience_ok & grad_condition
+
+            # Initialize state
+            initial_loss = loss_fn(params)
+            initial_state = (0, params, opt_state, params, initial_loss, initial_loss, 0)
+
+            # Run optimization loop
+            final_state = jax.lax.while_loop(cond_fn, body_fn, initial_state)
+            _, _, _, best_params, _, _, _ = final_state
+
+            # Extract result
+            log_alpha_opt = best_params[0]
+
+        else:
+            # Fallback to scipy optimize
+            def objective(log_alpha_array):
+                return loss_fn(log_alpha_array[0])
+
+            try:
+                result = optimize.minimize(objective, jnp.array([log_alpha_init]))
+                if result.success:
+                    log_alpha_opt = jnp.asarray(result.x).flatten()[0]
+                else:
+                    log_alpha_opt = log_alpha_init
+            except Exception:  # noqa: BLE001
+                log_alpha_opt = log_alpha_init
+
+        # Final fallback: grid search if result is at boundary
+        log_alpha_opt = jnp.clip(log_alpha_opt, log_min, log_max)
+
+        # Check if we're at boundary and do grid search if needed
+        at_min_boundary = jnp.abs(log_alpha_opt - log_min) < 1e-6
+        at_max_boundary = jnp.abs(log_alpha_opt - log_max) < 1e-6
+        at_boundary = at_min_boundary | at_max_boundary
+
+        def grid_search():
+            log_alphas = jnp.linspace(log_min, log_max, 50)
+            losses = jax.vmap(loss_fn)(log_alphas)
+            best_idx = jnp.argmin(losses)
+            return log_alphas[best_idx]
+
+        log_alpha_opt = jax.lax.cond(at_boundary, grid_search, lambda: log_alpha_opt)
 
         alpha_opt = jnp.exp(log_alpha_opt)
         return jnp.clip(alpha_opt, self.min_disp, self.max_disp)
@@ -1073,19 +1185,30 @@ class PyDESeq2DispersionEstimator:
         counts: jnp.ndarray,
         size_factors: jnp.ndarray,
         mu: jnp.ndarray,
-        alpha_init: jnp.ndarray | float,
+        alpha_init: jnp.ndarray,
+        design_matrix: jnp.ndarray,
         prior_disp_var: float = 1.0,
         use_prior: bool = False,
+        use_cr_reg: bool = True,
+        use_optax: bool = True,
+        max_iter: int = 100,
     ) -> jnp.ndarray:
-        """Estimate gene-wise dispersion using MLE with optional prior."""
+        """Estimate gene-wise dispersion using MLE with optional Optax support."""
 
-        def estimate_disp_single(counts, mu, alpha_init):
+        def estimate_dispersion(x, m, a):
             return self.estimate_dispersion_mle_single_gene(
-                counts, size_factors, mu, alpha_init, prior_disp_var, use_prior
+                x,
+                size_factors,
+                m,
+                a,
+                design_matrix,
+                prior_disp_var,
+                use_prior,
+                use_cr_reg,
             )
 
         return jax.vmap(
-            estimate_disp_single,
+            estimate_dispersion,
             in_axes=(1, 1, 0),
         )(counts, mu, alpha_init)
 
@@ -1160,7 +1283,7 @@ class PyDESeq2DispersionEstimator:
 
     @partial(jax.jit, static_argnums=(0,))
     def fit_trend_mean(self, dispersions: jnp.ndarray) -> tuple[jnp.ndarray, float]:
-        """Fit mean trend (constant dispersion)."""
+        """Fit mean trend (constant dispersion) (JIT-compiled)."""
         valid_genes = dispersions > 10 * self.min_disp
 
         mean_disp = jax.lax.cond(
@@ -1174,7 +1297,7 @@ class PyDESeq2DispersionEstimator:
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_trimmed_mean(self, values: jnp.ndarray) -> float:
-        """Compute trimmed mean (0.1% from each end)."""
+        """Compute trimmed mean (0.1% from each end) (JIT-compiled)."""
         sorted_vals = jnp.sort(values)
         n = len(sorted_vals)
         trim_count = jnp.maximum(1, jnp.round(0.001 * n).astype(int))
@@ -1256,7 +1379,7 @@ class PyDESeq2DispersionEstimator:
         active_counts = counts[:, non_zero_mask]
         active_normed = normed_counts[:, non_zero_mask]
 
-        # Step 1: Initial dispersion estimates (JIT-compiled)
+        # Step 1: Initial dispersion estimates (JIT-compiled, now using NB model for simple designs)
         initial_dispersions = self.estimate_initial_dispersions(active_normed, design_matrix, size_factors)
 
         # Step 2: Estimate means (simple approach for intercept-only)
@@ -1265,7 +1388,12 @@ class PyDESeq2DispersionEstimator:
         # Step 3: MLE dispersion estimates (gene by gene due to optimization)
         def estimate_single_gene(i):
             return self.estimate_dispersion_single_gene_mle(
-                active_counts[:, i], size_factors, mu_estimates[:, i], initial_dispersions[i]
+                active_counts[:, i],
+                size_factors,
+                mu_estimates[:, i],
+                initial_dispersions[i],
+                design_matrix,
+                use_cr_reg=True,
             )
 
         genewise_dispersions = jax.vmap(estimate_single_gene)(jnp.arange(n_active_genes))
@@ -1291,8 +1419,10 @@ class PyDESeq2DispersionEstimator:
                 size_factors,
                 mu_estimates[:, i],
                 fitted_dispersions[i],
+                design_matrix,
                 prior_variance,
                 use_prior=True,
+                use_cr_reg=True,
             )
 
         map_dispersions = jax.vmap(estimate_map_single_gene)(jnp.arange(n_active_genes))
@@ -1332,12 +1462,3 @@ class PyDESeq2DispersionEstimator:
             "outlier_genes": full_outliers,
             "fit_type": fit_type,
         }
-
-
-# Convenience function for PyDESeq2-style dispersion estimation
-def estimate_dispersions_pydeseq2_style(
-    counts: jnp.ndarray, size_factors: jnp.ndarray, fit_type: Literal["parametric", "mean"] = "parametric"
-) -> dict:
-    """Convenience function for PyDESeq2-style dispersion estimation."""
-    estimator = PyDESeq2DispersionEstimator()
-    return estimator.estimate_dispersions_full_pipeline(counts, size_factors, fit_type=fit_type)
