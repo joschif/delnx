@@ -1,4 +1,4 @@
-"""The Broyden-Fletcher-Goldfarb-Shanno minimization algorithm with bounds support."""
+"""The Broyden-Fletcher-Goldfarb-Shanno minimization algorithm with bounds support. Adapted from JAX's jax.scipy.optimize implementation."""
 
 from __future__ import annotations
 
