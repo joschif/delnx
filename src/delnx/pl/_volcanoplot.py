@@ -3,14 +3,14 @@ import numpy as np
 import pandas as pd
 from adjustText import adjust_text
 
-from delnx.pp._get_de_genes import get_de_genes
+from ..pp._get_de_genes import get_de_genes
 
 
 class VolcanoPlot:
     """Static volcano plot using matplotlib."""
 
     DEFAULT_COLOR_LEGEND_TITLE = "-log10(p-value)"
-    DEFAULT_SAVE_PREFIX = "volcanoplot_"
+    DEFAULT_SAVE_PREFIX = "volcanoplot"
 
     def __init__(
         self,
@@ -168,7 +168,7 @@ def volcanoplot(
     if isinstance(save, str):
         save_path = save
     elif save is True:
-        save_path = f"{VolcanoPlot.DEFAULT_SAVE_PREFIX}plot.pdf"
+        save_path = f"{VolcanoPlot.DEFAULT_SAVE_PREFIX}.pdf"
 
     vp = VolcanoPlot(
         df,

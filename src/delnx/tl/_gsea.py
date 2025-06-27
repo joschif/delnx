@@ -59,7 +59,7 @@ def run_single_enrichment_analysis(
 
 def run_de_enrichment_analysis(
     de_results: pd.DataFrame,
-    top_n: int = 200,
+    top_n: int | None = None,
     background: list[str] | None = None,
     organism: str = "Human",
     method: str = "enrichr",

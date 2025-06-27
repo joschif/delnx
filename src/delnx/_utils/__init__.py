@@ -6,7 +6,6 @@ import sys
 import warnings
 from collections.abc import Sequence
 from contextlib import contextmanager
-from enum import Enum
 from io import StringIO
 from typing import Union
 
@@ -15,33 +14,6 @@ from anndata import AnnData
 from scipy import sparse
 
 LegacyUnionType = type(Union[int, str])  # noqa: UP007
-
-
-class _Empty(Enum):
-    token = 0
-
-    def __repr__(self) -> str:
-        return "_empty"
-
-
-_empty = _Empty.token
-
-
-def _check_use_raw(adata: AnnData, use_raw: bool | None, *, layer: str | None = None) -> bool:
-    """Normalize checking `use_raw`.
-
-    Centralizes logic and future deprecation warnings.
-    """
-    if use_raw is not None:
-        return use_raw
-    if layer is not None:
-        return False
-    return adata.raw is not None
-
-
-def sanitize_anndata(adata: AnnData) -> None:
-    """Transform string annotations to categoricals (legacy, to be removed)."""
-    adata._sanitize()
 
 
 @contextmanager
