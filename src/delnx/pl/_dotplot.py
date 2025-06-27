@@ -66,6 +66,8 @@ class DotPlot(MatrixPlot):
             sizes=(1, self.scale * 100),
             vmin=self.vmin,
             vmax=self.vmax,
+            width=self.width,
+            height=self.height,
             center=self.center,
             cmap=self.cmap,
             edgecolor=None,

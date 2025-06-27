@@ -1,4 +1,5 @@
 import marsilea as ma
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from marsilea.plotter import Bar, Chunk, Labels
@@ -115,7 +116,8 @@ class GSEAHeatmap(BaseGSEA):
         cb.add_legends()
 
         if show:
-            cb.render()
+            with plt.rc_context(rc={"axes.grid": False, "grid.color": ".8"}):
+                cb.render()
         return cb
 
 
@@ -162,7 +164,8 @@ class GSEADot(BaseGSEA):
         cb.add_left(labels, pad=0.05)
         cb.add_legends()
         if show:
-            cb.render()
+            with plt.rc_context(rc={"axes.grid": False, "grid.color": ".8"}):
+                cb.render()
         return cb
 
 
@@ -313,5 +316,6 @@ def gsea_barplot(
     cb.add_left(labels, pad=0.05)
 
     if show:
-        cb.render()
+        with plt.rc_context(rc={"axes.grid": False, "grid.color": ".8"}):
+            cb.render()
     return cb
