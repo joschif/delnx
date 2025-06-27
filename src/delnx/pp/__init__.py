@@ -1,3 +1,4 @@
+from ._aucell import msigdb_aucell
 from ._dispersion import dispersion
 from ._filter_genes import filter_genes
 from ._get_de_genes import get_de_genes

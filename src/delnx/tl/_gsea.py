@@ -1,55 +1,77 @@
+from collections.abc import Sequence
 from typing import Any
 
 import gseapy as gp
 import pandas as pd
 
-from delnx.pp._get_de_genes import get_de_genes
+from ..ds._gmt import load_gmt
+from ..pp._get_de_genes import get_de_genes
+
+MIN_GENESET_SIZE = 5
+MAX_GENESET_SIZE = 500
 
 
-def run_single_enrichment_analysis(
-    genes: list[str],
-    background: list[str] | None = None,
-    organism: str = "Human",
+def get_gene_sets(
+    collection: str = "all",
+    url: str | None = None,
+    filepath: str | None = None,
+    geneset_key: str = "geneset",
+    genesymbol_key: str = "genesymbol",
+    min_genes: int = MIN_GENESET_SIZE,
+    max_genes: int = MAX_GENESET_SIZE,
+) -> dict[str, list[str]]:
+    """
+    Load and return gene sets as a dictionary.
+    """
+    gmt_df = load_gmt(
+        collection=collection,
+        url=url,
+        filepath=filepath,
+        geneset_key=geneset_key,
+        genesymbol_key=genesymbol_key,
+        min_genes=min_genes,
+        max_genes=max_genes,
+    )
+    gmt_df = gmt_df.rename(columns={geneset_key: "source", genesymbol_key: "target"})
+    gene_sets = gmt_df.groupby("source")["target"].apply(list).to_dict()
+    return gene_sets
+
+
+def single_enrichment_analysis(
+    genes: Sequence[str],
+    background: Sequence[str] | None = None,
+    gene_sets: dict[str, list[str]] | None = None,
+    collection: str = "all",
+    url: str | None = None,
+    filepath: str | None = None,
+    geneset_key: str = "geneset",
+    genesymbol_key: str = "genesymbol",
     method: str = "enrichr",
-    library: str = "GO_Biological_Process_2021",
     return_object: bool = False,
+    min_genes: int = MIN_GENESET_SIZE,
+    max_genes: int = MAX_GENESET_SIZE,
 ) -> pd.DataFrame | Any:
     """
     Run enrichment analysis for a single gene list using Enrichr.
-
-    Parameters
-    ----------
-    genes : list of str
-        List of gene symbols to analyze.
-    background : list of str or None, optional
-        Optional background gene list. If None, default background is used.
-    organism : str, optional
-        Organism name for enrichment (e.g., "Human").
-    method : str, optional
-        Enrichment method. Only "enrichr" is supported.
-    library : str, optional
-        Enrichment gene set library (e.g., "GO_Biological_Process_2021").
-    return_object : bool, optional
-        If True, return the enrichment result object. If False, return the results DataFrame.
-
-    Returns
-    -------
-    pd.DataFrame or Any
-        Enrichment results as a DataFrame, or the enrichment object if return_object is True.
-
-    Raises
-    ------
-    ValueError
-        If an unsupported enrichment method is specified.
     """
     if method != "enrichr":
         raise ValueError(f"Unsupported method: {method}")
 
+    if gene_sets is None:
+        gene_sets = get_gene_sets(
+            collection=collection,
+            url=url,
+            filepath=filepath,
+            geneset_key=geneset_key,
+            genesymbol_key=genesymbol_key,
+            min_genes=min_genes,
+            max_genes=max_genes,
+        )
+
     enr = gp.enrichr(
-        gene_list=genes,
-        background=background,
-        organism=organism,
-        gene_sets=library,
+        gene_list=list(genes),
+        background=list(background) if background is not None else None,
+        gene_sets=gene_sets,
         outdir=None,
         no_plot=True,
     )
@@ -57,63 +79,54 @@ def run_single_enrichment_analysis(
     return enr if return_object else enr.res2d
 
 
-def run_de_enrichment_analysis(
+def de_enrichment_analysis(
     de_results: pd.DataFrame,
     top_n: int | None = None,
-    background: list[str] | None = None,
-    organism: str = "Human",
+    background: Sequence[str] | None = None,
+    collection: str = "all",
+    url: str | None = None,
+    filepath: str | None = None,
+    geneset_key: str = "geneset",
+    genesymbol_key: str = "genesymbol",
     method: str = "enrichr",
-    library: str = "GO_Biological_Process_2021",
     cutoff: float = 0.05,
+    min_genes: int = MIN_GENESET_SIZE,
+    max_genes: int = MAX_GENESET_SIZE,
 ) -> pd.DataFrame:
     """
     Run enrichment for up/down gene sets per group and stack filtered results.
-
-    Parameters
-    ----------
-    de_results : pd.DataFrame
-        DataFrame with differential expression results, must contain group labels.
-    top_n : int
-        Number of top genes to select for each group and direction.
-    background : list or None
-        Optional background gene list.
-    organism : str
-        Organism name for enrichment (e.g., "Human").
-    method : str
-        Enrichment method (currently supports "enrichr").
-    library : str
-        Enrichment gene set library.
-    cutoff : float
-        Adjusted p-value cutoff for significance.
-
-    Returns
-    -------
-    pd.DataFrame
-        Combined enrichment results across groups.
     """
     de_genes_dict = get_de_genes(de_results, top_n=top_n)
     all_enrichment_results = []
 
-    for group, gene_sets in de_genes_dict.items():
-        up_genes = gene_sets.get("up", [])
-        down_genes = gene_sets.get("down", [])
+    # Load gene sets once and reuse
+    gene_sets = get_gene_sets(
+        collection=collection,
+        url=url,
+        filepath=filepath,
+        geneset_key=geneset_key,
+        genesymbol_key=genesymbol_key,
+        min_genes=min_genes,
+        max_genes=max_genes,
+    )
 
-        # Run enrichment only if gene list is not empty
-        if up_genes:
-            enr_up = run_single_enrichment_analysis(up_genes, background, organism, method, library)
-            enr_up = enr_up[enr_up["Adjusted P-value"] <= cutoff].copy()
-            enr_up["UP_DW"] = "UP"
-            enr_up["group"] = group
-            all_enrichment_results.append(enr_up)
-
-        if down_genes:
-            enr_dw = run_single_enrichment_analysis(down_genes, background, organism, method, library)
-            enr_dw = enr_dw[enr_dw["Adjusted P-value"] <= cutoff].copy()
-            enr_dw["UP_DW"] = "DOWN"
-            enr_dw["group"] = group
-            all_enrichment_results.append(enr_dw)
+    for group, gene_sets_dict in de_genes_dict.items():
+        for direction, label in [("up", "UP"), ("down", "DOWN")]:
+            genes = gene_sets_dict.get(direction, [])
+            if not genes:
+                continue
+            enr = single_enrichment_analysis(
+                genes,
+                background=background,
+                gene_sets=gene_sets,
+                method=method,
+            )
+            if "Adjusted P-value" in enr.columns:
+                filtered = enr[enr["Adjusted P-value"] <= cutoff].copy()
+                filtered["UP_DW"] = label
+                filtered["group"] = group
+                all_enrichment_results.append(filtered)
 
     if all_enrichment_results:
         return pd.concat(all_enrichment_results, ignore_index=True)
-    else:
-        return pd.DataFrame()  # Return empty DataFrame if nothing passes cutoff
+    return pd.DataFrame()

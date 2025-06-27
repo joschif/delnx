@@ -1,140 +1,74 @@
-import gseapy as gp
-import matplotlib.pyplot as plt
+import marsilea as ma
+import marsilea.plotter as mp
 import numpy as np
 import pandas as pd
 
 
 def gsea_barplot(
     enrichment_results: pd.DataFrame,
-    top_n: int = 10,
+    group_key: str,
+    top_n: int = 5,
+    adata=None,
+    values=None,
+    colors=None,
     figsize=(4, 5),
-    save_path: str | None = None,
     show: bool = True,
-) -> tuple[plt.Figure, plt.Axes]:
+) -> ma.ClusterBoard:
     """
-    Create a horizontal bar plot of top GSEA enrichment terms, split by UP and DOWN regulation.
-
-    This function selects the top N significantly enriched terms separately for UP- and DOWN-regulated categories,
-    based on the adjusted p-value. The selected terms are visualized as horizontal bars colored by regulation status.
+    Create a horizontal bar plot of top GSEA enrichment terms per group using Marsilea.
 
     Parameters
     ----------
     enrichment_results : pd.DataFrame
-        DataFrame containing GSEA results with at least the columns: "Term", "Adjusted P-value", and "UP_DW"
-        (which should contain either "UP" or "DOWN" for each term).
-    top_n : int, default=10
-        Number of top enriched terms to include for each of the UP and DOWN categories.
+        DataFrame containing GSEA results with at least the columns: "Term", "Adjusted P-value", and group_key.
+    group_key : str, default="group"
+        Column name in enrichment_results to group by (e.g., cell type).
+    top_n : int, default=5
+        Number of top enriched terms to include for each group.
+    adata : AnnData or None, default=None
+        AnnData object to extract palette from (using group_key).
+    values : list or None, default=None
+        List of group names (used if adata is not provided).
+    colors : list or None, default=None
+        List of colors corresponding to values (used if adata is not provided).
     figsize : tuple, default=(4, 5)
-        Size of the matplotlib figure (width, height in inches).
-    save_path : str or None, default=None
-        If provided, the plot will be saved to the given file path.
+        Size of the figure (not used directly, for compatibility).
     show : bool, default=True
-        If True, the plot will be displayed using `plt.show()`.
+        If True, renders the plot.
 
     Returns
     -------
-    tuple[plt.Figure, plt.Axes]
-        A tuple containing the matplotlib figure and axes objects of the generated plot.
+    marsilea.ClusterBoard
+        The Marsilea ClusterBoard object.
     """
-    df = enrichment_results.copy()
+    df = enrichment_results[["Term", "Adjusted P-value", group_key]].copy()
+    df["-log10(padj)"] = -np.log10(df["Adjusted P-value"])
+    df = df.groupby(group_key, group_keys=False).apply(lambda g: g.nsmallest(top_n, "Adjusted P-value"))
+    df = df.set_index("Term")
+    group = pd.Categorical(df[group_key].tolist())
 
-    top_up = df[df["UP_DW"] == "UP"].sort_values("Adjusted P-value").head(top_n)
-    top_down = df[df["UP_DW"] == "DOWN"].sort_values("Adjusted P-value").head(top_n)
+    # Build palette
+    if adata is not None:
+        key = group_key
+        values = adata.obs[key].cat.categories
+        palette = adata.uns.get(f"{key}_colors")
+        palette = dict(zip(values, palette, strict=False))
+        palette = {e: palette[e] for e in list(group.categories)}
+    elif values is not None and colors is not None:
+        palette = dict(zip(values, colors, strict=False))
+        palette = {e: palette[e] for e in list(group.categories)}
+    else:
+        raise ValueError("Either adata or both values and colors must be provided to build the palette.")
 
-    top_terms = pd.concat([top_up, top_down])
-    top_terms["Label"] = top_terms["UP_DW"] + " | " + top_terms["Term"]
+    anno = ma.plotter.Chunk(list(palette.keys()), list(palette.values()), padding=10)
+    plot = mp.Bar(df[["-log10(padj)"]].T, orient="h", label="-log10(padj)", group_kws={"color": list(palette.values())})
+    labels = mp.Labels(list(df.index))
 
-    fig, ax = plt.subplots(figsize=figsize)
-    colors = top_terms["UP_DW"].map({"UP": "#10b981", "DOWN": "#ef4444"})
-
-    ax.barh(
-        y=top_terms["Label"],
-        width=-np.log10(top_terms["Adjusted P-value"]),
-        color=colors,
-        edgecolor="black",
-    )
-    ax.set_xlabel("-log10(Adjusted P-value)")
-    ax.set_ylabel("Enriched Terms (UP / DOWN)")
-    ax.invert_yaxis()
-    ax.grid(axis="x", linestyle="--", alpha=0.6)
-    if save_path:
-        fig.savefig(save_path, bbox_inches="tight", dpi=300)
+    cb = ma.ClusterBoard(df[["-log10(padj)"]], width=figsize[0], height=figsize[1])
+    cb.add_layer(plot)
+    cb.group_rows(group)
+    cb.add_left(anno)
+    cb.add_left(labels, pad=0.05)
     if show:
-        plt.show()
-    return fig, ax
-
-
-def gsea_dotplot(
-    enrichment_results: pd.DataFrame,
-    x_order: list[str] | None = None,
-    top_n: int = 10,
-    title: str = "GO_BP",
-    cmap: str = "Blues",
-    figsize=(4, 5),
-    cutoff: float = 0.05,
-    show_all: bool = False,
-) -> plt.Axes:
-    """
-    Create a dot plot visualization of top GSEA enrichment terms using GSEApy.
-
-    This function selects the top N enriched terms from both UP- and DOWN-regulated categories
-    based on adjusted p-values, and visualizes them using a dot plot where the x-axis reflects
-    the direction of regulation and dot size/intensity encodes enrichment statistics.
-
-    Parameters
-    ----------
-    enrichment_results : pd.DataFrame
-        DataFrame containing GSEA results with at least the columns: "Term", "Adjusted P-value", and "UP_DW"
-        (with values "UP" or "DOWN" indicating the direction of enrichment).
-    x_order : list of str or None, default=["UP", "DOWN"]
-        Order of categories to display along the x-axis. If None, defaults to ["UP", "DOWN"].
-    top_n : int, default=10
-        Number of top terms to include from each category (UP and DOWN).
-    title : str, default="GO_BP"
-        Title of the plot.
-    cmap : str, default="Blues"
-        Colormap to use for dot color intensity.
-    figsize : tuple, default=(4, 5)
-        Size of the matplotlib figure (width, height in inches).
-    cutoff : float, default=0.05
-        Adjusted p-value cutoff for filtering enriched terms. (Currently only used in error message.)
-    show_all : bool, default=False
-        Reserved for future use. Currently has no effect.
-
-    Returns
-    -------
-    matplotlib.axes.Axes
-        The matplotlib Axes object of the generated plot.
-
-    Raises
-    ------
-    ValueError
-        If no enriched terms are available for plotting.
-    """
-    if x_order is None:
-        x_order = ["UP", "DOWN"]
-
-    df = enrichment_results.copy()
-
-    top_up = df[df["UP_DW"] == "UP"].sort_values("Adjusted P-value").head(top_n)
-    top_down = df[df["UP_DW"] == "DOWN"].sort_values("Adjusted P-value").head(top_n)
-
-    top_terms = pd.concat([top_up, top_down])
-
-    try:
-        ax = gp.dotplot(
-            top_terms,
-            x="UP_DW",
-            x_order=x_order,
-            figsize=figsize,
-            title=title,
-            cmap=cmap,
-            size=3,
-            show_ring=True,
-            cutoff=1.0,
-        )
-        ax.set_xlabel("")
-        plt.show()
-        return ax
-    except ValueError as e:
-        raise ValueError(f"No enriched terms to plot (cutoff = {cutoff}): {e}") from e
+        cb.render()
+    return cb
