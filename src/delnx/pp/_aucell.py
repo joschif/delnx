@@ -12,7 +12,6 @@ def aucell(
     genesymbol_key: str = "genesymbol",
     min_genes: int = 15,
     max_genes: int = 500,
-    use_raw: bool = False,
 ):
     """
     Runs AUCell analysis on gene sets from a specified collection.
@@ -35,8 +34,6 @@ def aucell(
         Minimum number of genes in a gene set to include (default: 15).
     max_genes : int, optional
         Maximum number of genes in a gene set to include (default: 500).
-    use_raw : bool, optional
-        Whether to use raw attribute of adata (default: False).
 
     Returns
     -------
@@ -53,4 +50,4 @@ def aucell(
         max_genes=max_genes,
     )
     gmt = gmt.rename(columns={geneset_key: "source", genesymbol_key: "target"})
-    decoupler.mt.aucell(adata, gmt, use_raw=use_raw)
+    decoupler.mt.aucell(adata, gmt)
