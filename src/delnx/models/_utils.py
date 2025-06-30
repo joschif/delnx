@@ -4,10 +4,13 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.scipy.special import gammaln, polygamma
 
+# from scipy.special import gammaln, polygamma
 
-def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> float | jnp.ndarray:
+
+def nb_nll(counts: np.ndarray, mu: np.ndarray, alpha: float | np.ndarray) -> float | np.ndarray:
     r"""Neg log-likelihood of a negative binomial of parameters ``mu`` and ``alpha``.
 
     Mathematically, if ``counts`` is a vector of counting entries :math:`y_i`
@@ -58,20 +61,124 @@ def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> 
     -----
     [1] https://en.wikipedia.org/wiki/Negative_binomial_distribution
     """
-    n = counts.shape[0]
-    alpha_inv = 1.0 / alpha
+    n = len(counts)
+    alpha_neg1 = 1 / alpha
+    logbinom = gammaln(counts + alpha_neg1) - gammaln(counts + 1) - gammaln(alpha_neg1)
+    if hasattr(alpha, "__len__") and len(alpha) > 1:
+        return (
+            alpha_neg1 * np.log(alpha)
+            - logbinom
+            + (counts + alpha_neg1) * np.log(mu + alpha_neg1)
+            - (counts * np.log(mu))
+        ).sum(0)
+    else:
+        return (
+            n * alpha_neg1 * np.log(alpha)
+            + (-logbinom + (counts + alpha_neg1) * np.log(alpha_neg1 + mu) - counts * np.log(mu)).sum()
+        )
 
-    logbinom = gammaln(counts + alpha_inv) - gammaln(counts + 1) - gammaln(alpha_inv)
 
-    nll = n * alpha_inv * jnp.log(alpha) + jnp.sum(
-        -logbinom + (counts + alpha_inv) * jnp.log(alpha_inv + mu) - counts * jnp.log(mu)
-    )
+# def dnb_nll(counts: np.ndarray, mu: np.ndarray, alpha: float) -> float:
+#     r"""Gradient of the negative log-likelihood of a negative binomial.
 
-    return nll
+#     Unvectorized.
+
+#     Parameters
+#     ----------
+#     counts : ndarray
+#         Observations.
+
+#     mu : float
+#         Mean of the distribution.
+
+#     alpha : float
+#         Dispersion of the distribution,
+#         s.t. the variance is :math:`\mu + \alpha\mu^2`.
+
+#     Returns
+#     -------
+#     float
+#         Derivative of negative log likelihood of NB w.r.t. :math:`\alpha`.
+#     """
+#     alpha_neg1 = 1 / alpha
+#     ll_part = (
+#         alpha_neg1**2
+#         * (
+#             polygamma(0, alpha_neg1)
+#             - polygamma(0, counts + alpha_neg1)
+#             + np.log(1 + mu * alpha)
+#             + (counts - mu) / (mu + alpha_neg1)
+#         ).sum()
+#     )
+
+#     return -ll_part
 
 
-# Vectorize over alpha parameter
-nb_nll_vmap = jax.vmap(nb_nll, in_axes=(None, None, 0))
+# def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> float | jnp.ndarray:
+#     r"""Neg log-likelihood of a negative binomial of parameters ``mu`` and ``alpha``.
+
+#     Mathematically, if ``counts`` is a vector of counting entries :math:`y_i`
+#     then the likelihood of each entry :math:`y_i` to be drawn from a negative
+#     binomial :math:`NB(\mu, \alpha)` is [1]
+
+#     .. math::
+#         p(y_i | \mu, \alpha) = \frac{\Gamma(y_i + \alpha^{-1})}{
+#             \Gamma(y_i + 1)\Gamma(\alpha^{-1})
+#         }
+#         \left(\frac{1}{1 + \alpha \mu} \right)^{1/\alpha}
+#         \left(\frac{\mu}{\alpha^{-1} + \mu} \right)^{y_i}
+
+#     As a consequence, assuming there are :math:`n` entries,
+#     the total negative log-likelihood for ``counts`` is
+
+#     .. math::
+#         \ell(\mu, \alpha) = \frac{n}{\alpha} \log(\alpha) +
+#             \sum_i \left \lbrace
+#             - \log \left( \frac{\Gamma(y_i + \alpha^{-1})}{
+#             \Gamma(y_i + 1)\Gamma(\alpha^{-1})
+#         } \right)
+#         + (\alpha^{-1} + y_i) \log (\alpha^{-1} + \mu)
+#         - y_i \log \mu
+#             \right \rbrace
+
+#     This is implemented in this function.
+
+#     Parameters
+#     ----------
+#     counts : ndarray
+#         Observations.
+
+#     mu : ndarray
+#         Mean of the distribution :math:`\mu`.
+
+#     alpha : float or ndarray
+#         Dispersion of the distribution :math:`\alpha`,
+#         s.t. the variance is :math:`\mu + \alpha \mu^2`.
+
+#     Returns
+#     -------
+#     float or ndarray
+#         Negative log likelihood of the observations counts
+#         following :math:`NB(\mu, \alpha)`.
+
+#     Notes
+#     -----
+#     [1] https://en.wikipedia.org/wiki/Negative_binomial_distribution
+#     """
+#     n = counts.shape[0]
+#     alpha_inv = 1.0 / alpha
+
+#     logbinom = gammaln(counts + alpha_inv) - gammaln(counts + 1) - gammaln(alpha_inv)
+
+#     nll = n * alpha_inv * jnp.log(alpha) + jnp.sum(
+#         -logbinom + (counts + alpha_inv) * jnp.log(alpha_inv + mu) - counts * jnp.log(mu)
+#     )
+
+#     return nll
+
+
+# # Vectorize over alpha parameter
+# nb_nll_vmap = jax.vmap(nb_nll, in_axes=(None, None, 0))
 
 
 def dnb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float) -> float:
@@ -108,6 +215,10 @@ def dnb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float) -> float:
     )
 
     return -ll_part
+
+
+def nb_nll_vmap():
+    pass
 
 
 @partial(jax.jit, static_argnames=("grid_length", "cr_reg", "prior_reg"))
