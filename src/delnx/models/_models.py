@@ -9,10 +9,9 @@ import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
 from jax.scipy import optimize
-from scipy.optimize import minimize
 
 # from jax.scipy.optimize import minimize
-from ._utils import dnb_nll, nb_nll
+from ._utils import dnb_nll, grid_fit_alpha, nb_nll
 
 
 @dataclass(frozen=True)
@@ -1038,6 +1037,7 @@ class PyDESeq2DispersionEstimator:
             in_axes=(1, None, None),
         )(counts, design_matrix, size_factors)
 
+    @partial(jax.jit, static_argnums=(0,))
     def estimate_dispersion_mle_single_gene(
         self,
         counts: jnp.ndarray,
@@ -1050,9 +1050,8 @@ class PyDESeq2DispersionEstimator:
     ) -> float:
         """Estimate dispersion using MLE following PyDESeq2 exactly."""
         log_alpha_init = jnp.log(jnp.clip(alpha_init, self.min_disp, self.max_disp))
-        # log_min_disp = jnp.log(self.min_disp)
-        # log_max_disp = jnp.log(self.max_disp)
 
+        @jax.jit
         def loss(log_alpha: jnp.ndarray) -> jnp.ndarray:
             # closure to be minimized
             alpha = jnp.exp(log_alpha)
@@ -1064,6 +1063,7 @@ class PyDESeq2DispersionEstimator:
                 reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
             return nb_nll(counts, mu, alpha) + reg
 
+        @jax.jit
         def dloss(log_alpha: jnp.ndarray) -> jnp.ndarray:
             # gradient closure
             alpha = jnp.exp(log_alpha)
@@ -1087,53 +1087,36 @@ class PyDESeq2DispersionEstimator:
             # gradient wrt log_alpha
             return jnp.array([alpha * dnb_nll(counts, mu, alpha) + reg_grad])
 
-        # # First try with gradients (like PyDESeq2's L-BFGS-B)
-        # init_params = jnp.array([log_alpha_init])
-        # param_bounds = jnp.array([log_min_disp]), jnp.array([log_max_disp])
+        init_params = jnp.array([log_alpha_init])
 
-        # result = custom_minimize(
-        #     lambda x: loss(x[0]),
-        #     x0=init_params,
-        #     # jac=lambda x: dloss(x[0]),
-        #     method="BFGS",  # only supports BFGS (but with bounds)
-        #     # bounds=param_bounds,
-        #     options={"maxiter": 100, "gtol": 1e-4},
-        # )
-
-        # # If optimization fails, fallback to grid search
-        # log_alpha_opt = jax.lax.cond(
-        #     result.success,
-        #     lambda x: x[0],
-        #     lambda _: jnp.array(999.9),
-        #     # lambda _: grid_fit_alpha(
-        #     #     counts,
-        #     #     design_matrix,
-        #     #     mu,
-        #     #     alpha_init,
-        #     #     self.min_disp,
-        #     #     self.max_disp,
-        #     #     prior_disp_var,
-        #     #     use_prior_reg,
-        #     #     use_cr_reg,
-        #     #     grid_length=1000,
-        #     # ),
-        #     result.x,
-        # )
-
-        import numpy as np
-
-        optimizer = "BFGS"  # Use L-BFGS-B for bounded optimization
-        res = minimize(
+        res = optimize.minimize(
             lambda x: loss(x[0]),
-            x0=np.log(alpha_init),
-            jac=lambda x: dloss(x[0]),
-            method=optimizer,
+            x0=init_params,
+            method="BFGS",
+            options={"maxiter": 200, "gtol": 1e-2},
         )
-        log_alpha_opt = res.x[0]
 
-        alpha_opt = jnp.exp(log_alpha_opt)
-        # return jnp.clip(alpha_opt, self.min_disp, self.max_disp)
-        return alpha_opt
+        # If optimization fails, fallback to grid search
+        log_alpha_opt = jax.lax.cond(
+            res.success,
+            lambda x: x[0],
+            lambda _: grid_fit_alpha(
+                counts,
+                design_matrix,
+                mu,
+                jnp.clip(res.x[0], self.min_disp, self.max_disp),
+                self.min_disp,
+                self.max_disp,
+                prior_disp_var,
+                use_prior_reg,
+                use_cr_reg,
+                grid_length=1000,
+            ),
+            res.x,
+        )
+
+        log_alpha_opt = jnp.clip(jnp.exp(log_alpha_opt), self.min_disp, self.max_disp)
+        return log_alpha_opt, res.success
 
     def estimate_dispersion_mle(
         self,
