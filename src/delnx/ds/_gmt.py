@@ -12,6 +12,9 @@ MSIGDB_GMT_URLS = {
     "go": "https://data.broadinstitute.org/gsea-msigdb/msigdb/release/2025.1.Hs/c5.go.v2025.1.Hs.symbols.gmt",
 }
 
+MIN_GENESET_SIZE = 5
+MAX_GENESET_SIZE = 500
+
 
 def parse_gmt(content: str, geneset_key: str = "geneset", genesymbols_key: str = "genesymbols") -> list[dict[str, Any]]:
     """
@@ -184,3 +187,46 @@ def load_gmt(
     valid_genesets = geneset_sizes.index[(geneset_sizes >= min_genes) & (geneset_sizes <= max_genes)]
     filtered_gmt = gmt[gmt[geneset_key].isin(valid_genesets)]
     return filtered_gmt
+
+
+def get_gene_sets(
+    collection: str = "all",
+    url: str | None = None,
+    filepath: str | None = None,
+    geneset_key: str = "geneset",
+    genesymbol_key: str = "genesymbol",
+    min_genes: int = MIN_GENESET_SIZE,
+    max_genes: int = MAX_GENESET_SIZE,
+) -> dict[str, list[str]]:
+    """
+    Load and return gene sets as a dictionary.
+
+    Parameters
+    ----------
+    collection : str
+        Name of the collection to load. Default is "all".
+    url : str, optional
+        URL to load the GMT file from. If None, uses the default collection.
+    filepath : str, optional
+        Local file path to load the GMT file from. If None, uses the default collection.
+    geneset_key : str
+        Column name for the gene set name in the output dictionary.
+    genesymbol_key : str
+        Column name for the gene symbol in the output dictionary.
+    min_genes : int
+        Minimum number of genes in a gene set to include. Default is 5.
+    max_genes : int
+        Maximum number of genes in a gene set to include. Default is 500.
+    """
+    gmt_df = load_gmt(
+        collection=collection,
+        url=url,
+        filepath=filepath,
+        geneset_key=geneset_key,
+        genesymbol_key=genesymbol_key,
+        min_genes=min_genes,
+        max_genes=max_genes,
+    )
+    gmt_df = gmt_df.rename(columns={geneset_key: "source", genesymbol_key: "target"})
+    gene_sets = gmt_df.groupby("source")["target"].apply(list).to_dict()
+    return gene_sets

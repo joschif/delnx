@@ -118,6 +118,19 @@ class BasePlot:
         # Make copy of adata to avoid modifying the original object
         self.adata = self.adata.copy()
 
+        # Make category dtype for groupby_keys if not already categorical
+        if isinstance(self.groupby_keys, str):
+            if self.groupby_keys not in self.adata.obs.columns:
+                raise ValueError(f"Key '{self.groupby_keys}' not found in adata.obs.")
+            if not pd.api.types.is_categorical_dtype(self.adata.obs[self.groupby_keys]):
+                self.adata.obs[self.groupby_keys] = self.adata.obs[self.groupby_keys].astype("category")
+        elif isinstance(self.groupby_keys, list):
+            for key in self.groupby_keys:
+                if key not in self.adata.obs.columns:
+                    raise ValueError(f"Key '{key}' not found in adata.obs.")
+                if not pd.api.types.is_categorical_dtype(self.adata.obs[key]):
+                    self.adata.obs[key] = self.adata.obs[key].astype("category")
+
         # If layer is specified, set as X
         if self.layer is not None:
             self.adata.X = self.adata.layers[self.layer]

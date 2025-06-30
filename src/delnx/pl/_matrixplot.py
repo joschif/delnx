@@ -8,6 +8,7 @@ import pandas as pd
 
 from ..pp._utils import group_by_max
 from ._baseplot import BasePlot
+from ._palettes import default_palette
 
 
 @dataclass
@@ -110,10 +111,25 @@ class MatrixPlot(BasePlot):
             If the key is not found in `adata.obs`.
         """
         values = self.group_metadata[key]
-        palette = dict(zip(list(self.adata.obs[key].cat.categories), self.adata.uns.get(f"{key}_colors"), strict=False))
-        palette = {e: palette[e] for e in values}
+
+        # Extract category names and check for custom color palette
+        categories = list(self.adata.obs[key].cat.categories)
+        uns_key = f"{key}_colors"
+        raw_colors = self.adata.uns.get(uns_key)
+
+        # Create color mapping from either .uns or fallback palette
+        if raw_colors is None:
+            colors = default_palette(len(categories))
+        else:
+            colors = raw_colors
+
+        palette = dict(zip(categories, colors, strict=False))
+
+        # Restrict palette to the relevant group values
+        filtered_palette = {val: palette[val] for val in values}
+
         label = self.group_names[self.groupby_keys.index(key)]
-        colorbar = mp.Colors(list(values), palette=palette, label=label)
+        colorbar = mp.Colors(list(values), palette=filtered_palette, label=label)
         m.add_left(colorbar, size=self.groupbar_size, pad=self.groupbar_pad)
 
     def _build_plot(self):

@@ -4,54 +4,11 @@ from typing import Any
 import gseapy as gp
 import pandas as pd
 
-from ..ds._gmt import load_gmt
+from ..ds._gmt import get_gene_sets
 from ..pp._get_de_genes import get_de_genes
 
 MIN_GENESET_SIZE = 5
 MAX_GENESET_SIZE = 500
-
-
-def get_gene_sets(
-    collection: str = "all",
-    url: str | None = None,
-    filepath: str | None = None,
-    geneset_key: str = "geneset",
-    genesymbol_key: str = "genesymbol",
-    min_genes: int = MIN_GENESET_SIZE,
-    max_genes: int = MAX_GENESET_SIZE,
-) -> dict[str, list[str]]:
-    """
-    Load and return gene sets as a dictionary.
-
-    Parameters
-    ----------
-    collection : str
-        Name of the collection to load. Default is "all".
-    url : str, optional
-        URL to load the GMT file from. If None, uses the default collection.
-    filepath : str, optional
-        Local file path to load the GMT file from. If None, uses the default collection.
-    geneset_key : str
-        Column name for the gene set name in the output dictionary.
-    genesymbol_key : str
-        Column name for the gene symbol in the output dictionary.
-    min_genes : int
-        Minimum number of genes in a gene set to include. Default is 5.
-    max_genes : int
-        Maximum number of genes in a gene set to include. Default is 500.
-    """
-    gmt_df = load_gmt(
-        collection=collection,
-        url=url,
-        filepath=filepath,
-        geneset_key=geneset_key,
-        genesymbol_key=genesymbol_key,
-        min_genes=min_genes,
-        max_genes=max_genes,
-    )
-    gmt_df = gmt_df.rename(columns={geneset_key: "source", genesymbol_key: "target"})
-    gene_sets = gmt_df.groupby("source")["target"].apply(list).to_dict()
-    return gene_sets
 
 
 def single_enrichment_analysis(
@@ -126,6 +83,7 @@ def single_enrichment_analysis(
 
 def de_enrichment_analysis(
     de_results: pd.DataFrame,
+    gene_sets: dict[str, list[str]] | None = None,
     top_n: int | None = None,
     background: Sequence[str] | None = None,
     collection: str = "all",
@@ -146,6 +104,9 @@ def de_enrichment_analysis(
     de_results : pd.DataFrame
         DataFrame containing differential expression results with columns for group, direction, and gene symbols.
         Expected columns: ['group', 'direction', 'gene'].
+    gene_sets : dict[str, list[str]] | None
+        Pre-loaded gene sets as a dictionary where keys are gene set names and values are lists of gene symbols.
+        If None, will load gene sets based on the provided collection, URL, or filepath.
     top_n : int, optional
         If specified, only consider the top N genes per group for enrichment analysis.
     background : Sequence[str], optional
@@ -172,16 +133,17 @@ def de_enrichment_analysis(
     de_genes_dict = get_de_genes(de_results, top_n=top_n)
     all_enrichment_results = []
 
-    # Load gene sets once and reuse
-    gene_sets = get_gene_sets(
-        collection=collection,
-        url=url,
-        filepath=filepath,
-        geneset_key=geneset_key,
-        genesymbol_key=genesymbol_key,
-        min_genes=min_genes,
-        max_genes=max_genes,
-    )
+    if gene_sets is None:
+        # Load gene sets once and reuse
+        gene_sets = get_gene_sets(
+            collection=collection,
+            url=url,
+            filepath=filepath,
+            geneset_key=geneset_key,
+            genesymbol_key=genesymbol_key,
+            min_genes=min_genes,
+            max_genes=max_genes,
+        )
 
     for group, gene_sets_dict in de_genes_dict.items():
         for direction, label in [("up", "UP"), ("down", "DOWN")]:
@@ -194,6 +156,8 @@ def de_enrichment_analysis(
                 gene_sets=gene_sets,
                 method=method,
             )
+            if enr is None or enr.empty:
+                continue
             if "Adjusted P-value" in enr.columns:
                 filtered = enr[enr["Adjusted P-value"] <= cutoff].copy()
                 filtered["up_dw"] = label
