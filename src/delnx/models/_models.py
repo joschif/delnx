@@ -11,6 +11,7 @@ import jax.scipy as jsp
 from jax.scipy import optimize
 from scipy.optimize import minimize
 
+# from jax.scipy.optimize import minimize
 from ._utils import dnb_nll, nb_nll
 
 
@@ -1052,37 +1053,39 @@ class PyDESeq2DispersionEstimator:
         # log_min_disp = jnp.log(self.min_disp)
         # log_max_disp = jnp.log(self.max_disp)
 
-        # def loss(log_alpha: jnp.ndarray) -> jnp.ndarray:
-        #     # closure to be minimized
-        #     alpha = jnp.exp(log_alpha)
-        #     reg = 0
-        #     if use_cr_reg:
-        #         W = mu / (1 + mu * alpha)
-        #         reg += 0.5 * jnp.linalg.slogdet((design_matrix.T * W) @ design_matrix)[1]
-        #     if use_prior_reg:
-        #         reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
-        #     return nb_nll(counts, mu, alpha) + reg
+        def loss(log_alpha: jnp.ndarray) -> jnp.ndarray:
+            # closure to be minimized
+            alpha = jnp.exp(log_alpha)
+            reg = 0
+            if use_cr_reg:
+                W = mu / (1 + mu * alpha)
+                reg += 0.5 * jnp.linalg.slogdet((design_matrix.T * W) @ design_matrix)[1]
+            if use_prior_reg:
+                reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
+            return nb_nll(counts, mu, alpha) + reg
 
-        # def dloss(log_alpha: jnp.ndarray) -> jnp.ndarray:
-        #     # gradient closure
-        #     alpha = jnp.exp(log_alpha)
-        #     reg_grad = 0
+        def dloss(log_alpha: jnp.ndarray) -> jnp.ndarray:
+            # gradient closure
+            alpha = jnp.exp(log_alpha)
+            reg_grad = 0
 
-        #     if use_cr_reg:
-        #         W = mu / (1 + mu * alpha)
-        #         dW = -(W**2)
-        #         reg_grad += (
-        #             0.5
-        #             * (
-        #                 jnp.linalg.inv((design_matrix.T * W) @ design_matrix) * ((design_matrix.T * dW) @ design_matrix)
-        #             ).sum()
-        #         ) * alpha  # since we want the gradient wrt log_alpha,
-        #         # we need to multiply by alpha
+            if use_cr_reg:
+                W = mu / (1 + mu * alpha)
+                dW = -(W**2)
+                reg_grad += (
+                    0.5
+                    * (
+                        jnp.linalg.inv((design_matrix.T * W) @ design_matrix) * ((design_matrix.T * dW) @ design_matrix)
+                    ).sum()
+                ) * alpha  # since we want the gradient wrt log_alpha,
+                # we need to multiply by alpha
 
-        #         reg_grad += (log_alpha - log_alpha_init) / prior_disp_var
-        #     # dnb_nll is the gradient wrt alpha, we need to multiply by alpha to get the
-        #     # gradient wrt log_alpha
-        #     return jnp.array([alpha * dnb_nll(counts, mu, alpha) + reg_grad])
+            if use_prior_reg:
+                reg_grad += (log_alpha - log_alpha_init) / prior_disp_var
+
+            # dnb_nll is the gradient wrt alpha, we need to multiply by alpha to get the
+            # gradient wrt log_alpha
+            return jnp.array([alpha * dnb_nll(counts, mu, alpha) + reg_grad])
 
         # # First try with gradients (like PyDESeq2's L-BFGS-B)
         # init_params = jnp.array([log_alpha_init])
@@ -1119,49 +1122,12 @@ class PyDESeq2DispersionEstimator:
 
         import numpy as np
 
-        def loss(log_alpha: float) -> float:
-            # closure to be minimized
-            alpha = np.exp(log_alpha)
-            reg = 0
-            if use_cr_reg:
-                W = mu / (1 + mu * alpha)
-                reg += 0.5 * np.linalg.slogdet((design_matrix.T * W) @ design_matrix)[1]
-            if use_prior_reg:
-                if prior_disp_var is None:
-                    raise ValueError("Sigma_prior is required for prior regularization")
-                reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
-            return nb_nll(counts, mu, alpha) + reg
-
-        def dloss(log_alpha: float) -> float:
-            # gradient closure
-            alpha = np.exp(log_alpha)
-            reg_grad = 0
-            if use_cr_reg:
-                W = mu / (1 + mu * alpha)
-                dW = -(W**2)
-                reg_grad += (
-                    0.5
-                    * (
-                        np.linalg.inv((design_matrix.T * W) @ design_matrix) * ((design_matrix.T * dW) @ design_matrix)
-                    ).sum()
-                ) * alpha  # since we want the gradient wrt log_alpha,
-                # we need to multiply by alpha
-            if use_prior_reg:
-                if prior_disp_var is None:
-                    raise ValueError("Sigma_prior is required for prior regularization")
-
-                reg_grad += (log_alpha - log_alpha_init) / prior_disp_var
-            # dnb_nll is the gradient wrt alpha, we need to multiply by alpha to get the
-            # gradient wrt log_alpha
-            return alpha * dnb_nll(counts, mu, alpha) + reg_grad
-
         optimizer = "BFGS"  # Use L-BFGS-B for bounded optimization
         res = minimize(
             lambda x: loss(x[0]),
             x0=np.log(alpha_init),
             jac=lambda x: dloss(x[0]),
             method=optimizer,
-            # bounds=([(np.log(self.min_disp), np.log(self.max_disp))] if optimizer == "L-BFGS-B" else None),
         )
         log_alpha_opt = res.x[0]
 
