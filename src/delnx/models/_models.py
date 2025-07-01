@@ -1063,7 +1063,8 @@ class PyDESeq2DispersionEstimator:
     ) -> float:
         """Estimate dispersion using MLE following PyDESeq2 exactly."""
         max_disp = jnp.maximum(self.max_disp, design_matrix.shape[0])
-        log_alpha_init = jnp.log(jnp.clip(alpha_init, self.min_disp, max_disp))
+        alpha_init = jnp.clip(alpha_init, self.min_disp, max_disp)
+        log_alpha_init = jnp.log(alpha_init)
 
         @jax.jit
         def loss(log_alpha: jnp.ndarray) -> jnp.ndarray:
@@ -1098,7 +1099,7 @@ class PyDESeq2DispersionEstimator:
                 counts,
                 design_matrix,
                 mu,
-                jnp.clip(alpha_init, self.min_disp, max_disp),
+                alpha_init,
                 self.min_disp,
                 max_disp,
                 prior_disp_var,
@@ -1140,7 +1141,7 @@ class PyDESeq2DispersionEstimator:
             in_axes=(1, 1, 0),
         )(counts, mu, alpha_init)
 
-    def fit_mean_dispersion_trend(self, dispersions: jnp.ndarray) -> tuple[jnp.ndarray, float]:
+    def fit_mean_dispersion_trend(self, dispersions: jnp.ndarray) -> jnp.ndarray:
         """Fit mean trend (constant dispersion)."""
         mean_disp = trim_mean(
             dispersions[dispersions > 10 * self.min_disp],
@@ -1183,7 +1184,7 @@ class PyDESeq2DispersionEstimator:
         self,
         dispersions: jnp.ndarray,
         normed_means: jnp.ndarray,
-    ) -> dict:
+    ) -> jnp.ndarray:
         """
         Fit parametric dispersion trend: f(μ) = α₁/μ + α₀. This pretty much exactly mimics PyDESeq2.
 
@@ -1249,7 +1250,7 @@ class PyDESeq2DispersionEstimator:
         dispersions: jnp.ndarray,
         normed_means: jnp.ndarray,
         trend_type: str = "parametric",
-    ) -> dict:
+    ) -> jnp.ndarray:
         """
         Main interface for fitting dispersion trends.
 
@@ -1276,7 +1277,7 @@ class PyDESeq2DispersionEstimator:
         else:
             raise ValueError(f"Unknown trend_type: {trend_type}")
 
-    def fit_dispersion_prior(self, dispersions: jnp.ndarray, trend: jnp.ndarray, design_matrix: jnp.ndarray) -> None:
+    def fit_dispersion_prior(self, dispersions: jnp.ndarray, trend: jnp.ndarray, design_matrix: jnp.ndarray) -> float:
         """Fit dispersion variance priors and standard deviation of log-residuals.
 
         The computation is based on genes whose dispersions are above 100 * min_disp.
@@ -1320,7 +1321,7 @@ class PyDESeq2DispersionEstimator:
         trend: jnp.ndarray,
         design_matrix: jnp.ndarray,
         mu_hat: jnp.ndarray,
-    ) -> None:
+    ) -> jnp.ndarray:
         """Fit Maximum a Posteriori dispersion estimates.
 
         After MAP dispersions are fit, filter genes for which we don't apply shrinkage.
