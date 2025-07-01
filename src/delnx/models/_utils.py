@@ -4,7 +4,29 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.scipy.special import gammaln
+from scipy.stats import norm
+
+
+def mean_absolute_deviation(x: np.ndarray) -> float:
+    """
+    Compute a scaled estimator of the mean absolute deviation.
+
+    Used in :meth:`pydeseq2.dds.DeseqDataSet.fit_dispersion_prior()`.
+
+    Parameters
+    ----------
+    features : ndarray
+        1D array whose MAD to compute.
+
+    Returns
+    -------
+    float
+        Mean absolute deviation estimator.
+    """
+    center = np.median(x)
+    return np.median(np.abs(x - center)) / norm.ppf(0.75)
 
 
 def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> float | jnp.ndarray:
