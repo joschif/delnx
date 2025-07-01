@@ -68,7 +68,7 @@ def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> 
     logbinom = gammaln(counts + alpha_inv + epsilon) - gammaln(counts + 1 + epsilon) - gammaln(alpha_inv + epsilon)
 
     # Robust logarithm calculations
-    log_terms = (counts + alpha_inv) * jnp.log(jnp.clip(alpha_inv + mu, 1e-15, None)) - counts * jnp.log(mu)
+    log_terms = (counts + alpha_inv) * jnp.log(alpha_inv + mu) - counts * jnp.log(mu)
 
     # Handle potential NaN/inf values
     logbinom = jnp.where(jnp.isfinite(logbinom), logbinom, 0.0)
@@ -178,7 +178,7 @@ def grid_fit_alpha(
 
         total_loss = base_loss + cr_term + prior_term
 
-        return jnp.where(jnp.isfinite(total_loss), total_loss, 1e10)
+        return jnp.where(jnp.isfinite(total_loss), total_loss, 1e15)
 
     ll_grid = loss(grid)
 

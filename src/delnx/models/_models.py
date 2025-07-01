@@ -12,7 +12,7 @@ import jax.scipy as jsp
 from jax.scipy import optimize
 
 # from jax.scipy.optimize import minimize
-from ._utils import grid_fit_alpha, nb_nll
+from ._utils import grid_fit_alpha, nb_nll, safe_slogdet
 
 # Enable x64 precision globally
 try:
@@ -521,7 +521,7 @@ class NegativeBinomialRegression(Regression):
         eta = jnp.clip(eta, -50, 50)
         mu = jnp.exp(eta)
 
-        # Get the size (r = alpha = 1 / dispersion)
+        # TODO: Potentially compute with nb_nll from here
         r = 1 / jnp.clip(dispersion, self.dispersion_range[0], self.dispersion_range[1])
 
         ll = (
@@ -1069,7 +1069,7 @@ class PyDESeq2DispersionEstimator:
             reg = 0
             if use_cr_reg:
                 W = mu / (1 + mu * alpha)
-                reg += 0.5 * jnp.linalg.slogdet((design_matrix.T * W) @ design_matrix)[1]
+                reg += 0.5 * safe_slogdet((design_matrix.T * W) @ design_matrix)[1]
             if use_prior_reg:
                 reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
             return nb_nll(counts, mu, alpha) + reg
@@ -1081,7 +1081,7 @@ class PyDESeq2DispersionEstimator:
             x0=init_params,
             method="BFGS",
             # This ensures better convergence similar to PyDESeq2
-            options={"maxiter": 200, "gtol": 1e-2},
+            options={"maxiter": 100, "gtol": 1e-2},
         )
 
         # If optimization fails, fallback to grid search
