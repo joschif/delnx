@@ -4,7 +4,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-from jax.scipy.special import gammaln, polygamma
+from jax.scipy.special import gammaln
 
 
 def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> float | jnp.ndarray:
@@ -59,13 +59,23 @@ def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> 
     [1] https://en.wikipedia.org/wiki/Negative_binomial_distribution
     """
     n = counts.shape[0]
+    alpha = jnp.clip(alpha, 1e-10, 1e10)
+    mu = jnp.clip(mu, 1e-10, 1e10)
     alpha_inv = 1.0 / alpha
 
-    logbinom = gammaln(counts + alpha_inv) - gammaln(counts + 1) - gammaln(alpha_inv)
+    # Compute log-binomial coefficient using gammaln for numerical stability
+    epsilon = 0.0
+    logbinom = gammaln(counts + alpha_inv + epsilon) - gammaln(counts + 1 + epsilon) - gammaln(alpha_inv + epsilon)
 
-    nll = n * alpha_inv * jnp.log(alpha) + jnp.sum(
-        -logbinom + (counts + alpha_inv) * jnp.log(alpha_inv + mu) - counts * jnp.log(mu)
-    )
+    # Robust logarithm calculations
+    log_terms = (counts + alpha_inv) * jnp.log(jnp.clip(alpha_inv + mu, 1e-15, None)) - counts * jnp.log(mu)
+
+    # Handle potential NaN/inf values
+    logbinom = jnp.where(jnp.isfinite(logbinom), logbinom, 0.0)
+    log_terms = jnp.where(jnp.isfinite(log_terms), log_terms, 0.0)
+
+    # Final NLL computation
+    nll = n * alpha_inv * jnp.log(alpha) - jnp.sum(logbinom) + jnp.sum(log_terms)
 
     return nll
 
@@ -74,40 +84,17 @@ def nb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float | jnp.ndarray) -> 
 nb_nll_vmap = jax.vmap(nb_nll, in_axes=(None, None, 0))
 
 
-def dnb_nll(counts: jnp.ndarray, mu: jnp.ndarray, alpha: float) -> float:
-    r"""Gradient of the negative log-likelihood of a negative binomial.
+def safe_slogdet(matrix):
+    """Robust slogdet computation for JAX with regularization"""
+    eye = jnp.eye(matrix.shape[-1])
+    reg_matrix = matrix + 1e-12 * eye
 
-    Unvectorized.
+    sign, logdet = jnp.linalg.slogdet(reg_matrix)
 
-    Parameters
-    ----------
-    counts : ndarray
-        Observations.
+    logdet = jnp.where(jnp.isfinite(logdet), logdet, -1e10)
+    sign = jnp.where(jnp.isfinite(sign), sign, 0.0)
 
-    mu : float
-        Mean of the distribution.
-
-    alpha : float
-        Dispersion of the distribution,
-        s.t. the variance is :math:`\mu + \alpha\mu^2`.
-
-    Returns
-    -------
-    float
-        Derivative of negative log likelihood of NB w.r.t. :math:`\alpha`.
-    """
-    alpha_neg1 = 1 / alpha
-    ll_part = (
-        alpha_neg1**2
-        * (
-            polygamma(0, alpha_neg1)
-            - polygamma(0, counts + alpha_neg1)
-            + jnp.log(1 + mu * alpha)
-            + (counts - mu) / (mu + alpha_neg1)
-        ).sum()
-    )
-
-    return -ll_part
+    return sign, logdet
 
 
 @partial(jax.jit, static_argnames=("grid_length", "cr_reg", "prior_reg"))
@@ -170,13 +157,16 @@ def grid_fit_alpha(
 
     def loss(log_alpha: jnp.ndarray) -> jnp.ndarray:
         alpha = jnp.exp(log_alpha)
+        alpha = jnp.clip(alpha, min_disp, max_disp)
+
         W = mu[:, None] / (1 + mu[:, None] * alpha)
+        W = jnp.clip(W, 1e-15, 1e6)
 
         base_loss = nb_nll_vmap(counts, mu, alpha)
 
         cr_term = jnp.where(
             cr_reg,
-            0.5 * jnp.linalg.slogdet((design_matrix.T[:, :, None] * W).transpose(2, 0, 1) @ design_matrix)[1],
+            0.5 * safe_slogdet((design_matrix.T[:, :, None] * W).transpose(2, 0, 1) @ design_matrix)[1],
             0.0,
         )
 
@@ -186,7 +176,9 @@ def grid_fit_alpha(
             0.0,
         )
 
-        return base_loss + cr_term + prior_term
+        total_loss = base_loss + cr_term + prior_term
+
+        return jnp.where(jnp.isfinite(total_loss), total_loss, 1e10)
 
     ll_grid = loss(grid)
 

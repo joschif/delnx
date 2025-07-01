@@ -1,5 +1,6 @@
 """Regression models in JAX."""
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -11,7 +12,17 @@ import jax.scipy as jsp
 from jax.scipy import optimize
 
 # from jax.scipy.optimize import minimize
-from ._utils import dnb_nll, grid_fit_alpha, nb_nll
+from ._utils import grid_fit_alpha, nb_nll
+
+# Enable x64 precision globally
+try:
+    jax.config.update("jax_enable_x64", True)
+    if not jax.config.jax_enable_x64:
+        warnings.warn(
+            "JAX x64 precision could not be enabled. This might lead to numerical instabilities.", stacklevel=2
+        )
+except Exception as e:  # noqa: BLE001
+    warnings.warn(f"JAX configuration failed: {e}", stacklevel=2)
 
 
 @dataclass(frozen=True)
@@ -1063,36 +1074,13 @@ class PyDESeq2DispersionEstimator:
                 reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
             return nb_nll(counts, mu, alpha) + reg
 
-        @jax.jit
-        def dloss(log_alpha: jnp.ndarray) -> jnp.ndarray:
-            # gradient closure
-            alpha = jnp.exp(log_alpha)
-            reg_grad = 0
-
-            if use_cr_reg:
-                W = mu / (1 + mu * alpha)
-                dW = -(W**2)
-                reg_grad += (
-                    0.5
-                    * (
-                        jnp.linalg.inv((design_matrix.T * W) @ design_matrix) * ((design_matrix.T * dW) @ design_matrix)
-                    ).sum()
-                ) * alpha  # since we want the gradient wrt log_alpha,
-                # we need to multiply by alpha
-
-            if use_prior_reg:
-                reg_grad += (log_alpha - log_alpha_init) / prior_disp_var
-
-            # dnb_nll is the gradient wrt alpha, we need to multiply by alpha to get the
-            # gradient wrt log_alpha
-            return jnp.array([alpha * dnb_nll(counts, mu, alpha) + reg_grad])
-
         init_params = jnp.array([log_alpha_init])
 
         res = optimize.minimize(
             lambda x: loss(x[0]),
             x0=init_params,
             method="BFGS",
+            # This ensures better convergence similar to PyDESeq2
             options={"maxiter": 200, "gtol": 1e-2},
         )
 
@@ -1110,7 +1098,7 @@ class PyDESeq2DispersionEstimator:
                 prior_disp_var,
                 use_prior_reg,
                 use_cr_reg,
-                grid_length=1000,
+                grid_length=100,
             ),
             res.x,
         )
