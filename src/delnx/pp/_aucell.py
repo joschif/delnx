@@ -1,6 +1,6 @@
 import decoupler
 
-from ..ds._gmt import load_gmt
+from delnx.ds._gmt import load_gmt
 
 
 def aucell(

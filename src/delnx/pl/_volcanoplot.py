@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from adjustText import adjust_text
 
-from ..pp._get_de_genes import get_de_genes
+from delnx.pp._get_de_genes import get_de_genes
 
 
 class VolcanoPlot:

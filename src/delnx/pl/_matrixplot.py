@@ -1,3 +1,4 @@
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -5,9 +6,9 @@ from typing import Any
 import marsilea as ma
 import marsilea.plotter as mp
 import pandas as pd
-import itertools
 
-from ..pp._utils import group_by_max
+from delnx.pp._utils import group_by_max
+
 from ._baseplot import BasePlot
 from ._palettes import default_palette
 
@@ -15,8 +16,7 @@ from ._palettes import default_palette
 @dataclass
 class MatrixPlot(BasePlot):
     """
-    MatrixPlot visualizes group-level mean expression data as a heatmap,
-    with support for group annotations and flexible row grouping.
+    MatrixPlot visualizes group-level mean expression data as a heatmap with support for group annotations and flexible row grouping.
 
     Parameters
     ----------
@@ -106,7 +106,7 @@ class MatrixPlot(BasePlot):
             return group, categories
 
         # Provided Series or Categorical
-        elif isinstance(self.row_grouping, (pd.Series, pd.Categorical)):
+        elif isinstance(self.row_grouping, pd.Series | pd.Categorical):
             if isinstance(self.row_grouping, pd.Series):
                 values = self.row_grouping.loc[index_source]
             else:

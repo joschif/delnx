@@ -1,3 +1,4 @@
+import itertools
 from dataclasses import dataclass, field
 
 import anndata as ad
@@ -6,7 +7,6 @@ import marsilea.plotter as mp
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import itertools
 
 from ._palettes import default_palette
 
@@ -192,7 +192,7 @@ class BasePlot:
             group = group.loc[index_source] if index_source is not None else group
             group = pd.Categorical(group)
             return group, group.categories
-        elif isinstance(self.row_grouping, (pd.Series, pd.Categorical)):
+        elif isinstance(self.row_grouping, pd.Series | pd.Categorical):
             group = (
                 self.row_grouping.loc[index_source] if isinstance(self.row_grouping, pd.Series) else self.row_grouping
             )
@@ -242,7 +242,6 @@ class BasePlot:
             )
             m.add_left(labels, pad=self.chunk_pad)
 
-
     def _add_column_labels(self, m: ma.Heatmap):
         """
         Add column labels to the heatmap.
@@ -257,9 +256,7 @@ class BasePlot:
         """
         if isinstance(self.markers, dict):
             # Build matching group labels for each column
-            chunk_labels = list(itertools.chain.from_iterable(
-                [key] * len(vals) for key, vals in self.markers.items()
-            ))
+            chunk_labels = list(itertools.chain.from_iterable([key] * len(vals) for key, vals in self.markers.items()))
 
             # Create Categorical with explicit order
             group_labels = pd.Categorical(chunk_labels, categories=list(self.markers.keys()), ordered=True)

@@ -68,7 +68,7 @@ class BaseGSEA:
                             adata_palette = dict(zip(values, self.adata.uns[f"{col}_colors"], strict=False))
                             colors_for_each.append(adata_palette.get(val))
                     palette[g] = next(c for c in colors_for_each if c is not None)
-                except Exception:
+                except StopIteration:
                     palette[g] = None
             # Assign default colors for missing
             missing = [k for k, v in palette.items() if v is None]
