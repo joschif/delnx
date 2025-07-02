@@ -306,7 +306,7 @@ def test_de_data_type_validation(adata_pb_counts):
         )
 
     # Test ANOVA with non-log-normalized data
-    with pytest.warns(UserWarning, match="ANOVA is designed for log-normalized data"):
+    with pytest.warns(UserWarning, match="ANOVA is designed for"):
         de(
             adata_pb_counts,
             condition_key="condition",
@@ -315,7 +315,7 @@ def test_de_data_type_validation(adata_pb_counts):
         )
 
     # Test logistic regression with count data
-    with pytest.warns(UserWarning, match="designed for log-normalized or binary data"):
+    with pytest.warns(UserWarning, match="Logistic regression is designed for"):
         de(
             adata_pb_counts,
             condition_key="condition",

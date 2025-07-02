@@ -40,7 +40,7 @@ def _compute_library_size(adata, layer=None):
     adata : AnnData
         Annotated data matrix containing expression data.
     layer : str, optional
-        Layer in `adata.layers` to use for calculation. If None, uses `adata.X`.
+        Layer in `adata.layers` to use for calculation. If `None`, uses `adata.X`.
 
     Returns
     -------
@@ -86,18 +86,25 @@ def _compute_median_ratio(adata, layer=None):
     """
     X = _get_layer(adata, layer)
 
+    if sparse.issparse(X):
+        raise ValueError(
+            "The median-of-ratios method requires a dense matrix. Please convert the sparse matrix to dense format before using this method."
+        )
+
     # Compute gene-wise mean log counts
     with np.errstate(divide="ignore"):  # ignore division by zero warnings
         log_X = np.log(X)
 
     log_means = log_X.mean(0)
 
-    # Filter out genes with -∞ log means (genes with all zero counts)
+    # Filter out genes with -∞ log means (genes with zero counts)
     filtered_genes = ~np.isinf(log_means)
 
     # Check if we have any genes left after filtering
     if not filtered_genes.any():
-        raise ValueError("All genes have all-zero counts. Cannot compute size factors with median-of-ratios method.")
+        raise ValueError(
+            "All genes have a least one zero count. Cannot compute size factors with median-of-ratios method."
+        )
 
     # Compute log ratios using only filtered genes
     log_ratios = log_X[:, filtered_genes] - log_means[filtered_genes]
@@ -201,8 +208,8 @@ def _compute_quantile_regression(adata, layer=None, min_counts=1, quantiles=np.l
     return size_factors / np.mean(size_factors)
 
 
-def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor", **kwargs):
-    """Compute size factors for RNA-seq normalization.
+def size_factors(adata, method="library_size", layer=None, obs_key_added="size_factor", **kwargs):
+    """Compute size factors for (single-cell) RNA-seq normalization.
 
     This function calculates sample/cell-specific normalization factors (size factors)
     to account for differences in sequencing depth and technical biases between samples.
@@ -213,30 +220,24 @@ def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor",
     ----------
     adata : AnnData
         Annotated data matrix containing expression data.
-    method : str, default="ratio"
+    method : str, default="library_size"
         Method to compute size factors:
-        - "ratio": DESeq2-style median-of-ratios size factors, robust to differential
-          expression between samples. Recommended for bulk RNA-seq and well-covered
-          single-cell data.
-        - "quantile_regression": SCnorm-style quantile regression normalization,
-          accounts for gene-specific count-depth relationships. Recommended for
-          single-cell RNA-seq data with potential gene-dependent biases.
-        - "library_size": Library size normalization based on the total counts per
-          sample. Simple but less robust to highly expressed genes or differential
-          expression.
+            - "ratio": DESeq2-style median-of-ratios size factors, robust to differential expression between samples. Recommended for bulk RNA-seq and well-covered single-cell data.
+            - "quantile_regression": SCnorm-style quantile regression normalization, accounts for gene-specific count-depth relationships. Recommended for single-cell RNA-seq data with potential gene-dependent biases.
+            - "library_size": Library size normalization based on the total counts per sample. Simple but less robust to highly expressed genes or differential expression.
     layer : str, optional
-        Layer in `adata.layers` to use for size factor calculation. If None,
-        uses `adata.X`. Should contain raw (unlogged) counts.
+        Layer in `adata.layers` to use for size factor calculation. If None, uses `adata.X`. Should contain raw (unlogged) counts.
     obs_key_added : str, default="size_factor"
         Key in `adata.obs` where the computed size factors will be stored.
     **kwargs : dict
         Additional parameters for specific methods:
-        - For "quantile_regression": min_counts (default=1), quantiles, batch_size (default=32)
+            - For "quantile_regression": `min_counts` (default=1), `quantiles`, `batch_size` (default=32)
 
     Returns
     -------
-    None
-        Size factors are stored in `adata.obs[obs_key_added]`.
+    Updates ``adata`` in place and sets the following fields:
+
+            - `adata.obs[obs_key_added]`: Size factors for each cell.
 
     Examples
     --------
@@ -263,7 +264,6 @@ def size_factors(adata, method="ratio", layer=None, obs_key_added="size_factor",
     -----
     - Size factors are scaled to have a mean of 1.0 across all samples
     - A warning will be raised if any size factors are zero or negative
-    - For sparse count matrices, computation is automatically adjusted for efficiency
     """
     if method == "ratio":
         size_factors = _compute_median_ratio(adata, layer)

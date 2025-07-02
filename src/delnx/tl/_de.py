@@ -23,19 +23,14 @@ from anndata import AnnData
 from scipy.sparse import csr_matrix, issparse
 
 import delnx as dx
+from delnx._constants import SUPPORTED_BACKENDS
 from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
 from ._effects import _batched_auroc, _log2fc
 from ._jax_tests import _run_batched_de
-from ._utils import (
-    _infer_data_type,
-    _prepare_model_data,
-    _validate_conditions,
-)
-
-SUPPORTED_BACKENDS = ["jax", "statsmodels", "cuml"]
+from ._utils import _check_method_and_data_type, _infer_data_type, _prepare_model_data, _validate_conditions
 
 
 def _grouped_de(
@@ -52,10 +47,10 @@ def _grouped_de(
     layer: str | None = None,
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
-    min_samples: int = 2,
+    min_samples: int = 1,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
-    n_jobs: int = 1,
+    n_cpus: int = 1,
     batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -104,7 +99,7 @@ def _grouped_de(
         - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction.
-    n_jobs : int, default=1
+    n_cpus : int, default=1
         Number of parallel jobs.
     batch_size : int, default=2048
         Number of features to process per batch.
@@ -131,30 +126,42 @@ def _grouped_de(
                 )
             continue
 
-        # Run DE for group
-        group_results = de(
-            adata=adata[mask, :],
-            condition_key=condition_key,
-            reference=reference,
-            group_key=None,
-            method=method,
-            backend=backend,
-            size_factor_key=size_factor_key,
-            dispersion_key=dispersion_key,
-            covariate_keys=covariate_keys,
-            mode=mode,
-            layer=layer,
-            data_type=data_type,
-            log2fc_threshold=log2fc_threshold,
-            min_samples=min_samples,
-            dispersion_method=dispersion_method,
-            multitest_method=multitest_method,
-            n_jobs=n_jobs,
-            batch_size=batch_size,
-            optimizer=optimizer,
-            maxiter=maxiter,
-            verbose=verbose,
-        )
+        # Run DE for group with error handling
+        try:
+            group_results = de(
+                adata=adata[mask, :],
+                condition_key=condition_key,
+                reference=reference,
+                group_key=None,
+                method=method,
+                backend=backend,
+                size_factor_key=size_factor_key,
+                dispersion_key=dispersion_key,
+                covariate_keys=covariate_keys,
+                mode=mode,
+                layer=layer,
+                data_type=data_type,
+                log2fc_threshold=log2fc_threshold,
+                min_samples=min_samples,
+                dispersion_method=dispersion_method,
+                multitest_method=multitest_method,
+                n_cpus=n_cpus,
+                batch_size=batch_size,
+                optimizer=optimizer,
+                maxiter=maxiter,
+                verbose=verbose,
+            )
+            group_results["group"] = group
+            results.append(group_results)
+
+        except ValueError as e:
+            if verbose:
+                warnings.warn(
+                    f"Differential expression analysis failed for group '{group}': {str(e)}. Skipping this group.",
+                    stacklevel=2,
+                )
+            continue
+
         group_results["group"] = group
         results.append(group_results)
 
@@ -175,23 +182,10 @@ def _grouped_de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj"],
+        by=["test_condition", "ref_condition", "padj", "log2fc"],
     ).reset_index(drop=True)
 
-    # Reorder columns
-    return results[
-        [
-            "feature",
-            "test_condition",
-            "ref_condition",
-            "group",
-            "log2fc",
-            "auroc",
-            "coef",
-            "pval",
-            "padj",
-        ]
-    ]
+    return results
 
 
 def de(
@@ -208,16 +202,16 @@ def de(
     layer: str | None = None,
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
-    min_samples: int = 2,
+    min_samples: int = 1,
     dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
-    n_jobs: int = 1,
+    n_cpus: int = 1,
     batch_size: int = 2048,
     optimizer: str = "BFGS",
     maxiter: int = 100,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Perform differential expression analysis between condition levels.
+    """Perform differential expression analysis.
 
     This function runs differential expression testing using various statistical methods
     and backends. It supports both single and grouped comparisons with multiple
@@ -236,43 +230,43 @@ def de(
         each group.
     reference : str | tuple[str, str] | None, default=None
         Reference condition for comparison. Can be:
-        - Single string: reference condition for all comparisons
-        - Tuple (reference, comparison): specific pair to compare
-        - None: automatically determined based on mode
+            - Single string: reference condition for all comparisons
+            - Tuple (reference, comparison): specific pair to compare
+            - :obj:`None`: automatically determined based on mode
     size_factor_key : str | None, default=None
         Column name in `adata.obs` containing size factors for normalization. When using a negative binomial model, this is used as an offset term to account for library size differences. If not provided, size are computed internally based on library size normalization.
     dispersion_key : str | None, default=None
-        Column name in `adata.var` containing precomputed dispersions.
-        Only used for negative binomial methods.
+        Column name in `adata.var` containing precomputed dispersions. Only used for negative binomial methods. If not provided, the function will estimate gene-wise dispersions using the specified `dispersion_method`.
     covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
-        Statistical method for differential expression testing:
-        - "lr": Logistic regression with likelihood ratio test
-        - "deseq2": DESeq2 method for count data (requires pydeseq2)
-        - "negbinom": Negative binomial GLM with Wald test
-        - "anova": ANOVA based on linear model
-        - "anova_residual": Linear model with residual F-test
-        - "binomial": Binomial GLM
+        Method for differential expression testing:
+            - "lr": Constructs a logistic regression model predicting group membership based on each feature individually and compares this to a null model with a likelihood ratio test. Recommended for log-normalized single-cell data.
+            - "deseq2": DESeq2 method (through PyDESeq2) based on a model using the negative binomial distribution. Recommended for (pseudo-)bulk RNA-seq count data.
+            - "negbinom": Wald test based on a negative binomial regression model. Recommended for count single-cell and bulk RNA-seq data.
+            - "anova": ANOVA based on linear model. Recommended for log-normalized or scaled single-cell data.
+            - "anova_residual": Linear model with residual F-test. Recommended for log-normalized or scaled single-cell data
+            - "binomial": Likelihood ratio test based on a binomial regression model. Recommended for binary data such as single-cell and bulk ATAC-seq.
     backend : Backends, default='jax'
         Computational backend for linear model-based methods:
-        - "jax": Custom JAX implementation (batched, GPU-accelerated)
-        - "statsmodels": Standard statsmodels implementation
-        - "cuml": cuML for GPU-accelerated logistic regression
+            - "jax": Custom JAX implementation (batched, GPU-accelerated)
+            - "statsmodels": Standard statsmodels implementation
+            - "cuml": cuML for GPU-accelerated logistic regression
     mode : ComparisonMode, default='all_vs_all'
         Comparison strategy:
-        - "all_vs_all": Compare all pairs of condition levels
-        - "all_vs_ref": Compare all levels against reference
-        - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
+            - "all_vs_all": Compare all pairs of condition levels
+            - "all_vs_ref": Compare all levels against reference
+            - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
     layer : str | None, default=None
-        Layer name in `adata.layers` to use for expression data.
-        If None, uses `adata.X`.
+        Layer name in :attr:`~anndata.AnnData.layers` to use for expression data.
+        If :obj:`None`, uses :attr:`~anndata.AnnData.X`.
     data_type : DataType, default='auto'
         Type of expression data:
-        - "auto": Automatically infer from data
-        - "counts": Raw count data
-        - "lognorm": Log-normalized data (log1p of normalized counts)
-        - "binary": Binary expression data
+            - "auto": Automatically infer from data
+            - "counts": Raw count data
+            - "lognorm": Log-normalized data (log1p of normalized counts)
+            - "binary": Binary expression data
+            - "scaled": Scaled data (e.g., z-scores)
     log2fc_threshold : float, default=0.0
         Minimum absolute log2 fold change threshold for feature inclusion.
         Features below this threshold are excluded from testing.
@@ -281,22 +275,21 @@ def de(
         Comparisons with fewer samples are skipped.
     dispersion_method : str, default='mle'
         Method for estimating gene-wise dispersions for negative binomial models if not provided:
-        - 'mle': Maximum likelihood estimation based an intercept-only model
-        - 'moments': Method of moments
+            - 'mle': Maximum likelihood estimation based an intercept-only model
+            - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
-        Method for multiple testing correction. Accepts any method supported
-        by `statsmodels.stats.multipletests`. Common options include:
-        - "fdr_bh": Benjamini-Hochberg FDR correction
-        - "bonferroni": Bonferroni correction
-    n_jobs : int, default=1
-        Number of parallel jobs for non-JAX backends.
+        Method for multiple testing correction. Accepts any method supported by :func:`statsmodels.stats.multipletests`. Common options include:
+            - "fdr_bh": Benjamini-Hochberg FDR correction
+            - "bonferroni": Bonferroni correction
+    n_cpus : int, default=1
+        Number of CPUs for parallel processing with non-JAX backends.
     batch_size : int, default=2048
         Number of features to process per batch. Reduce for memory-constrained
         environments or very large datasets (>1M samples).
     optimizer : str, default='BFGS'
         Optimization algorithm for JAX backend:
-        - "BFGS": BFGS optimizer via jax.scipy.optimize
-        - "IRLS": Iteratively reweighted least squares (experimental)
+            - "BFGS": BFGS optimizer via :func:`jax.scipy.optimize.minimize`
+            - "IRLS": Iteratively reweighted least squares (experimental)
     maxiter : int, default=100
         Maximum number of optimization iterations.
     verbose : bool, default=True
@@ -304,17 +297,17 @@ def de(
 
     Returns
     -------
-    pd.DataFrame
-        Differential expression results with columns:
-        - "feature": Feature/gene names
-        - "test_condition": Test condition label
-        - "ref_condition": Reference condition label
-        - "log2fc": Log2 fold change (test vs reference)
-        - "auroc": Area under ROC curve
-        - "coef": Model coefficient
-        - "pval": Raw p-value
-        - "padj": Adjusted p-value (multiple testing corrected)
-        - "group": Group label (only for grouped DE)
+    :obj:`pandas.DataFrame` with differential expression results with columns:
+
+            - "feature": Feature/gene names
+            - "test_condition": Test condition label
+            - "ref_condition": Reference condition label
+            - "log2fc": Log2 fold change (test vs reference)
+            - "auroc": Area under ROC curve
+            - "coef": Model coefficient
+            - "pval": Raw p-value
+            - "padj": Adjusted p-value (multiple testing corrected)
+            - "group": Group label (only for grouped DE)
 
     Raises
     ------
@@ -329,6 +322,7 @@ def de(
     >>> results = de(adata, condition_key="treatment", reference="control", mode="all_vs_ref")
 
     Pairwise DE testing between all conditions:
+
     >>> results = de(adata, condition_key="treatment", mode="all_vs_all")
 
     Grouped DE by cell type with covariates:
@@ -349,6 +343,7 @@ def de(
     ... )
 
     Using other methods and backends:
+
     >>> results = de(adata, method="binomial", backend="statsmodels", condition_key="treatment")
     >>> results = de(adata, method="anova", condition_key="treatment", data_type="lognorm")
     >>> results = de(adata, method="lr", backend="cuml", condition_key="treatment")
@@ -357,13 +352,13 @@ def de(
     Notes
     -----
     - Method and data type compatibility:
-      - "deseq2" and "negbinom" require count data
-      - "binomial" requires binary data
-      - "lr" works best with log-normalized or binary data
-      - "anova" methods work best with log-normalized data
+        - "deseq2" and "negbinom" require count data
+        - "binomial" requires binary data
+        - "lr" works best with log-normalized or binary data
+        - "anova" methods work best with log-normalized data
     - Backend options:
         - "jax" provides batched, GPU-accelerated testing with the following methods: "lr", "negbinom", "anova", "anova_residual"
-        - "statsmodels" uses [statsmodels](https://www.statsmodels.org/stable/index.html) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
+        - "statsmodels" uses statsmodels (https://www.statsmodels.org/) implementations of regression models with the following methods: "lr", "negbinom", "anova", "anova_residual", "binomial"
         - "cuml" provides GPU-accelerated logistic regression with the "lr" method
     - The "deseq2" method ignores the `backend` parameter and always uses the PyDESeq2 implementation.
     - Size factors and dispersion parameters should be pre-computed for the "negbinom" method.
@@ -418,7 +413,7 @@ def de(
             min_samples=min_samples,
             dispersion_method=dispersion_method,
             multitest_method=multitest_method,
-            n_jobs=n_jobs,
+            n_cpus=n_cpus,
             batch_size=batch_size,
             optimizer=optimizer,
             maxiter=maxiter,
@@ -437,24 +432,7 @@ def de(
         print(f"Using specified data type: {data_type}")
 
     # Validate method and data type combinations
-    if method == "deseq2" and data_type != "counts":
-        raise ValueError(f"DESeq2 requires count data. Current data type is {data_type}.")
-    elif method == "negbinom" and data_type != "counts":
-        raise ValueError(f"Negative binomial models require count data. Current data type is {data_type}.")
-    elif method == "binomial" and data_type != "binary":
-        raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
-    elif method == "lr" and data_type not in ["lognorm", "binary"]:
-        warnings.warn(
-            "Logistic regression is designed for log-normalized or binary data. "
-            f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
-        )
-    elif (method == "anova" or method == "anova_residual") and data_type != "lognorm":
-        warnings.warn(
-            "ANOVA is designed for log-normalized data. "
-            f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
-        )
+    _check_method_and_data_type(method, data_type)
 
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
@@ -468,7 +446,7 @@ def de(
             covariate_keys=covariate_keys,
             multitest_method=multitest_method,
             layer=layer,
-            n_cpus=n_jobs,
+            n_cpus=n_cpus,
             verbose=verbose,
         )
 
@@ -485,6 +463,7 @@ def de(
                     f"Skipping comparison {group1} vs {group2} with < {min_samples} samples",
                     stacklevel=2,
                 )
+            results.append(pd.DataFrame())
             continue
 
         all_mask = mask1 | mask2
@@ -509,6 +488,8 @@ def de(
 
         # Calculate log2 fold change
         log2fc = _log2fc(X=X_norm, condition_mask=condition_mask, data_type=data_type)
+        # Clip log2fc to avoid extreme values
+        log2fc = np.clip(log2fc, -10, 10)
 
         # Apply log2fc threshold
         feature_mask = np.abs(log2fc) > log2fc_threshold
@@ -547,7 +528,7 @@ def de(
                 condition_key=condition_key,
                 size_factors=sf_comp,
                 covariate_keys=covariate_keys,
-                n_jobs=n_jobs,
+                n_cpus=n_cpus,
                 verbose=verbose,
             )
 
@@ -588,6 +569,9 @@ def de(
             "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
         )
 
+    # Clip p-values at 1e-15
+    results["pval"] = np.clip(results["pval"], 1e-50, 1)
+
     # Perform multiple testing correction
     padj = sm.stats.multipletests(
         results["pval"][results["pval"].notna()].values,
@@ -597,7 +581,7 @@ def de(
     results.loc[results["pval"].notna(), "padj"] = padj
 
     results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj"],
+        by=["test_condition", "ref_condition", "padj", "log2fc"],
     ).reset_index(drop=True)
 
     # Reorder columns

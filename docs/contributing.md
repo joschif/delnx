@@ -1,4 +1,4 @@
-# Contributing guide
+# 👥 Contributing guide
 
 Scanpy provides extensive [developer documentation][scanpy developer guide], most of which applies to this project, too.
 This document will not reproduce the entire content from there.
