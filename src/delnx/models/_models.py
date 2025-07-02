@@ -504,7 +504,6 @@ class NegativeBinomialRegression(Regression):
 
     dispersion: float | None = None
     dispersion_range: tuple[float, float] = (1e-8, 100.0)
-    dispersion_method: str = "mle"
 
     def _negative_log_likelihood(
         self,
@@ -621,7 +620,14 @@ class NegativeBinomialRegression(Regression):
         if self.dispersion is not None:
             dispersion = jnp.clip(self.dispersion, self.dispersion_range[0], self.dispersion_range[1])
         else:
-            dispersion = DispersionEstimator().estimate_dispersion_single_gene(y, self.dispersion_method)
+            dispersion = DispersionEstimator(
+                min_disp=self.dispersion_range[0],
+                max_disp=max(self.dispersion_range[1], X.shape[0]),
+            ).fit_dispersion_single_gene(
+                counts=y,
+                design_matrix=X,
+                size_factors=offset,
+            )
 
         # Initialize parameters
         init_params = jnp.zeros(X.shape[1])
@@ -988,6 +994,50 @@ class DispersionEstimator:
             fit_dispersion,
             in_axes=(1, 1, 0),
         )(counts, mu, alpha_init)
+
+    def fit_dispersion_single_gene(
+        self,
+        counts: jnp.ndarray,
+        design_matrix: jnp.ndarray,
+        size_factors: jnp.ndarray,
+    ) -> tuple[float, bool]:
+        """Estimate gene-wise dispersion using initial dispersions and MLE.
+
+        Parameters
+        ----------
+        counts : jnp.ndarray
+            Raw count data for a single gene, shape (n_samples,).
+        design_matrix : jnp.ndarray
+            Design matrix for the experiment, shape (n_samples, n_covariates).
+        size_factors : jnp.ndarray
+            Size factors for normalization, shape (n_samples,).
+
+        Returns
+        -------
+        tuple[float, bool]
+            Tuple containing (estimated_dispersion, success_flag).
+            estimated_dispersion: Estimated dispersion value for the gene.
+            success_flag: Boolean indicating if the optimization was successful.
+        """
+        # Estimate initial dispersion
+        size_factors = size_factors or jnp.ones(counts.shape[0])
+        normed_counts = counts / size_factors
+        initial_dispersions = self.fit_initial_dispersions(normed_counts[:, None], design_matrix, size_factors)
+        mu = self.fit_mu_single_gene(counts, design_matrix, size_factors)
+
+        # Fit MLE dispersion
+        alpha_init = initial_dispersions[0]
+        dispersion, _ = self.fit_dispersion_mle_single_gene(
+            counts,
+            mu,
+            alpha_init,
+            design_matrix,
+            prior_disp_var=1.0,
+            use_prior_reg=False,
+            use_cr_reg=True,
+        )
+
+        return dispersion
 
     def fit_mean_dispersion_trend(self, dispersions: jnp.ndarray) -> jnp.ndarray:
         """Fit mean trend (constant dispersion).

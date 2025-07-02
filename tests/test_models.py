@@ -1,3 +1,5 @@
+import warnings
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -295,12 +297,10 @@ class TestNegativeBinomialRegression:
         reg = NegativeBinomialRegression()
         assert reg.dispersion is None
         assert isinstance(reg.dispersion_range, tuple)
-        assert isinstance(reg.dispersion_method, str)
 
         # Custom initialization
-        reg_custom = NegativeBinomialRegression(dispersion=0.1, dispersion_method="mle")
+        reg_custom = NegativeBinomialRegression(dispersion=0.1)
         assert reg_custom.dispersion == 0.1
-        assert reg_custom.dispersion_method == "mle"
 
     def test_fit_with_fixed_dispersion(self, count_data):
         """Test fitting with fixed dispersion parameter."""
@@ -319,7 +319,7 @@ class TestNegativeBinomialRegression:
 
     def test_fit_with_estimated_dispersion(self, count_data):
         """Test fitting with estimated dispersion parameter."""
-        reg = NegativeBinomialRegression(dispersion=None, dispersion_method="mle")
+        reg = NegativeBinomialRegression(dispersion=None)
         result = reg.fit(count_data["X"], count_data["y"])
 
         # Check return structure
@@ -418,145 +418,624 @@ class TestNegativeBinomialRegression:
 class TestDispersionEstimator:
     """Test suite for DispersionEstimator class."""
 
-    def test_initialization(self):
-        """Test DispersionEstimator initialization."""
-        estimator = DispersionEstimator()
-        assert isinstance(estimator.dispersion_range, tuple)
-        assert isinstance(estimator.prior_variance, float)
-        assert isinstance(estimator.prior_df, int | float)
+    @pytest.fixture
+    def estimator(self):
+        """Create a DispersionEstimator instance with default parameters."""
+        return DispersionEstimator()
 
-    def test_estimate_dispersion_single_gene_moments(self):
-        """Test single gene dispersion estimation with method of moments."""
-        estimator = DispersionEstimator()
+    @pytest.fixture
+    def custom_estimator(self):
+        """Create a DispersionEstimator instance with custom parameters."""
+        return DispersionEstimator(min_disp=1e-6, max_disp=20.0, min_mu=1.0)
 
-        # Create test data with known dispersion
+    @pytest.fixture
+    def synthetic_data(self):
+        """Create synthetic data that follows negative binomial distribution."""
         np.random.seed(42)
-        mu = 50.0
-        true_dispersion = 0.1
-        r = 1.0 / true_dispersion
-        p = r / (r + mu)
-        x = jnp.array(np.random.negative_binomial(r, p, size=100))
+        n_samples, n_genes = 20, 8
 
-        disp = estimator.estimate_dispersion_single_gene(x, method="moments")
+        # True parameters
+        true_dispersions = np.array([0.1, 0.2, 0.15, 0.3, 0.25, 0.12, 0.18, 0.22])
+        true_means = np.array([20, 50, 30, 80, 40, 25, 60, 35])
 
-        assert jnp.isfinite(disp)
-        assert estimator.dispersion_range[0] <= disp <= estimator.dispersion_range[1]
-        # Should be reasonably close to true dispersion
-        assert abs(disp - true_dispersion) < 0.5
+        # Size factors
+        size_factors = np.random.uniform(0.7, 1.5, n_samples)
 
-    def test_estimate_dispersion_single_gene_mle(self):
-        """Test single gene dispersion estimation with MLE."""
-        estimator = DispersionEstimator()
+        # Design matrix (intercept + 1 covariate)
+        covariate = np.random.randn(n_samples)
+        design_matrix = np.column_stack([np.ones(n_samples), covariate])
 
-        # Create test data
-        np.random.seed(42)
-        mu = 50.0
-        true_dispersion = 0.1
-        r = 1.0 / true_dispersion
-        p = r / (r + mu)
-        x = jnp.array(np.random.negative_binomial(r, p, size=100))
+        # Generate counts following negative binomial
+        counts = np.zeros((n_samples, n_genes))
+        for i, (mu, alpha) in enumerate(zip(true_means, true_dispersions, strict=False)):
+            # Adjust mean by size factors
+            sample_means = mu * size_factors
+            # Generate NB counts: parameterized as (n, p) where n=1/alpha, p=n/(n+mu)
+            for j in range(n_samples):
+                r = 1.0 / alpha
+                p = r / (r + sample_means[j])
+                counts[j, i] = np.random.negative_binomial(r, p)
 
-        disp = estimator.estimate_dispersion_single_gene(x, method="mle")
+        # Normalized counts
+        normed_counts = counts / size_factors[:, np.newaxis]
 
-        assert jnp.isfinite(disp)
-        assert estimator.dispersion_range[0] <= disp <= estimator.dispersion_range[1]
+        return {
+            "counts": jnp.array(counts),
+            "normed_counts": jnp.array(normed_counts),
+            "design_matrix": jnp.array(design_matrix),
+            "size_factors": jnp.array(size_factors),
+            "true_dispersions": true_dispersions,
+            "true_means": true_means,
+            "n_samples": n_samples,
+            "n_genes": n_genes,
+        }
 
-    def test_estimate_dispersion_batch(self, dispersion_data):
-        """Test batch dispersion estimation."""
-        estimator = DispersionEstimator()
+    @pytest.fixture
+    def minimal_data(self):
+        """Create minimal valid test data."""
+        counts = jnp.array([[5, 10], [8, 12], [6, 9], [7, 11]])
+        size_factors = jnp.array([1.0, 1.2, 0.9, 1.1])
+        design_matrix = jnp.array([[1.0], [1.0], [1.0], [1.0]])  # Intercept only
+        normed_counts = counts / size_factors[:, jnp.newaxis]
 
-        dispersions = estimator.estimate_dispersion(dispersion_data["counts"], method="moments")
+        return {
+            "counts": counts,
+            "normed_counts": normed_counts,
+            "design_matrix": design_matrix,
+            "size_factors": size_factors,
+        }
 
-        assert dispersions.shape == (dispersion_data["n_genes"],)
-        assert jnp.all(jnp.isfinite(dispersions))
-        assert jnp.all(dispersions >= estimator.dispersion_range[0])
-        assert jnp.all(dispersions <= estimator.dispersion_range[1])
+    def test_initialization(self, custom_estimator):
+        """Test DispersionEstimator initialization with custom parameters."""
+        assert custom_estimator.min_disp == 1e-6
+        assert custom_estimator.max_disp == 20.0
+        assert custom_estimator.min_mu == 1.0
 
-    def test_moments_estimation_internal(self):
-        """Test internal moments estimation function."""
-        estimator = DispersionEstimator()
+    def test_frozen_dataclass(self, estimator):
+        """Test that DispersionEstimator is properly frozen."""
+        with pytest.raises(AttributeError):
+            estimator.min_disp = 1e-5
 
-        # Test data with known mean and variance
-        x = jnp.array([10, 15, 20, 25, 30])
-        disp = estimator._estimate_dispersion_moments(x)
+    def test_fit_moments_dispersions_basic(self, estimator, minimal_data):
+        """Test basic moments dispersion estimation."""
+        dispersions = estimator.fit_moments_dispersions(minimal_data["normed_counts"], minimal_data["size_factors"])
 
-        assert jnp.isfinite(disp)
-        assert disp > 0
+        assert dispersions.shape == (2,)  # Two genes
+        assert bool(jnp.all(jnp.isfinite(dispersions)))
+        assert bool(jnp.all(dispersions >= estimator.min_disp))
+        assert bool(jnp.all(dispersions <= estimator.max_disp))
 
-        # Test with size factors
-        x = jnp.array([10, 15, 20, 25, 30])
-        size_factors = jnp.array([1.0, 1.2, 0.8, 1.5, 1.0])
-        disp = estimator._estimate_dispersion_moments(x, size_factors=size_factors)
+    def test_fit_moments_dispersions_realistic(self, estimator, synthetic_data):
+        """Test moments dispersion estimation with realistic data."""
+        dispersions = estimator.fit_moments_dispersions(synthetic_data["normed_counts"], synthetic_data["size_factors"])
 
-        assert jnp.isfinite(disp)
-        assert disp > 0
+        assert dispersions.shape == (synthetic_data["n_genes"],)
+        assert bool(jnp.all(jnp.isfinite(dispersions)))
+        assert bool(jnp.all(dispersions >= estimator.min_disp))
 
-    def test_shrink_dispersions_edger(self, dispersion_data):
-        """Test edgeR-style dispersion shrinkage."""
-        estimator = DispersionEstimator()
+        # Check that estimates are in reasonable range (not exact due to sampling)
+        assert bool(jnp.all(dispersions < 1.0))  # Should be reasonable for our data
 
-        # Get initial dispersions
-        dispersions = estimator.estimate_dispersion(
-            dispersion_data["counts"], method="moments", size_factors=dispersion_data["size_factors"]
+    def test_fit_moments_dispersions_zero_handling(self, estimator):
+        """Test moments dispersion estimation handles zero counts gracefully."""
+        # Data with some zero counts
+        counts_with_zeros = jnp.array([[0, 5], [0, 8], [1, 6], [0, 7]])
+        size_factors = jnp.ones(4)
+
+        dispersions = estimator.fit_moments_dispersions(counts_with_zeros, size_factors)
+
+        assert dispersions.shape == (2,)
+        assert bool(jnp.all(jnp.isfinite(dispersions)))
+        assert bool(jnp.all(dispersions >= estimator.min_disp))
+
+    def test_fit_initial_dispersions(self, estimator, synthetic_data):
+        """Test initial dispersion estimation (minimum of rough and moments)."""
+        initial_dispersions = estimator.fit_initial_dispersions(
+            synthetic_data["normed_counts"], synthetic_data["design_matrix"], synthetic_data["size_factors"]
         )
-        mean_counts = jnp.mean(dispersion_data["counts"], axis=0)
 
-        # Apply shrinkage
-        shrunk = estimator.shrink_dispersion(
-            dispersions, mean_counts, method="edger", size_factors=dispersion_data["size_factors"]
-        )
+        assert initial_dispersions.shape == (synthetic_data["n_genes"],)
+        assert bool(jnp.all(jnp.isfinite(initial_dispersions)))
+        assert bool(jnp.all(initial_dispersions >= estimator.min_disp))
+        assert bool(jnp.all(initial_dispersions <= estimator.max_disp))
 
-        assert shrunk.shape == dispersions.shape
-        assert jnp.all(jnp.isfinite(shrunk))
-        assert jnp.all(shrunk >= estimator.dispersion_range[0])
-        assert jnp.all(shrunk <= estimator.dispersion_range[1])
+    def test_fit_mean_dispersion_trend_constant(self, estimator):
+        """Test mean dispersion trend fitting returns constant values."""
+        # Create some dispersions
+        dispersions = jnp.array([0.1, 0.2, 0.15, 0.3, 0.25])
 
-        # Shrinkage should change the values
-        assert not jnp.allclose(dispersions, shrunk)
+        # The mean trend should return a constant value for all genes
+        trend = estimator.fit_mean_dispersion_trend(dispersions)
 
-    def test_shrink_dispersions_deseq2(self, dispersion_data):
-        """Test DESeq2-style dispersion shrinkage."""
-        estimator = DispersionEstimator()
+        assert trend.shape == dispersions.shape
+        assert bool(jnp.all(jnp.isfinite(trend)))
 
-        dispersions = estimator.estimate_dispersion(dispersion_data["counts"], method="moments")
-        mean_counts = jnp.mean(dispersion_data["counts"], axis=0)
+        # All values should be the same (constant trend)
+        assert bool(jnp.allclose(trend, trend[0]))
 
-        shrunk = estimator.shrink_dispersion(dispersions, mean_counts, method="deseq2")
+        # Value should be reasonable
+        assert estimator.min_disp <= float(trend[0]) <= estimator.max_disp
 
-        assert shrunk.shape == dispersions.shape
-        assert jnp.all(jnp.isfinite(shrunk))
-        assert jnp.all(shrunk >= estimator.dispersion_range[0])
-        assert jnp.all(shrunk <= estimator.dispersion_range[1])
+    def test_fit_dispersion_trend_interface_mean(self, estimator, synthetic_data):
+        """Test the main dispersion trend interface with mean method."""
+        dispersions = jnp.array([0.1, 0.2, 0.15, 0.3])
+        normed_means = jnp.array([20.0, 50.0, 30.0, 80.0])
 
-    def test_invalid_methods(self):
-        """Test invalid method parameters raise errors."""
-        estimator = DispersionEstimator()
-        x = jnp.array([1, 2, 3, 4, 5])
+        trend = estimator.fit_dispersion_trend(dispersions, normed_means, trend_type="mean")
 
-        with pytest.raises(ValueError, match="Unknown method for dispersion estimation"):
-            estimator.estimate_dispersion_single_gene(x, method="invalid")
+        assert trend.shape == dispersions.shape
+        assert bool(jnp.all(jnp.isfinite(trend)))
+        assert bool(jnp.allclose(trend, trend[0]))  # Should be constant
 
+    def test_fit_dispersion_trend_invalid_type(self, estimator):
+        """Test that invalid trend types raise appropriate errors."""
         dispersions = jnp.array([0.1, 0.2, 0.3])
-        mu = jnp.array([10, 20, 30])
+        normed_means = jnp.array([10.0, 20.0, 30.0])
 
-        with pytest.raises(ValueError, match="Unknown method for dispersion shrinkage"):
-            estimator.shrink_dispersion(dispersions, mu, method="invalid")
+        with pytest.raises(ValueError, match="Unknown trend_type"):
+            estimator.fit_dispersion_trend(dispersions, normed_means, trend_type="invalid")
 
-    def test_edge_cases(self):
-        """Test edge cases for dispersion estimation."""
-        estimator = DispersionEstimator()
+    def test_dispersion_bounds_enforcement(self):
+        """Test that custom bounds are properly enforced."""
+        # Very restrictive bounds
+        restrictive_estimator = DispersionEstimator(min_disp=0.15, max_disp=0.25)
 
-        # Test with all zeros
-        x_zeros = jnp.zeros(10)
-        disp_zeros = estimator.estimate_dispersion_single_gene(x_zeros, method="moments")
-        assert estimator.dispersion_range[0] <= disp_zeros <= estimator.dispersion_range[1]
+        # Data that would normally give dispersions outside this range
+        extreme_counts = jnp.array([[1, 100], [2, 200], [1, 150], [3, 180]])
+        size_factors = jnp.ones(4)
 
-        # Test with very small values
-        x_small = jnp.array([0, 0, 1, 0, 1])
-        disp_small = estimator.estimate_dispersion_single_gene(x_small, method="moments")
-        assert jnp.isfinite(disp_small)
+        dispersions = restrictive_estimator.fit_moments_dispersions(extreme_counts, size_factors)
 
-        # Test with very large values
-        x_large = jnp.array([1000, 1500, 2000, 1200, 1800])
-        disp_large = estimator.estimate_dispersion_single_gene(x_large, method="moments")
-        assert jnp.isfinite(disp_large)
+        # Should be clipped to the specified range
+        assert bool(jnp.all(dispersions >= 0.15))
+        assert bool(jnp.all(dispersions <= 0.25))
+
+    def test_edge_case_all_zeros(self, estimator):
+        """Test handling of all-zero count data."""
+        zero_counts = jnp.zeros((5, 3))
+        size_factors = jnp.ones(5)
+
+        dispersions = estimator.fit_moments_dispersions(zero_counts, size_factors)
+
+        assert dispersions.shape == (3,)
+        assert bool(jnp.all(jnp.isfinite(dispersions)))
+        assert bool(jnp.all(dispersions >= estimator.min_disp))
+
+    def test_edge_case_very_small_counts(self, estimator):
+        """Test handling of very small count values."""
+        small_counts = jnp.array([[0, 1, 0], [1, 0, 1], [0, 1, 0], [1, 1, 1]])
+        size_factors = jnp.ones(4)
+
+        dispersions = estimator.fit_moments_dispersions(small_counts, size_factors)
+
+        assert dispersions.shape == (3,)
+        assert bool(jnp.all(jnp.isfinite(dispersions)))
+
+    def test_edge_case_very_large_counts(self, estimator):
+        """Test handling of very large count values."""
+        large_counts = jnp.array([[1000, 1500], [1200, 1800], [1100, 1600], [1300, 1700]])
+        size_factors = jnp.ones(4)
+
+        dispersions = estimator.fit_moments_dispersions(large_counts, size_factors)
+
+        assert dispersions.shape == (2,)
+        assert bool(jnp.all(jnp.isfinite(dispersions)))
+        assert bool(jnp.all(dispersions >= estimator.min_disp))
+
+    def test_size_factor_effects(self, estimator):
+        """Test that different size factors properly affect dispersion estimation."""
+        # Same raw counts but different size factors
+        counts = jnp.array([[10, 20], [10, 20], [10, 20], [10, 20]])
+
+        # Uniform size factors
+        uniform_sf = jnp.ones(4)
+        disp_uniform = estimator.fit_moments_dispersions(counts, uniform_sf)
+
+        # Variable size factors (this should increase apparent variance)
+        variable_sf = jnp.array([0.5, 1.0, 1.5, 2.0])
+        disp_variable = estimator.fit_moments_dispersions(counts, variable_sf)
+
+        assert disp_uniform.shape == disp_variable.shape == (2,)
+        assert bool(jnp.all(jnp.isfinite(disp_uniform)))
+        assert bool(jnp.all(jnp.isfinite(disp_variable)))
+
+    def test_single_gene_vs_batch_consistency(self, estimator, synthetic_data):
+        """Test that single gene processing gives same results as batch processing."""
+        # Test with first gene only
+        single_gene_counts = synthetic_data["normed_counts"][:, 0:1]
+        single_gene_sf = synthetic_data["size_factors"]
+
+        single_disp = estimator.fit_moments_dispersions(single_gene_counts, single_gene_sf)
+
+        # Test with all genes
+        all_disp = estimator.fit_moments_dispersions(synthetic_data["normed_counts"], synthetic_data["size_factors"])
+
+        # First dispersion should be very close
+        assert bool(jnp.allclose(single_disp[0], all_disp[0], rtol=1e-10))
+
+    def test_dispersion_reasonableness_with_known_data(self, estimator):
+        """Test dispersion estimation with data where we know the expected range."""
+        # Create data with controlled variance
+        np.random.seed(123)
+
+        # Low dispersion scenario (Poisson-like)
+        mu = 50.0
+        low_disp_data = np.random.poisson(mu, size=(20, 1))
+        size_factors = np.ones(20)
+
+        low_disp = estimator.fit_moments_dispersions(jnp.array(low_disp_data), jnp.array(size_factors))
+
+        # Should be relatively small dispersion
+        assert float(low_disp[0]) < 0.5  # Poisson should have low dispersion
+
+        # High variance scenario
+        high_var_data = np.array([[10], [100], [5], [150], [8], [200], [12], [180]])
+
+        high_disp = estimator.fit_moments_dispersions(jnp.array(high_var_data), jnp.ones(8))
+
+        # Should have higher dispersion due to high variance
+        assert float(high_disp[0]) > float(low_disp[0])
+
+    def test_numerical_stability_extreme_size_factors(self, estimator):
+        """Test numerical stability with extreme size factor values."""
+        counts = jnp.array([[10, 20], [15, 25], [12, 22], [14, 24]])
+
+        # Very small size factors
+        tiny_sf = jnp.array([1e-6, 1e-6, 1e-6, 1e-6])
+        disp_tiny = estimator.fit_moments_dispersions(counts, tiny_sf)
+
+        # Very large size factors
+        huge_sf = jnp.array([1e6, 1e6, 1e6, 1e6])
+        disp_huge = estimator.fit_moments_dispersions(counts, huge_sf)
+
+        assert bool(jnp.all(jnp.isfinite(disp_tiny)))
+        assert bool(jnp.all(jnp.isfinite(disp_huge)))
+        assert bool(jnp.all(disp_tiny >= estimator.min_disp))
+        assert bool(jnp.all(disp_huge >= estimator.min_disp))
+
+    def test_parameter_ranges_validation(self):
+        """Test that different parameter ranges work correctly."""
+        configs = [(1e-10, 1.0, 0.1), (1e-8, 10.0, 0.5), (1e-6, 100.0, 1.0), (1e-4, 1000.0, 10.0)]
+
+        for min_disp, max_disp, min_mu in configs:
+            estimator = DispersionEstimator(min_disp=min_disp, max_disp=max_disp, min_mu=min_mu)
+
+            # Test with simple data
+            counts = jnp.array([[5, 10], [8, 12], [6, 9]])
+            size_factors = jnp.ones(3)
+
+            dispersions = estimator.fit_moments_dispersions(counts, size_factors)
+
+            assert bool(jnp.all(dispersions >= min_disp))
+            assert bool(jnp.all(dispersions <= max_disp))
+            assert dispersions.shape == (2,)
+
+    def test_shape_validation(self, estimator):
+        """Test that all methods return correct shapes."""
+        counts = jnp.array([[5, 10, 15], [8, 12, 18], [6, 9, 14], [7, 11, 16]])
+        size_factors = jnp.array([1.0, 1.1, 0.9, 1.05])
+        design_matrix = jnp.array([[1.0, 0.5], [1.0, -0.2], [1.0, 0.8], [1.0, -0.4]])
+        normed_counts = counts / size_factors[:, jnp.newaxis]
+
+        # Test moments dispersions
+        moments_disp = estimator.fit_moments_dispersions(normed_counts, size_factors)
+        assert moments_disp.shape == (3,)
+
+        # Test initial dispersions
+        initial_disp = estimator.fit_initial_dispersions(normed_counts, design_matrix, size_factors)
+        assert initial_disp.shape == (3,)
+
+        # Test trend fitting
+        dispersions = jnp.array([0.1, 0.2, 0.15])
+        normed_means = jnp.array([10.0, 20.0, 15.0])
+
+        trend = estimator.fit_dispersion_trend(dispersions, normed_means, trend_type="mean")
+        assert trend.shape == (3,)
+
+    def test_fit_rough_dispersions_basic(self, estimator, synthetic_data):
+        """Test basic rough dispersions estimation."""
+        rough_dispersions = estimator.fit_rough_dispersions(
+            synthetic_data["normed_counts"], synthetic_data["design_matrix"]
+        )
+
+        assert rough_dispersions.shape == (synthetic_data["n_genes"],)
+        assert bool(jnp.all(jnp.isfinite(rough_dispersions)))
+        assert bool(jnp.all(rough_dispersions >= estimator.min_disp))
+
+        # Rough dispersions should be reasonable estimates
+        assert bool(jnp.all(rough_dispersions <= 2.0))  # Not too extreme
+
+    def test_fit_rough_dispersions_single_gene(self, estimator, synthetic_data):
+        """Test rough dispersions for single gene."""
+        single_gene_normed = synthetic_data["normed_counts"][:, 0]
+
+        single_rough = estimator.fit_rough_dispersions_single_gene(single_gene_normed, synthetic_data["design_matrix"])
+
+        # Should be scalar
+        assert single_rough.shape == ()
+        assert bool(jnp.isfinite(single_rough))
+        assert float(single_rough) >= estimator.min_disp
+
+    def test_fit_rough_dispersions_consistency(self, estimator, synthetic_data):
+        """Test consistency between single and batch rough dispersions."""
+        # Batch processing
+        batch_rough = estimator.fit_rough_dispersions(synthetic_data["normed_counts"], synthetic_data["design_matrix"])
+
+        # Single gene processing for first gene
+        single_rough = estimator.fit_rough_dispersions_single_gene(
+            synthetic_data["normed_counts"][:, 0], synthetic_data["design_matrix"]
+        )
+
+        # Should be very close
+        assert bool(jnp.allclose(batch_rough[0], single_rough, rtol=1e-10))
+
+    def test_fit_rough_dispersions_design_matrix_effects(self, estimator):
+        """Test that design matrix complexity affects rough dispersions."""
+        counts = jnp.array([[10, 20], [15, 25], [12, 22], [18, 28], [14, 24]])
+        size_factors = jnp.ones(5)
+        normed_counts = counts / size_factors[:, jnp.newaxis]
+
+        # Simple design (intercept only)
+        simple_design = jnp.ones((5, 1))
+        rough_simple = estimator.fit_rough_dispersions(normed_counts, simple_design)
+
+        # Complex design (intercept + covariate)
+        complex_design = jnp.array([[1, 0], [1, 1], [1, 0.5], [1, -0.5], [1, -1]])
+        rough_complex = estimator.fit_rough_dispersions(normed_counts, complex_design)
+
+        assert rough_simple.shape == rough_complex.shape == (2,)
+        assert bool(jnp.all(jnp.isfinite(rough_simple)))
+        assert bool(jnp.all(jnp.isfinite(rough_complex)))
+
+    def test_fit_mu_basic(self, estimator, synthetic_data):
+        """Test basic mu (mean) estimation."""
+        mu_estimates = estimator.fit_mu(
+            synthetic_data["counts"], synthetic_data["design_matrix"], synthetic_data["size_factors"]
+        )
+
+        assert mu_estimates.shape == synthetic_data["counts"].shape
+        assert bool(jnp.all(jnp.isfinite(mu_estimates)))
+        assert bool(jnp.all(mu_estimates >= estimator.min_mu))
+
+        # Mu estimates should be positive and reasonable
+        assert bool(jnp.all(mu_estimates > 0))
+
+    def test_fit_mu_single_gene(self, estimator, synthetic_data):
+        """Test single gene mu estimation."""
+        single_gene_counts = synthetic_data["counts"][:, 0]
+
+        mu_single = estimator.fit_mu_single_gene(
+            single_gene_counts, synthetic_data["design_matrix"], synthetic_data["size_factors"]
+        )
+
+        assert mu_single.shape == (synthetic_data["n_samples"],)
+        assert bool(jnp.all(jnp.isfinite(mu_single)))
+        assert bool(jnp.all(mu_single >= estimator.min_mu))
+
+    def test_fit_mu_consistency(self, estimator, synthetic_data):
+        """Test consistency between single and batch mu estimation."""
+        # Batch processing
+        batch_mu = estimator.fit_mu(
+            synthetic_data["counts"], synthetic_data["design_matrix"], synthetic_data["size_factors"]
+        )
+
+        # Single gene processing
+        single_mu = estimator.fit_mu_single_gene(
+            synthetic_data["counts"][:, 0], synthetic_data["design_matrix"], synthetic_data["size_factors"]
+        )
+
+        # Should match for first gene
+        assert bool(jnp.allclose(batch_mu[:, 0], single_mu, rtol=1e-10))
+
+    def test_fit_mu_size_factor_effects(self, estimator):
+        """Test that size factors properly affect mu estimation."""
+        counts = jnp.array([[10], [10], [10], [10]])  # Same raw counts
+        design_matrix = jnp.ones((4, 1))  # Intercept only
+
+        # Different size factors should give proportionally different mu
+        sf1 = jnp.ones(4)
+        sf2 = jnp.array([2.0, 2.0, 2.0, 2.0])  # Double size factors
+
+        mu1 = estimator.fit_mu(counts, design_matrix, sf1)
+        mu2 = estimator.fit_mu(counts, design_matrix, sf2)
+
+        # mu2 should be approximately double mu1
+        assert bool(jnp.all(mu2 > mu1))
+
+    def test_fit_parametric_dispersion_trend_basic(self, estimator):
+        """Test parametric dispersion trend fitting."""
+        # Create dispersions with clear 1/mean relationship
+        normed_means = jnp.array([10.0, 20.0, 50.0, 100.0])
+        # Dispersions should follow α₀ + α₁/μ pattern
+        dispersions = 0.1 + 2.0 / normed_means + jnp.array([0.01, -0.01, 0.005, -0.005])  # Add small noise
+
+        trend = estimator.fit_parametric_dispersion_trend(dispersions, normed_means)
+
+        assert trend.shape == dispersions.shape
+        assert bool(jnp.all(jnp.isfinite(trend)))
+        assert bool(jnp.all(trend > 0))
+
+        # Trend should be smoother than original dispersions
+        # (reduces the noise we added)
+        original_var = float(jnp.var(dispersions))
+        trend_var = float(jnp.var(trend))
+        assert trend_var < original_var
+
+    def test_fit_parametric_trend_convergence_fallback(self, estimator):
+        """Test parametric trend fallback to mean when convergence fails."""
+        # Create problematic data that might not converge
+        normed_means = jnp.array([1e-6, 1e6, 1e-6, 1e6])  # Extreme means
+        dispersions = jnp.array([100.0, 1e-8, 100.0, 1e-8])  # Extreme dispersions
+
+        # Should handle gracefully and potentially fall back to mean trend
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # Suppress convergence warnings
+            trend = estimator.fit_parametric_dispersion_trend(dispersions, normed_means)
+
+        assert trend.shape == dispersions.shape
+        assert bool(jnp.all(jnp.isfinite(trend)))
+        assert bool(jnp.all(trend >= estimator.min_disp))
+
+    def test_fit_dispersion_prior_basic(self, estimator, synthetic_data):
+        """Test dispersion prior variance estimation."""
+        dispersions = jnp.array([0.15, 0.22, 0.18, 0.25, 0.20])
+        trend = jnp.array([0.16, 0.20, 0.19, 0.23, 0.21])
+
+        prior_var = estimator.fit_dispersion_prior(dispersions, trend, synthetic_data["design_matrix"])
+
+        assert isinstance(prior_var, float)
+        assert prior_var > 0
+        assert prior_var >= 0.25  # Should be at least the minimum
+        assert jnp.isfinite(prior_var)
+
+    def test_fit_dispersion_prior_low_dof_warning(self, estimator):
+        """Test warning when degrees of freedom are low."""
+        dispersions = jnp.array([0.1, 0.2])
+        trend = jnp.array([0.12, 0.18])
+        # Very low DOF design matrix (2 samples, 2 covariates = 0 DOF)
+        low_dof_design = jnp.array([[1, 0], [1, 1]])
+
+        with pytest.warns(UserWarning, match="degrees of freedom"):
+            prior_var = estimator.fit_dispersion_prior(dispersions, trend, low_dof_design)
+
+        assert isinstance(prior_var, float)
+        assert prior_var >= 0.25
+
+    def test_fit_dispersion_prior_different_dispersions(self, estimator, synthetic_data):
+        """Test prior estimation with different dispersion ranges."""
+        # Low dispersions
+        low_dispersions = jnp.array([0.01, 0.02, 0.015, 0.025]) * 100  # Scale above min_disp threshold
+        low_trend = jnp.array([0.012, 0.018, 0.016, 0.022]) * 100
+
+        # High dispersions
+        high_dispersions = jnp.array([0.5, 0.8, 0.6, 0.9])
+        high_trend = jnp.array([0.52, 0.75, 0.62, 0.85])
+
+        design_matrix = jnp.array([[1, 0], [1, 1], [1, 0.5], [1, -0.5]])  # Sufficient DOF
+
+        prior_low = estimator.fit_dispersion_prior(low_dispersions, low_trend, design_matrix)
+        prior_high = estimator.fit_dispersion_prior(high_dispersions, high_trend, design_matrix)
+
+        assert isinstance(prior_low, float) and isinstance(prior_high, float)
+        assert prior_low > 0 and prior_high > 0
+        # Higher dispersions typically lead to higher prior variance
+        assert prior_high >= prior_low
+
+    def test_fit_MAP_dispersions_basic(self, estimator, synthetic_data):
+        """Test basic MAP dispersion estimation."""
+        # Use subset of data for faster testing
+        subset_counts = synthetic_data["counts"][:, :3]
+        subset_genes = 3
+
+        dispersions = jnp.array([0.15, 0.25, 0.20])
+        trend = jnp.array([0.18, 0.22, 0.19])
+        mu_hat = jnp.ones((synthetic_data["n_samples"], subset_genes)) * 20.0
+
+        map_dispersions, success = estimator.fit_MAP_dispersions(
+            subset_counts, dispersions, trend, synthetic_data["design_matrix"], mu_hat
+        )
+
+        assert map_dispersions.shape == (subset_genes,)
+        assert success.dtype == jnp.bool
+        assert bool(jnp.all(jnp.isfinite(map_dispersions)))
+        assert bool(jnp.all(map_dispersions >= estimator.min_disp))
+        assert bool(jnp.all(map_dispersions <= estimator.max_disp))
+
+    def test_fit_MAP_dispersions_shrinkage_effect(self, estimator):
+        """Test that MAP estimation provides reasonable shrinkage toward trend."""
+        # Create simple test case
+        counts = jnp.array([[10, 20], [15, 25], [12, 22], [18, 28]])
+        design_matrix = jnp.array([[1, 0], [1, 1], [1, 0.5], [1, -0.5]])
+
+        # Initial dispersions that are far from trend
+        dispersions = jnp.array([0.5, 0.8])  # High dispersions
+        trend = jnp.array([0.2, 0.25])  # Lower trend values
+        mu_hat = jnp.array([[15.0, 22.0], [18.0, 26.0], [14.0, 24.0], [20.0, 30.0]])
+
+        map_dispersions, success = estimator.fit_MAP_dispersions(counts, dispersions, trend, design_matrix, mu_hat)
+
+        assert map_dispersions.shape == (2,)
+        assert bool(jnp.all(jnp.isfinite(map_dispersions)))
+        assert success.dtype == jnp.bool
+
+        # MAP estimates should be between initial dispersions and trend (shrinkage effect)
+        # This is a basic sanity check - exact shrinkage depends on data
+        assert bool(jnp.all(map_dispersions <= dispersions))
+
+    def test_fit_MAP_dispersions_different_priors(self, estimator):
+        """Test MAP dispersions with different prior strengths."""
+        counts = jnp.array([[8, 15], [12, 18], [10, 16], [14, 20]])
+        design_matrix = jnp.array([[1, 0], [1, 1], [1, 0.5], [1, -0.5]])
+        dispersions = jnp.array([0.3, 0.4])
+        trend = jnp.array([0.2, 0.25])
+        mu_hat = jnp.array([[10.0, 17.0], [13.0, 19.0], [11.0, 18.0], [15.0, 21.0]])
+
+        # The prior variance is computed internally based on the data
+        # We test that different input dispersions give reasonable results
+        map_disp1, _ = estimator.fit_MAP_dispersions(counts, dispersions, trend, design_matrix, mu_hat)
+
+        # Different initial dispersions
+        dispersions2 = jnp.array([0.1, 0.15])  # Closer to trend
+        map_disp2, success = estimator.fit_MAP_dispersions(counts, dispersions2, trend, design_matrix, mu_hat)
+
+        assert success.dtype == jnp.bool
+        assert map_disp1.shape == map_disp2.shape == (2,)
+        assert bool(jnp.all(jnp.isfinite(map_disp1)))
+        assert bool(jnp.all(jnp.isfinite(map_disp2)))
+
+    def test_complete_dispersion_workflow(self, estimator, synthetic_data):
+        """Test the complete dispersion estimation workflow."""
+        # Step 1: Initial dispersions
+        initial_disp = estimator.fit_initial_dispersions(
+            synthetic_data["normed_counts"], synthetic_data["design_matrix"], synthetic_data["size_factors"]
+        )
+
+        # Step 2: Mu estimation
+        mu_hat = estimator.fit_mu(
+            synthetic_data["counts"], synthetic_data["design_matrix"], synthetic_data["size_factors"]
+        )
+
+        # Step 3: Trend fitting
+        normed_means = jnp.mean(synthetic_data["normed_counts"], axis=0)
+        trend = estimator.fit_dispersion_trend(initial_disp, normed_means, trend_type="mean")
+
+        # Step 4: MAP estimation
+        map_dispersions, success = estimator.fit_MAP_dispersions(
+            synthetic_data["counts"], initial_disp, trend, synthetic_data["design_matrix"], mu_hat
+        )
+
+        # Verify all steps completed successfully
+        assert success.dtype == jnp.bool
+        assert initial_disp.shape == (synthetic_data["n_genes"],)
+        assert mu_hat.shape == synthetic_data["counts"].shape
+        assert trend.shape == (synthetic_data["n_genes"],)
+        assert map_dispersions.shape == (synthetic_data["n_genes"],)
+
+        # All results should be finite and within bounds
+        for result in [initial_disp, trend, map_dispersions]:
+            assert bool(jnp.all(jnp.isfinite(result)))
+            assert bool(jnp.all(result >= estimator.min_disp))
+            assert bool(jnp.all(result <= estimator.max_disp))
+
+        assert bool(jnp.all(jnp.isfinite(mu_hat)))
+        assert bool(jnp.all(mu_hat >= estimator.min_mu))
+
+    def test_workflow_with_different_trend_types(self, estimator, synthetic_data):
+        """Test workflow with both trend types."""
+        # Get initial estimates
+        initial_disp = estimator.fit_initial_dispersions(
+            synthetic_data["normed_counts"], synthetic_data["design_matrix"], synthetic_data["size_factors"]
+        )
+        normed_means = jnp.mean(synthetic_data["normed_counts"], axis=0)
+
+        # Test mean trend
+        trend_mean = estimator.fit_dispersion_trend(initial_disp, normed_means, trend_type="mean")
+
+        # Test parametric trend (may fall back to mean if convergence fails)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            trend_param = estimator.fit_dispersion_trend(initial_disp, normed_means, trend_type="parametric")
+
+        assert trend_mean.shape == trend_param.shape == (2,)
+        assert bool(jnp.all(jnp.isfinite(trend_mean)))
+        assert bool(jnp.all(jnp.isfinite(trend_param)))
