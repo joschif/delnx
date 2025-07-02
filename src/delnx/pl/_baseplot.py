@@ -6,6 +6,7 @@ import marsilea.plotter as mp
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import itertools
 
 from ._palettes import default_palette
 
@@ -145,8 +146,15 @@ class BasePlot:
             if isinstance(self.group_names, str):
                 self.group_names = [self.group_names]
 
+        # Create _group labels
         group_labels = self.adata.obs[self.groupby_keys].astype(str).agg("_".join, axis=1)
-        self.group_labels = pd.Categorical(group_labels)
+
+        # Build all possible combinations from category levels in order
+        category_levels = [self.adata.obs[k].cat.categories for k in self.groupby_keys]
+        ordered_combinations = ["_".join(tup) for tup in itertools.product(*category_levels)]
+
+        # Create ordered categorical
+        self.group_labels = pd.Categorical(group_labels, categories=ordered_combinations, ordered=True)
         self.adata.obs["_group"] = self.group_labels
 
     def _resolve_row_grouping(self, index_source=None) -> tuple[pd.Categorical | None, pd.Index | None]:
@@ -195,37 +203,83 @@ class BasePlot:
 
     def _build_data(self) -> np.ndarray:
         """Extracts the data matrix for the selected markers."""
-        return self.adata[:, self.markers].X.toarray()
+        # Flatten markers if given as dict
+        if isinstance(self.markers, dict):
+            flat_markers = list(itertools.chain.from_iterable(self.markers.values()))
+        else:
+            flat_markers = self.markers
+        return self.adata[:, flat_markers].X.toarray()
 
     def _add_row_labels(self, m: ma.Heatmap):
         """
-        Add row labels (group names) to the heatmap.
+        Add row labels to the heatmap
+
+        - If self.order is defined, use `Chunk` to show grouped labels.
+        - If self.order is None, use `Labels` to show individual row names.
 
         Parameters
         ----------
         m : ma.Heatmap
-            The heatmap object to which group labels will be added.
+            The heatmap object to which row labels will be added.
         """
-        chunk = mp.Chunk(
-            self.order,
-            rotation=self.chunk_rotation,
-            align=self.chunk_align,
-            fontsize=self.chunk_fontsize,
-        )
-        m.add_left(chunk)
+        if self.row_group is not None:
+            # Create chunked row labels using the order
+            chunk = mp.Chunk(
+                self.order,
+                rotation=self.chunk_rotation,
+                align=self.chunk_align,
+                fontsize=self.chunk_fontsize,
+            )
+            m.group_rows(self.row_group, order=self.order)
+            m.add_left(chunk)
+        else:
+            # Use index from the data matrix as row labels
+            labels = mp.Labels(
+                list(self.mean_df.index),  # or m.data.index
+                rotation=self.chunk_rotation,
+                align=self.chunk_align,
+                fontsize=self.chunk_fontsize,
+            )
+            m.add_left(labels, pad=self.chunk_pad)
+
 
     def _add_column_labels(self, m: ma.Heatmap):
-        """Add column labels (genes) to the heatmap.
+        """
+        Add column labels to the heatmap.
+
+        - If `self.markers` is a dict, create grouped chunks using keys as categories.
+        - Otherwise, show all markers using `mp.Labels`.
 
         Parameters
         ----------
         m : ma.Heatmap
-            The heatmap object to which gene labels will be added.
+            The heatmap object to which column labels will be added.
         """
-        # Create a Labels object for the markers
-        labels = mp.Labels(self.markers, fontsize=self.chunk_fontsize)
-        # Add the labels to the heatmap with specified padding
-        m.add_top(labels, pad=self.chunk_pad)
+        if isinstance(self.markers, dict):
+            # Build matching group labels for each column
+            chunk_labels = list(itertools.chain.from_iterable(
+                [key] * len(vals) for key, vals in self.markers.items()
+            ))
+
+            # Create Categorical with explicit order
+            group_labels = pd.Categorical(chunk_labels, categories=list(self.markers.keys()), ordered=True)
+
+            # Apply column grouping
+            m.group_cols(group_labels, order=list(self.markers.keys()))
+
+            # Add chunked column annotations
+            chunk = mp.Chunk(
+                list(self.markers.keys()),
+                rotation=90,
+                align=self.chunk_align,
+                fontsize=self.chunk_fontsize,
+            )
+
+            m.add_top(chunk)
+        else:
+            # Simple unchunked label case
+            labels = mp.Labels(self.markers, fontsize=self.chunk_fontsize)
+            m.add_top(labels, pad=self.chunk_pad)
 
     def _add_annotations(self, m: ma.Heatmap):
         """

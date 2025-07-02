@@ -149,7 +149,7 @@ class ViolinPlot:
         df = df[df["split"].isin(self.split_values)]
         return df
 
-    def plot(
+    def _build_plot(
         self,
         plot_type: Literal["violin", "box", "boxen"] = "violin",
         show: bool = True,
@@ -217,10 +217,6 @@ class ViolinPlot:
             outer_boards, direction="horizontal" if not self.flip else "vertical", spacing=0.5, keep_legends=True
         )
 
-        if show:
-            with plt.rc_context(rc={"axes.grid": False, "axes.facecolor": "white", "axes.edgecolor": "black"}):
-                final_stack.render()
-
         return final_stack
 
 
@@ -230,17 +226,43 @@ def violinplot(
     groupby: str,
     splitby: str | None = None,
     plot_type: Literal["violin", "box", "boxen"] = "violin",
+    save: str | None = None,
+    show: bool = True,
     **kwargs,
 ) -> StackBoard:
     """
     Create a violin plot for gene expression across groups and splits.
 
-    Parameters are the same as in the GeneExpressionPlot class.
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix.
+    genes : list[str]
+        List of gene names to plot.
+    groupby : str
+        Column name in `adata.obs` to group by.
+    splitby : str | None, optional
+        Column name in `adata.obs` to split by.
+    plot_type : Literal["violin", "box", "boxen"], default "violin"
+        Type of plot to generate.
+    save : str | None, optional
+        Path to save the figure. If None, does not save.
+    show : bool, default True
+        Whether to display the plot.
+    **kwargs
+        Additional arguments passed to ViolinPlot.
     """
-    return ViolinPlot(
+    plot = ViolinPlot(
         adata=adata,
         genes=genes,
         groupby=groupby,
         splitby=splitby,
-        **kwargs,
-    ).plot(plot_type=plot_type)
+        **kwargs
+    )
+    board = plot._build_plot(plot_type=plot_type, show=show)
+    if show:
+        with plt.rc_context(rc={"axes.grid": False, "axes.facecolor": "white", "axes.edgecolor": "black"}):
+            board.render()
+    if save is not None:
+        with plt.rc_context(rc={"axes.grid": False, "axes.facecolor": "white", "axes.edgecolor": "black"}):
+            board.save(save, bbox_inches="tight")

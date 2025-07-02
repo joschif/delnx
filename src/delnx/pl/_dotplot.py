@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
-
+import itertools
 import marsilea as ma
 import numpy as np
 import pandas as pd
@@ -52,9 +52,24 @@ class DotPlot(MatrixPlot):
 
                     data = self._build_data()
 
-        group_index = self.adata.obs["_group"].astype(str)
-        X = self.adata[:, self.markers].X.toarray()
-        df = pd.DataFrame(X, index=group_index)
+        # Flatten markers if given as dict
+        if isinstance(self.markers, dict):
+            flat_markers = list(itertools.chain.from_iterable(self.markers.values()))
+        else:
+            flat_markers = self.markers
+
+        # Get detection data from raw or specified layer — do not fall back to .X
+        if self.adata.raw is not None:
+            X_raw = self.adata.raw.to_adata()[:, flat_markers].X.toarray()
+        elif self.layer is not None:
+            if self.layer not in self.adata.layers:
+                raise ValueError(f"Layer '{self.layer}' not found in adata.layers.")
+            X_raw = self.adata[:, flat_markers].layers[self.layer]
+        else:
+            raise ValueError("DotPlot requires either `adata.raw` or a specified `layer`. Neither was provided.")
+
+        group_labels = self.adata.obs["_group"].astype(str)
+        df = pd.DataFrame(X_raw > 0, index=group_labels)
 
         agg_count = df.gt(0).groupby(df.index).sum().loc[self.mean_df.index]
         agg_cell_counts = df.groupby(df.index).size().loc[self.mean_df.index].to_numpy()
@@ -79,9 +94,6 @@ class DotPlot(MatrixPlot):
                 "show_at": [0.2, 0.4, 0.6, 0.8, 1.0],
             },
         )
-
-        if self.row_group is not None:
-            m.group_rows(self.row_group, order=self.order)
 
         m = self._add_extras(m)
         return m

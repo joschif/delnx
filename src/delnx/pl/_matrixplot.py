@@ -5,6 +5,7 @@ from typing import Any
 import marsilea as ma
 import marsilea.plotter as mp
 import pandas as pd
+import itertools
 
 from ..pp._utils import group_by_max
 from ._baseplot import BasePlot
@@ -34,9 +35,19 @@ class MatrixPlot(BasePlot):
             pd.DataFrame: Mean expression matrix (groups x markers).
         """
         group_col = self.adata.obs["_group"].astype(str)
-        df = pd.DataFrame(self.adata[:, self.markers].X.toarray(), index=group_col)
+
+        # Flatten markers if given as dict
+        if isinstance(self.markers, dict):
+            flat_markers = list(itertools.chain.from_iterable(self.markers.values()))
+        else:
+            flat_markers = self.markers
+
+        df = pd.DataFrame(self.adata[:, flat_markers].X.toarray(), index=group_col)
         self.mean_df = df.groupby(df.index).mean()
-        self.mean_df.columns = self.markers
+        self.mean_df.columns = flat_markers
+
+        # Rearrange self mean df based on factors in _group
+        self.mean_df = self.mean_df.reindex(self.adata.obs["_group"].cat.categories)
 
         group_meta = (
             self.adata.obs[self.groupby_keys]
@@ -59,37 +70,50 @@ class MatrixPlot(BasePlot):
 
         Parameters
         ----------
-            index_source: Any | None
+        index_source: Any | None
             Optional source for row indices, defaults to mean_df index.
 
         Returns
         -------
-            Tuple of (group labels, group categories) or (None, None).
+        Tuple of (group labels, group categories) or (None, None).
         """
-        if self.row_grouping == "auto":
-            return self.mean_df.index, list(self.mean_df.index)
+        # Fallback to mean_df index if not specified
+        if index_source is None:
+            index_source = self.mean_df.index
 
+        # Auto: treat each row as its own group
+        if self.row_grouping == "auto":
+            group = pd.Categorical(index_source, categories=list(index_source), ordered=True)
+            return group, list(index_source)
+
+        # No grouping
         elif self.row_grouping is None:
             return None, None
 
+        # Single column from group_metadata
         elif isinstance(self.row_grouping, str):
-            group = pd.Categorical(self.group_metadata[self.row_grouping])
-            return group, group.categories
+            values = self.group_metadata.loc[index_source, self.row_grouping]
+            categories = values.drop_duplicates().tolist()  # preserve order of appearance
+            group = pd.Categorical(values, categories=categories, ordered=True)
+            return group, categories
 
+        # Multiple columns → compound grouping
         elif isinstance(self.row_grouping, list):
-            key_df = self.group_metadata[self.row_grouping].astype(str)
-            compound = key_df.agg("_".join, axis=1)
-            group = pd.Categorical(compound)
-            return group, group.categories
+            df = self.group_metadata.loc[index_source, self.row_grouping].astype(str)
+            compound = df.agg("_".join, axis=1)
+            categories = compound.drop_duplicates().tolist()
+            group = pd.Categorical(compound, categories=categories, ordered=True)
+            return group, categories
 
+        # Provided Series or Categorical
         elif isinstance(self.row_grouping, (pd.Series, pd.Categorical)):
-            group = (
-                self.row_grouping.loc[self.mean_df.index]
-                if isinstance(self.row_grouping, pd.Series)
-                else self.row_grouping
-            )
-            group = pd.Categorical(group)
-            return group, group.categories
+            if isinstance(self.row_grouping, pd.Series):
+                values = self.row_grouping.loc[index_source]
+            else:
+                values = pd.Series(self.row_grouping, index=self.mean_df.index).loc[index_source]
+            categories = values.drop_duplicates().tolist()
+            group = pd.Categorical(values, categories=categories, ordered=True)
+            return group, categories
 
         else:
             raise ValueError("Invalid value for row_grouping in MatrixPlot.")
@@ -176,9 +200,6 @@ class MatrixPlot(BasePlot):
             center=self.center,
             cbar_kws={"title": "Expression\nin group"},
         )
-
-        if self.row_group is not None:
-            m.group_rows(self.row_group, order=self.order)
 
         m = self._add_extras(m)
         return m
