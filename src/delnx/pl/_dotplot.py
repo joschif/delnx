@@ -61,14 +61,15 @@ class DotPlot(MatrixPlot):
             flat_markers = self.markers
 
         # Get detection data from raw or specified layer — do not fall back to .X
-        if self.adata.raw is not None:
-            X_raw = self.adata.raw.to_adata()[:, flat_markers].X.toarray()
-        elif self.layer is not None:
-            if self.layer not in self.adata.layers:
-                raise ValueError(f"Layer '{self.layer}' not found in adata.layers.")
-            X_raw = self.adata[:, flat_markers].layers[self.layer]
-        else:
-            raise ValueError("DotPlot requires either `adata.raw` or a specified `layer`. Neither was provided.")
+        if self.adata.raw is None:
+            raise ValueError("DotPlot requires `adata.raw` to be set and contain raw counts.")
+
+        X_raw = self.adata.raw.to_adata()[:, flat_markers].X
+        X_raw = X_raw.toarray() if hasattr(X_raw, "toarray") else X_raw
+
+        # Check if any value is not "integer-valued"
+        if not np.all(np.equal(np.mod(X_raw, 1), 0)):
+            raise ValueError("Array contains non-integer float values.")
 
         group_labels = self.adata.obs["_group"].astype(str)
         df = pd.DataFrame(X_raw > 0, index=group_labels)

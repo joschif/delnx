@@ -145,4 +145,4 @@ def test_gsea_dotplot(de_results, gene_sets):
 
     # Check if the figure is created
     assert fig is not None
-    assert isinstance(fig, ma.base.ClusterBoard)
+    assert isinstance(fig, ma.heatmap.SizedHeatmap)

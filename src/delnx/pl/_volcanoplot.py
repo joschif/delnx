@@ -15,20 +15,25 @@ class VolcanoPlot:
     def __init__(
         self,
         df: pd.DataFrame,
-        coef_thresh: float = 1.0,
-        pval_thresh: float = 0.05,
+        x: str = "coef",
+        y: str = "-log10(pval)",
+        thresh: dict[str, float] | None = None,
         color_legend_title: str | None = None,
+        ax: plt.Axes | None = None,
+        figsize: tuple[float, float] = (8, 6),
         save_path: str | None = None,
     ):
         self.df = df.copy()
-        self.coef_thresh = coef_thresh
-        self.pval_thresh = pval_thresh
+        self.x = x
+        self.y = y
+        self.thresh = thresh or {}
         self.color_legend_title = color_legend_title or self.DEFAULT_COLOR_LEGEND_TITLE
         self.save_path = save_path
-        self.fig = None
-        self.ax = None
+        self.figsize = figsize
+        self.ax = ax
 
-        if "-log10(pval)" not in self.df.columns:
+        # Compute -log10(pval) if needed and y is set to that
+        if self.y == "-log10(pval)" and "-log10(pval)" not in self.df.columns:
             self.df["-log10(pval)"] = -np.log10(self.df["pval"])
 
         # Default color map
@@ -44,16 +49,17 @@ class VolcanoPlot:
         return self
 
     def make_figure(self) -> "VolcanoPlot":
-        fig, ax = plt.subplots(figsize=(8, 6))
-        self.fig = fig
-        self.ax = ax
+        if self.ax is not None:
+            self.fig = self.ax.figure
+        else:
+            self.fig, self.ax = plt.subplots(figsize=self.figsize)
 
         # Plot each significance group
         for label, color in self.color_map.items():
             subset = self.df[self.df["significant"] == label]
-            ax.scatter(
-                subset["coef"],
-                subset["-log10(pval)"],
+            self.ax.scatter(
+                subset[self.x],
+                subset[self.y],
                 c=color,
                 label=label,
                 edgecolor="black",
@@ -63,15 +69,19 @@ class VolcanoPlot:
             )
 
         # Threshold lines
-        ax.axhline(y=-np.log10(self.pval_thresh), color="black", linestyle="--", linewidth=1)
-        ax.axvline(x=self.coef_thresh, color="black", linestyle="--", linewidth=1)
-        ax.axvline(x=-self.coef_thresh, color="black", linestyle="--", linewidth=1)
+        x_thresh = self.thresh.get(self.x, None)
+        y_thresh = self.thresh.get(self.y, None)
+        if y_thresh is not None:
+            self.ax.axhline(y=y_thresh, color="black", linestyle="--", linewidth=1)
+        if x_thresh is not None:
+            self.ax.axvline(x=x_thresh, color="black", linestyle="--", linewidth=1)
+            self.ax.axvline(x=-x_thresh, color="black", linestyle="--", linewidth=1)
 
         # Labels and grid
-        ax.set_xlabel("Estimated Coefficient")
-        ax.set_ylabel("-log10(p-value)")
-        ax.legend(title=self.color_legend_title)
-        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+        self.ax.set_xlabel(self.x if self.x != "coef" else "Estimated Coefficient")
+        self.ax.set_ylabel(self.y if self.y != "-log10(pval)" else "-log10(p-value)")
+        self.ax.legend(title=self.color_legend_title)
+        self.ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
 
         return self
 
@@ -83,11 +93,11 @@ class VolcanoPlot:
             row = self.df[self.df["feature"] == feature].iloc[0]
             texts.append(
                 self.ax.text(
-                    row["coef"],
-                    row["-log10(pval)"],
+                    row[self.x],
+                    row[self.y],
                     feature,
                     fontsize=8,
-                    ha="right" if row["coef"] > 0 else "left",
+                    ha="right" if row[self.x] > 0 else "left",
                     va="bottom",
                     bbox={
                         "boxstyle": "round,pad=0.3",
@@ -124,10 +134,13 @@ class VolcanoPlot:
 
 def volcanoplot(
     df: pd.DataFrame,
-    coef_thresh: float = 1.0,
-    pval_thresh: float = 0.05,
+    x: str = "coef",
+    y: str = "-log10(pval)",
+    thresh: dict[str, float] | None = None,
     label_top: int = 0,
     color_legend_title: str | None = None,
+    ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (8, 6),
     show: bool | None = True,
     save: str | bool | None = None,
     return_fig: bool = False,
@@ -139,14 +152,21 @@ def volcanoplot(
     ----------
     df : pd.DataFrame
         Must contain 'coef', 'pval', 'significant', and optionally 'feature'.
-    coef_thresh : float
-        Coefficient threshold for vertical cutoff lines.
-    pval_thresh : float
-        P-value threshold for horizontal cutoff line.
+    x : str
+        Column name for x-axis.
+    y : str
+        Column name for y-axis.
+    thresh : dict[str, float] or None
+        Dictionary mapping axis names to threshold values, e.g. {'coef': 1.0, '-log10(pval)': 1.3}.
     label_top : int
         If > 0, label top N up/down genes by effect size.
     color_legend_title : str or None
         Title for the legend. Default: "-log10(p-value)".
+    ax : plt.Axes or None
+        If provided, use this Axes for plotting instead of creating a new one.
+        If None, a new Axes will be created.
+    figsize : tuple[float, float]
+        Size of the figure in inches. Default: (8, 6).
     show : bool or None
         Whether to display the figure interactively.
     save : str or bool or None
@@ -172,9 +192,12 @@ def volcanoplot(
 
     vp = VolcanoPlot(
         df,
-        coef_thresh=coef_thresh,
-        pval_thresh=pval_thresh,
+        x=x,
+        y=y,
+        thresh=thresh,
         color_legend_title=color_legend_title,
+        figsize=figsize,
+        ax=ax,
         save_path=save_path,
     ).make_figure()
 
