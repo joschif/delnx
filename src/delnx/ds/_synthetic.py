@@ -123,6 +123,7 @@ def synthetic_adata(
 
     # Store raw counts
     adata.layers["counts"] = adata.X.copy()
+    adata.raw = adata.copy()
 
     # Normalize and log transform
     sc.pp.normalize_total(adata, target_sum=1e4)

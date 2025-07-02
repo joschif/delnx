@@ -39,13 +39,13 @@ def test_plot_volcanoplot(adata_pb_counts):
 
     # Check if the figure is created
     assert fig is not None
-    assert isinstance(fig.fig, plt.Figure)
+    assert isinstance(fig, plt.Figure)
 
 
 def test_plot_violinplot(adata_small):
     """Test plotting of violinplot."""
 
-    fig = dx.pl.violinplot(
+    plot = dx.pl.ViolinPlot(
         adata_small,
         genes=["gene_1", "gene_2", "gene_3"],
         groupby="cell_type",
@@ -56,9 +56,10 @@ def test_plot_violinplot(adata_small):
         use_raw=False,
         flip=True,
     )
+    board = plot._build_plot(plot_type="violin")
     # Check if the figure is created
-    assert fig is not None
-    assert isinstance(fig, ma.base.StackBoard)
+    assert board is not None
+    assert isinstance(board, ma.base.StackBoard)
 
 
 def test_matrixplot(adata_small):

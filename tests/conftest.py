@@ -83,7 +83,6 @@ def adata_small():
     adata.obs["continuous_covar"] = np.random.normal(size=adata.n_obs)
     adata.layers["binary"] = adata.X.copy()
     adata.layers["binary"] = (adata.layers["binary"] > 0).astype(int)
-    adata.raw = adata.copy()
 
     return adata
 
