@@ -20,3 +20,6 @@ __pycache__/
 /docs/_build/
 
 *.csv
+
+# Jupyter checkpoints
+.ipynb_checkpoints/

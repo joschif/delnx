@@ -37,6 +37,7 @@ dependencies = [
   "session-info2>=0.1.2",
   "statsmodels>=0.14.4",
   "tqdm>=4.67.1",
+  "gseapy>=1.1.9"
 ]
 optional-dependencies.dev = [
   "pre-commit>=4.2",
