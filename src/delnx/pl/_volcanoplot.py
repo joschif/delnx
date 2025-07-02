@@ -213,4 +213,3 @@ def volcanoplot(
         vp.show()
     if return_fig:
         return vp.get_figure()
-    return vp

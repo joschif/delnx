@@ -1,5 +1,6 @@
 import marsilea as ma
 import matplotlib.pyplot as plt
+import numpy as np
 
 import delnx as dx
 
@@ -32,7 +33,9 @@ def test_plot_volcanoplot(adata_pb_counts):
     results = results[results["group"] == "cell_type_1"]
 
     # Plot volcano plot
-    fig = dx.pl.volcanoplot(results, label_top=5, coef_thresh=0.5)
+    fig, _ = dx.pl.volcanoplot(
+        results, thresh={"coef": 2, "-log10(pval)": -np.log10(0.05)}, label_top=5, return_fig=True
+    )
 
     # Check if the figure is created
     assert fig is not None
@@ -89,6 +92,7 @@ def test_matrixplot(adata_small):
 def test_dotplot(adata_small):
     """Test plotting of matrixplot."""
 
+    adata_small
     m = dx.pl.DotPlot(
         adata_small,
         markers=["gene_1", "gene_2", "gene_3"],
