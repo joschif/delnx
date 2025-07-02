@@ -1,16 +1,11 @@
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+
+import marsilea as ma
+import numpy as np
+import pandas as pd
 
 from delnx.pl._baseplot import BasePlot
 
-
-from dataclasses import dataclass
-import numpy as np
-import pandas as pd
-import marsilea as ma
-import marsilea.plotter as mp
-import matplotlib.pyplot as plt
 
 @dataclass
 class GradientHeatmapPlot(BasePlot):
@@ -52,11 +47,9 @@ class GradientHeatmapPlot(BasePlot):
         # Smooth expression if requested
         if self.smooth:
             for i in range(X.shape[1]):
-                X[:, i] = pd.Series(X[:, i]).rolling(
-                    window=self.smoothing_window,
-                    min_periods=1,
-                    center=True
-                ).mean().values
+                X[:, i] = (
+                    pd.Series(X[:, i]).rolling(window=self.smoothing_window, min_periods=1, center=True).mean().values
+                )
 
         # Sort genes by peak activation (earliest peak first)
         peak_indices = X.argmax(axis=0)

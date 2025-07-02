@@ -1,7 +1,8 @@
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
-import itertools
+
 import marsilea as ma
 import numpy as np
 import pandas as pd

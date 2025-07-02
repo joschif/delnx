@@ -252,13 +252,7 @@ def violinplot(
     **kwargs
         Additional arguments passed to ViolinPlot.
     """
-    plot = ViolinPlot(
-        adata=adata,
-        genes=genes,
-        groupby=groupby,
-        splitby=splitby,
-        **kwargs
-    )
+    plot = ViolinPlot(adata=adata, genes=genes, groupby=groupby, splitby=splitby, **kwargs)
     board = plot._build_plot(plot_type=plot_type, show=show)
     if show:
         with plt.rc_context(rc={"axes.grid": False, "axes.facecolor": "white", "axes.edgecolor": "black"}):

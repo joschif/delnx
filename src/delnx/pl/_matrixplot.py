@@ -1,3 +1,4 @@
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -5,7 +6,6 @@ from typing import Any
 import marsilea as ma
 import marsilea.plotter as mp
 import pandas as pd
-import itertools
 
 from ..pp._utils import group_by_max
 from ._baseplot import BasePlot
