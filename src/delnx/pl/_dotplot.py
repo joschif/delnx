@@ -7,7 +7,8 @@ import marsilea as ma
 import numpy as np
 import pandas as pd
 
-from ..pp._utils import group_by_max
+from delnx.pp._utils import group_by_max
+
 from ._matrixplot import MatrixPlot
 
 
