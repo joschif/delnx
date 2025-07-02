@@ -287,7 +287,7 @@ def gsea_barplot(
                         colors_for_each.append(adata_palette.get(val))
                 # Take first non-None color
                 palette[g] = next(c for c in colors_for_each if c is not None)
-            except Exception:
+            except StopIteration:
                 palette[g] = None
         # Replace None with defaults
         missing = [k for k, v in palette.items() if v is None]
