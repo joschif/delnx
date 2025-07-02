@@ -92,7 +92,6 @@ def test_matrixplot(adata_small):
 def test_dotplot(adata_small):
     """Test plotting of matrixplot."""
 
-    adata_small
     m = dx.pl.DotPlot(
         adata_small,
         markers=["gene_1", "gene_2", "gene_3"],
