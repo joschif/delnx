@@ -679,8 +679,9 @@ class DispersionEstimator:
         Minimum allowed dispersion value.
     max_disp : float, default=10.0
         Maximum allowed dispersion value.
+        Note: The threshold that is actually enforced is max(max_disp, n_samples).
     min_mu : float, default=0.5
-        Minimum allowed mean value.
+        Threshold for mean estimates.
     """
 
     min_disp: float = 1e-8
@@ -944,7 +945,7 @@ class DispersionEstimator:
         prior_disp_var: float = 1.0,
         use_prior_reg: bool = False,
         use_cr_reg: bool = True,
-    ) -> jnp.ndarray:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Estimate gene-wise dispersion using MLE.
 
         Parameters
@@ -966,8 +967,10 @@ class DispersionEstimator:
 
         Returns
         -------
-        jnp.ndarray
-            MLE dispersion estimates for all genes, shape (n_genes,).
+        tuple[jnp.ndarray, jnp.ndarray]
+            Tuple containing (optimized_dispersions, optimization_success_flags).
+            optimized_dispersions: Estimated dispersion values, shape (n_genes,).
+            optimization_success_flags: Boolean flags indicating success for each gene, shape (n_genes,).
         """
 
         def fit_dispersion(x, m, a):
@@ -1143,11 +1146,6 @@ class DispersionEstimator:
     def fit_dispersion_prior(self, dispersions: jnp.ndarray, trend: jnp.ndarray, design_matrix: jnp.ndarray) -> float:
         """Fit dispersion variance priors and standard deviation of log-residuals.
 
-        The computation is based on genes whose dispersions are above 100 * min_disp.
-
-        Note: when the design matrix has fewer than 3 degrees of freedom, the
-        estimate of log dispersions is likely to be imprecise.
-
         Parameters
         ----------
         dispersions : jnp.ndarray
@@ -1198,7 +1196,7 @@ class DispersionEstimator:
         trend: jnp.ndarray,
         design_matrix: jnp.ndarray,
         mu_hat: jnp.ndarray,
-    ) -> jnp.ndarray:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Fit Maximum a Posteriori dispersion estimates.
 
         After MAP dispersions are fit, filter genes for which we don't apply shrinkage.
@@ -1218,8 +1216,10 @@ class DispersionEstimator:
 
         Returns
         -------
-        jnp.ndarray
-            MAP dispersion estimates, shape (n_genes,).
+        tuple[jnp.ndarray, jnp.ndarray]
+            Tuple containing (MAP dispersion estimates, success flags).
+            MAP dispersion estimates: Estimated dispersion values, shape (n_genes,).
+            success flags: Boolean flags indicating convergence success for each gene, shape (n_genes,).
         """
         # Compute prior variance for dispersion
         prior_disp_var = self.fit_dispersion_prior(
