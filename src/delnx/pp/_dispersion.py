@@ -113,6 +113,12 @@ def _estimate_dispersion_batched(
         trend_type=trend_type,
     )
 
+    # Get prior variance
+    prior_disp_var = estimator.fit_dispersion_prior(
+        mle_dispersions,
+        fitted_trend,
+    )
+
     map_dispersions = []
 
     # Genewise MAP estimation in batches
@@ -123,10 +129,7 @@ def _estimate_dispersion_batched(
         # Fit mu and MAP dispersions
         mu_hat = estimator.fit_mu(X_batch)
         map_disp, _ = estimator.fit_MAP_dispersions(
-            X_batch,
-            mle_dispersions[batch],
-            fitted_trend[batch],
-            mu_hat,
+            X_batch, mle_dispersions[batch], fitted_trend[batch], mu_hat, prior_disp_var
         )
 
         map_dispersions.append(map_disp)
@@ -147,7 +150,7 @@ def dispersion(
     size_factor_key: str | None = None,
     var_key_added: str = "dispersion",
     trend_type: str = "parametric",
-    dispersion_range: tuple[float, float] = (1e-8, 100.0),
+    dispersion_range: tuple[float, float] = (1e-8, 10.0),
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> None:
