@@ -2,7 +2,7 @@
 
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 
 import jax
@@ -621,12 +621,12 @@ class NegativeBinomialRegression(Regression):
             dispersion = jnp.clip(self.dispersion, self.dispersion_range[0], self.dispersion_range[1])
         else:
             dispersion = DispersionEstimator(
+                design_matrix=X,
+                size_factors=offset if offset is not None else jnp.ones(X.shape[0]),
                 min_disp=self.dispersion_range[0],
                 max_disp=max(self.dispersion_range[1], X.shape[0]),
             ).fit_dispersion_single_gene(
                 counts=y,
-                design_matrix=X,
-                size_factors=offset,
             )
 
         # Initialize parameters
@@ -687,18 +687,26 @@ class DispersionEstimator:
         Size factors for normalization, shape (n_samples,).
     min_disp : float, default=1e-8
         Minimum allowed dispersion value.
-    max_disp : float, default=10.0
+    max_disp : float, default=100.0
         Maximum allowed dispersion value.
-        Note: The threshold that is actually enforced is max(max_disp, n_samples).
     min_mu : float, default=0.5
         Threshold for mean estimates.
     """
 
-    design_matrix: jnp.ndarray
-    size_factors: jnp.ndarray
+    design_matrix: jnp.ndarray = field(compare=False)
+    size_factors: jnp.ndarray = field(compare=False)
     min_disp: float = 1e-8
-    max_disp: float = 10.0
+    max_disp: float = 100.0
     min_mu: float = 0.5
+
+    def __post_init__(self):
+        """Validate input parameters."""
+        if self.design_matrix.ndim != 2:
+            raise ValueError("Design matrix must be 2D (n_samples, n_covariates).")
+        if self.size_factors.ndim != 1 or self.size_factors.shape[0] != self.design_matrix.shape[0]:
+            raise ValueError("Size factors must be 1D and match the number of samples in the design matrix.")
+        if not (self.min_disp > 0 and self.max_disp > self.min_disp):
+            raise ValueError("Invalid dispersion range: min_disp must be > 0 and max_disp must be > min_disp.")
 
     @partial(jax.jit, static_argnums=(0,))
     def fit_rough_dispersions_single_gene(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
@@ -728,8 +736,7 @@ class DispersionEstimator:
 
         dispersions = (nominator / denom).sum(0)
 
-        max_disp = jnp.maximum(self.max_disp, num_samples)
-        return jnp.clip(dispersions, self.min_disp, max_disp)
+        return jnp.clip(dispersions, self.min_disp, self.max_disp)
 
     def fit_rough_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate rough dispersions for multiple genes.
@@ -746,8 +753,8 @@ class DispersionEstimator:
         """
         return jax.vmap(
             self.fit_rough_dispersions_single_gene,
-            in_axes=(1, None),
-        )(normed_counts, self.design_matrix)
+            in_axes=(1,),
+        )(normed_counts)
 
     @partial(jax.jit, static_argnums=(0,))
     def fit_moments_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
@@ -775,23 +782,24 @@ class DispersionEstimator:
         dispersions = jnp.where(mu > 1e-10, (sigma_sq - s_mean_inv * mu) / (mu**2), 0.0)
         dispersions = jnp.nan_to_num(dispersions, nan=0.0, posinf=0.0, neginf=0.0)
 
-        max_disp = jnp.maximum(self.max_disp, normed_counts.shape[0])
-        return jnp.clip(dispersions, self.min_disp, max_disp)
+        return jnp.clip(dispersions, self.min_disp, self.max_disp)
 
     @partial(jax.jit, static_argnums=(0,))
-    def fit_initial_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
+    def fit_initial_dispersions(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate initial dispersions as minimum of rough and moments estimates (JIT-compiled).
 
         Parameters
         ----------
-        normed_counts : jnp.ndarray
-            Normalized count data, shape (n_samples, n_genes).
+        counts : jnp.ndarray
+            Raw count data, shape (n_samples, n_genes).
 
         Returns
         -------
         jnp.ndarray
             Initial dispersion estimates, shape (n_genes,).
         """
+        normed_counts = counts / self.size_factors[:, None]
+
         rough_disp = self.fit_rough_dispersions(normed_counts)
         moments_disp = self.fit_moments_dispersions(normed_counts)
 
@@ -799,7 +807,7 @@ class DispersionEstimator:
         return jnp.minimum(rough_disp, moments_disp)
 
     def fit_mu_single_gene(self, counts: jnp.ndarray) -> jnp.ndarray:
-        """Estimate gene-wise means (mu) using a linear model.
+        """Estimate gene-wise means of the NB distribution (mu).
 
         Parameters
         ----------
@@ -821,7 +829,7 @@ class DispersionEstimator:
         return jnp.maximum(mu_hat, self.min_mu)
 
     def fit_mu(self, counts: jnp.ndarray) -> jnp.ndarray:
-        """Estimate gene-wise means (mu) for multiple genes.
+        """Estimate gene-wise means of the NB distribution (mu).
 
         Parameters
         ----------
@@ -835,11 +843,11 @@ class DispersionEstimator:
         """
         return jax.vmap(
             self.fit_mu_single_gene,
-            in_axes=(1, None, None),
+            in_axes=(1,),
             out_axes=1,
-        )(counts, self.design_matrix, self.size_factors)
+        )(counts)
 
-    @partial(jax.jit, static_argnums=(0, 6, 7))
+    @partial(jax.jit, static_argnums=(0, 5, 6))
     def fit_dispersion_mle_single_gene(
         self,
         counts: jnp.ndarray,
@@ -873,8 +881,7 @@ class DispersionEstimator:
         tuple[float, bool]
             Tuple containing (optimized_dispersion, optimization_success).
         """
-        max_disp = jnp.maximum(self.max_disp, self.design_matrix.shape[0])
-        alpha_init = jnp.clip(alpha_init, self.min_disp, max_disp)
+        alpha_init = jnp.clip(alpha_init, self.min_disp, self.max_disp)
         log_alpha_init = jnp.log(alpha_init)
 
         @jax.jit
@@ -912,7 +919,7 @@ class DispersionEstimator:
                 mu,
                 alpha_init,
                 self.min_disp,
-                max_disp,
+                self.max_disp,
                 prior_disp_var,
                 use_prior_reg,
                 use_cr_reg,
@@ -921,7 +928,7 @@ class DispersionEstimator:
             res.x,
         )
 
-        log_alpha_opt = jnp.clip(jnp.exp(log_alpha_opt), self.min_disp, max_disp)
+        log_alpha_opt = jnp.clip(jnp.exp(log_alpha_opt), self.min_disp, self.max_disp)
         return log_alpha_opt, res.success
 
     def fit_dispersion_mle(
@@ -1241,14 +1248,12 @@ class DispersionEstimator:
         prior_disp_var = self.fit_dispersion_prior(
             dispersions=dispersions,
             trend=trend,
-            design_matrix=self.design_matrix,
         )
 
         return self.fit_dispersion_mle(
             counts=counts,
             mu=mu,
             alpha_init=trend,
-            design_matrix=self.design_matrix,
             prior_disp_var=prior_disp_var,
             use_prior_reg=True,
             use_cr_reg=True,

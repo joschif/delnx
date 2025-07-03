@@ -18,55 +18,45 @@ import jax.numpy as jnp
 import numpy as np
 import tqdm
 from anndata import AnnData
-from scipy.sparse import csr_matrix, issparse
 
-from delnx._typing import Method
 from delnx._utils import _get_layer, _to_dense
 from delnx.models import DispersionEstimator
 
 
 def _estimate_dispersion_batched(
     X: jnp.ndarray,
-    method: str = "deseq2",
-    dispersion_range: tuple[float, float] = (1e-8, 100.0),
-    shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
-    prior_variance: float = 0.1,
-    prior_df: float = 5.0,
+    design_matrix: jnp.ndarray | None = None,
+    size_factors: jnp.ndarray | None = None,
+    trend_type: str = "parametric",
+    min_disp: float = 1e-8,
+    max_disp: float = 10.0,
+    min_mu: float = 0.5,
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> jnp.ndarray:
     """Estimate dispersion parameters for negative binomial regression in batches.
 
-    This internal function implements batch processing for dispersion estimation to
-    efficiently handle large datasets. It supports multiple methods including DESeq2-style
-    and EdgeR-style approaches with trend-based shrinkage.
-
     Parameters
     ----------
     X : jnp.ndarray
-        Expression data matrix, shape (n_cells, n_features). Should contain count data
-        that has been normalized by size factors if necessary.
-    method : str, default="deseq2"
-        Dispersion estimation method:
-        - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a
-          parametric trend based on a gamma distribution.
-        - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards
-          a log-linear trend.
-        - "mle": Maximum likelihood estimation without shrinkage.
-        - "moments": Method of moments estimation (faster but less accurate).
-    dispersion_range : tuple[float, float], default=(1e-6, 10.0)
-        Allowed range for dispersion values, specified as (min_dispersion, max_dispersion).
-        Values outside this range will be clipped.
-    shrinkage_weight_range : tuple[float, float], default=(0.1, 0.95)
-        Range for the shrinkage weight used in DESeq2 and EdgeR methods, specified as
-        (min_weight, max_weight). Controls the balance between gene-specific estimates
-        and the fitted trend.
-    prior_variance : float, default=0.25
-        Prior variance parameter for DESeq2-style dispersion shrinkage. Higher values
-        result in less shrinkage.
-    prior_df : float, default=5.0
-        Prior degrees of freedom for edgeR-style dispersion shrinkage. Higher values
-        result in stronger shrinkage towards the trend.
+        Expression data matrix, shape (n_cells, n_features). Should contain raw count data.
+    design_matrix : jnp.ndarray | None, default=None
+        Design matrix for the model, shape (n_cells, n_covariates).
+        If :obj:`None`, a simple intercept model is used.
+    size_factors : jnp.ndarray | None, default=None
+        Size factors for normalization, shape (n_cells,).
+        If :obj:`None`, assumes all samples have equal size.
+    trend_type : str, default="parametric"
+        Type of trend to fit for dispersion estimates:
+            - "parametric": Fit a parametric trend (e.g., gamma distribution).
+            - "mean": Fit a constant mean-dispersion trend.
+    min_disp : float, default=1e-8
+        Minimum allowed dispersion value.
+    max_disp : float, default=10.0
+        Maximum allowed dispersion value.
+        Note: The threshold that is actually enforced is max(max_disp, n_samples).
+    min_mu : float, default=0.5
+        Threshold for mean estimates.
     batch_size : int, default=2048
         Number of features to process per batch. Adjust based on available memory.
     verbose : bool, default=True
@@ -77,60 +67,94 @@ def _estimate_dispersion_batched(
     jnp.ndarray
         Dispersion estimates for each feature, shape (n_features,).
     """
-    n_features = X.shape[1]
-    estimator = DispersionEstimator(
-        dispersion_range=dispersion_range,
-        shrinkage_weight_range=shrinkage_weight_range,
-        prior_variance=prior_variance,
-        prior_df=prior_df,
-    )
-    estimation_method = "mle" if method in ["mle", "deseq2"] else "moments"
+    if design_matrix is None:
+        # If no design matrix is provided, use a simple intercept model
+        design_matrix = jnp.ones((X.shape[0], 1), dtype=jnp.float32)
 
-    # Batched estimation of initial dispersion
+    if size_factors is None:
+        # If no size factors are provided, assume all samples have equal size
+        size_factors = jnp.ones(X.shape[0], dtype=jnp.float32)
+
+    n_features = X.shape[1]
+    normed_means = jnp.mean(X / size_factors[:, None], axis=0)
+    max_disp = max(max_disp, X.shape[0])
+
+    estimator = DispersionEstimator(
+        design_matrix=design_matrix,
+        size_factors=size_factors,
+        min_disp=min_disp,
+        max_disp=max_disp,
+        min_mu=min_mu,
+    )
+
     init_dispersions = []
+    mle_dispersions = []
+
+    # Compute genewise estimates in batches
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
         batch = slice(i, min(i + batch_size, n_features))
         X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
-        dispersion = estimator.estimate_dispersion(X_batch, method=estimation_method)
-        init_dispersions.append(dispersion)
+
+        # Fit initial dispersions, mu, and MLE dispersion (genewise)
+        disp_init = estimator.fit_initial_dispersions(X_batch)
+        mu_hat = estimator.fit_mu(X_batch)
+        disp_mle, _ = estimator.fit_dispersion_mle(X_batch, mu_hat, disp_init)
+
+        init_dispersions.append(disp_init)
+        mle_dispersions.append(disp_mle)
 
     init_dispersions = jnp.concatenate(init_dispersions, axis=0)
+    mle_dispersions = jnp.concatenate(mle_dispersions, axis=0)
 
-    if method in ["mle", "moments"]:
-        # If using MLE or moments, return initial estimates directly
-        return init_dispersions
-
-    # Shrinkage of dispersion towards trend
-    mean_counts = jnp.array(X.mean(axis=0)).flatten()
-    dispersions = estimator.shrink_dispersion(
-        dispersions=init_dispersions,
-        mu=mean_counts,
-        method=method,
+    # Fit trend across genes on genewise dispersion estimates
+    fitted_trend = estimator.fit_dispersion_trend(
+        mle_dispersions,
+        normed_means,
+        trend_type=trend_type,
     )
 
-    return dispersions
+    map_dispersions = []
+
+    # Genewise MAP estimation in batches
+    for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
+        batch = slice(i, min(i + batch_size, n_features))
+        X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
+
+        # Fit mu and MAP dispersions
+        mu_hat = estimator.fit_mu(X_batch)
+        map_disp, _ = estimator.fit_MAP_dispersions(
+            X_batch,
+            mle_dispersions[batch],
+            fitted_trend[batch],
+            mu_hat,
+        )
+
+        map_dispersions.append(map_disp)
+
+    map_dispersions = jnp.concatenate(map_dispersions, axis=0)
+
+    return {
+        "init_dispersions": init_dispersions,
+        "mle_dispersions": mle_dispersions,
+        "fitted_trend": fitted_trend,
+        "map_dispersions": map_dispersions,
+    }
 
 
 def dispersion(
     adata: AnnData,
     layer: str | None = None,
     size_factor_key: str | None = None,
-    method: Method = "deseq2",
     var_key_added: str = "dispersion",
+    trend_type: str = "parametric",
     dispersion_range: tuple[float, float] = (1e-8, 100.0),
-    shrinkage_weight_range: tuple[float, float] = (0.1, 0.95),
-    prior_variance: float = 0.1,
-    prior_df: float = 5.0,
     batch_size: int = 2048,
     verbose: bool = True,
 ) -> None:
     """Estimate dispersion parameters from (single-cell) RNA-seq data.
 
     This function estimates gene-specific dispersion parameters for negative binomial
-    models from count data. These dispersion estimates are crucial for differential
-    expression analysis with methods like negative binomial regression or DESeq2-style
-    approaches. The function supports various estimation methods with trend-based
-    shrinkage to improve estimates for genes with low counts or few replicates.
+    models from count data. The approach closely follows the PyDESeq2 implementation.
 
     Parameters
     ----------
@@ -139,34 +163,22 @@ def dispersion(
         raw or normalized counts.
     layer : str | None, default=None
         Layer in `adata.layers` containing count data to use for dispersion estimation.
-        If :obj:`None`, uses `adata.X`. Should contain raw counts or normalized counts.
+        If :obj:`None`, uses `adata.X`. Should contain raw counts.
     size_factor_key : str | None, default=None
         Key in `adata.obs` containing size factors for normalization. If provided,
         counts will be normalized by these factors before dispersion estimation.
         This is important for accurate dispersion estimation in datasets with
         variable sequencing depth.
-    method : Method, default="deseq2"
-        Method for dispersion estimation:
-            - "deseq2": DESeq2-inspired estimation with Bayesian shrinkage towards a parametric trend based on a gamma distribution.
-            - "edger": EdgeR-inspired estimation with empirical Bayes shrinkage towards a log-linear trend.
-            - "mle": Maximum likelihood estimation without shrinkage.
-            - "moments": Simple method of moments estimation (faster but less accurate).
     var_key_added : str, default="dispersion"
-        Key in `adata.var` where the estimated dispersion values will be stored.
+        Key in `adata.var` where the final estimated dispersion values will be stored.
         Existing values will be overwritten.
     dispersion_range : tuple[float, float], default=(1e-4, 10.0)
         Allowed range for dispersion values, specified as (min_dispersion, max_dispersion).
-        Values outside this range will be clipped.
-    shrinkage_weight_range : tuple[float, float], default=(0.1, 0.95)
-        Range for the shrinkage weight used in DESeq2 and EdgeR methods, specified as
-        (min_weight, max_weight). Controls how strongly individual gene estimates
-        are shrunk towards the trend.
-    prior_variance : float, default=0.1
-        Prior variance parameter for DESeq2-style dispersion shrinkage. Higher values
-        result in less shrinkage.
-    prior_df : float, default=5.0
-        Prior degrees of freedom for edgeR-style dispersion shrinkage. Higher values
-        result in stronger shrinkage towards the trend.
+        Note: The threshold that is actually enforced is max(max_disp, n_samples).
+    trend_type : str, default="parametric"
+        Type of trend to fit for dispersion estimates:
+            - "parametric": Fit a parametric trend (e.g., gamma distribution).
+            - "mean": Fit a constant mean-dispersion trend.
     batch_size : int, default=2048
         Number of features to process per batch. Adjust based on available memory
         and dataset size.
@@ -177,11 +189,15 @@ def dispersion(
     -------
     Updates ``adata`` in place and sets the following fields:
 
-            - ``adata.var[var_key_added]``: Estimated dispersion values for each feature.
+            - ``adata.var[var_key_added]``: Final estimated dispersion values for each feature.
+            - ``adata.var["dispersion_init"]``: Initial dispersion estimates.
+            - ``adata.var["dispersion_mle"]``: Genewise maximum likelihood dispersion estimates.
+            - ``adata.var["dispersion_trend"]``: Fitted dispersion trend across genes.
+            - ``adata.var["dispersion_map"]``: MAP dispersion estimates after trend fitting.
 
     Examples
     --------
-    Estimate dispersions using the DESeq2 method:
+    Estimate dispersions on (sc)RNA-seq data:
 
     >>> import scanpy as sc
     >>> import delnx as dx
@@ -189,14 +205,7 @@ def dispersion(
     >>> # Calculate size factors first (optional but recommended)
     >>> adata.obs["size_factors"] = adata.X.sum(axis=1) / np.median(adata.X.sum(axis=1))
     >>> # Estimate dispersions
-    >>> dx.pp.dispersion(adata, size_factor_key="size_factors", method="deseq2")
-
-    Using different estimation methods:
-
-    >>> # EdgeR-style estimation
-    >>> dx.pp.dispersion(adata, size_factor_key="size_factors", method="edger", var_key_added="disp_edger")
-    >>> # Maximum likelihood estimation (no shrinkage)
-    >>> dx.pp.dispersion(adata, size_factor_key="size_factors", method="mle", var_key_added="disp_mle")
+    >>> dx.pp.dispersion(adata, size_factor_key="size_factors")
 
     Notes
     -----
@@ -209,29 +218,23 @@ def dispersion(
     """
     # Get expression data from the specified layer or X
     X = _get_layer(adata, layer)
-
-    # Apply size factor normalization if provided
-    if size_factor_key is not None:
-        if size_factor_key not in adata.obs:
-            raise ValueError(f"Size factor key '{size_factor_key}' not found in adata.obs")
-        size_factors = adata.obs[size_factor_key].values
-        X_norm = X / size_factors[:, None]
-    else:
-        X_norm = X
-
-    X_norm = csr_matrix(X_norm) if issparse(X) else X_norm
+    size_factors = adata.obs[size_factor_key].values if size_factor_key else None
 
     # Estimate dispersions using the specified method
     dispersions = _estimate_dispersion_batched(
-        X=X_norm,
-        method=method,
-        dispersion_range=dispersion_range,
-        shrinkage_weight_range=shrinkage_weight_range,
-        prior_variance=prior_variance,
-        prior_df=prior_df,
+        X=X,
+        design_matrix=None,  # TODO: Add design matrix support
+        size_factors=size_factors,
+        min_disp=dispersion_range[0],
+        max_disp=max(dispersion_range[1], X.shape[0]),
+        trend_type=trend_type,
         batch_size=batch_size,
         verbose=verbose,
     )
 
     # Store results in adata.var
-    adata.var[var_key_added] = np.array(dispersions)
+    adata.var[var_key_added] = np.array(dispersions["map_dispersions"])
+    adata.var["dispersion_init"] = np.array(dispersions["init_dispersions"])
+    adata.var["dispersion_mle"] = np.array(dispersions["mle_dispersions"])
+    adata.var["dispersion_trend"] = np.array(dispersions["fitted_trend"])
+    adata.var["dispersion_map"] = np.array(dispersions["map_dispersions"])
