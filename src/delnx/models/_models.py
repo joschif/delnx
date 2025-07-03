@@ -681,6 +681,10 @@ class DispersionEstimator:
 
     Parameters
     ----------
+    design_matrix : jnp.ndarray
+        Design matrix for the experiment, shape (n_samples, n_covariates).
+    size_factors : jnp.ndarray
+        Size factors for normalization, shape (n_samples,).
     min_disp : float, default=1e-8
         Minimum allowed dispersion value.
     max_disp : float, default=10.0
@@ -690,33 +694,33 @@ class DispersionEstimator:
         Threshold for mean estimates.
     """
 
+    design_matrix: jnp.ndarray
+    size_factors: jnp.ndarray
     min_disp: float = 1e-8
     max_disp: float = 10.0
     min_mu: float = 0.5
 
     @partial(jax.jit, static_argnums=(0,))
-    def fit_rough_dispersions_single_gene(self, normed_counts: jnp.ndarray, design_matrix: jnp.ndarray) -> jnp.ndarray:
+    def fit_rough_dispersions_single_gene(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate rough dispersions using linear model residuals (JIT-compiled).
 
         Parameters
         ----------
         normed_counts : jnp.ndarray
             Normalized count data for a single gene, shape (n_samples,).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
 
         Returns
         -------
         jnp.ndarray
             Rough dispersion estimates clipped to valid range.
         """
-        num_samples, num_vars = design_matrix.shape
+        num_samples, num_vars = self.design_matrix.shape
 
         # Fit linear model
         model = LinearRegression(skip_stats=True)
-        results = model.fit(design_matrix, normed_counts)
+        results = model.fit(self.design_matrix, normed_counts)
 
-        y_hat = results["coef"] @ design_matrix.T  # (num_samples, num_genes)
+        y_hat = results["coef"] @ self.design_matrix.T  # (num_samples, num_genes)
         y_hat = jnp.maximum(y_hat, 1.0)  # Threshold as in PyDESeq2
 
         nominator = (normed_counts - y_hat) ** 2 - y_hat
@@ -727,15 +731,13 @@ class DispersionEstimator:
         max_disp = jnp.maximum(self.max_disp, num_samples)
         return jnp.clip(dispersions, self.min_disp, max_disp)
 
-    def fit_rough_dispersions(self, normed_counts: jnp.ndarray, design_matrix: jnp.ndarray) -> jnp.ndarray:
+    def fit_rough_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate rough dispersions for multiple genes.
 
         Parameters
         ----------
         normed_counts : jnp.ndarray
             Normalized count data, shape (n_samples, n_genes).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
 
         Returns
         -------
@@ -745,18 +747,16 @@ class DispersionEstimator:
         return jax.vmap(
             self.fit_rough_dispersions_single_gene,
             in_axes=(1, None),
-        )(normed_counts, design_matrix)
+        )(normed_counts, self.design_matrix)
 
     @partial(jax.jit, static_argnums=(0,))
-    def fit_moments_dispersions(self, normed_counts: jnp.ndarray, size_factors: jnp.ndarray) -> jnp.ndarray:
+    def fit_moments_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate dispersions using method of moments (JIT-compiled).
 
         Parameters
         ----------
         normed_counts : jnp.ndarray
             Normalized count data, shape (n_samples, n_genes).
-        size_factors : jnp.ndarray
-            Size factors for normalization, shape (n_samples,).
 
         Returns
         -------
@@ -764,7 +764,7 @@ class DispersionEstimator:
             Method of moments dispersion estimates, shape (n_genes,).
         """
         # Mean inverse size factor
-        s_mean_inv = jnp.mean(1.0 / size_factors)
+        s_mean_inv = jnp.mean(1.0 / self.size_factors)
 
         # Gene-wise means and variances
         mu = jnp.mean(normed_counts, axis=0)
@@ -779,45 +779,32 @@ class DispersionEstimator:
         return jnp.clip(dispersions, self.min_disp, max_disp)
 
     @partial(jax.jit, static_argnums=(0,))
-    def fit_initial_dispersions(
-        self, normed_counts: jnp.ndarray, design_matrix: jnp.ndarray, size_factors: jnp.ndarray
-    ) -> jnp.ndarray:
+    def fit_initial_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate initial dispersions as minimum of rough and moments estimates (JIT-compiled).
 
         Parameters
         ----------
         normed_counts : jnp.ndarray
             Normalized count data, shape (n_samples, n_genes).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
-        size_factors : jnp.ndarray
-            Size factors for normalization, shape (n_samples,).
 
         Returns
         -------
         jnp.ndarray
             Initial dispersion estimates, shape (n_genes,).
         """
-        rough_disp = self.fit_rough_dispersions(normed_counts, design_matrix)
-        moments_disp = self.fit_moments_dispersions(normed_counts, size_factors)
+        rough_disp = self.fit_rough_dispersions(normed_counts)
+        moments_disp = self.fit_moments_dispersions(normed_counts)
 
         # Take minimum as in PyDESeq2
-        initial_disp = jnp.minimum(rough_disp, moments_disp)
-        return jnp.clip(initial_disp, self.min_disp, self.max_disp)
+        return jnp.minimum(rough_disp, moments_disp)
 
-    def fit_mu_single_gene(
-        self, counts: jnp.ndarray, design_matrix: jnp.ndarray, size_factors: jnp.ndarray
-    ) -> jnp.ndarray:
+    def fit_mu_single_gene(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate gene-wise means (mu) using a linear model.
 
         Parameters
         ----------
         counts : jnp.ndarray
             Raw count data for a single gene, shape (n_samples,).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
-        size_factors : jnp.ndarray
-            Size factors for normalization, shape (n_samples,).
 
         Returns
         -------
@@ -826,24 +813,20 @@ class DispersionEstimator:
         """
         # Fit linear model
         model = LinearRegression(skip_stats=True)
-        results = model.fit(design_matrix, counts / size_factors)
+        results = model.fit(self.design_matrix, counts / self.size_factors)
 
-        mu_hat = size_factors * (results["coef"] @ design_matrix.T)
+        mu_hat = self.size_factors * (results["coef"] @ self.design_matrix.T)
 
         # Threshold mu_hat as 1/mu_hat will be used later on.
         return jnp.maximum(mu_hat, self.min_mu)
 
-    def fit_mu(self, counts: jnp.ndarray, design_matrix: jnp.ndarray, size_factors: jnp.ndarray) -> jnp.ndarray:
+    def fit_mu(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate gene-wise means (mu) for multiple genes.
 
         Parameters
         ----------
         counts : jnp.ndarray
             Raw count data, shape (n_samples, n_genes).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
-        size_factors : jnp.ndarray
-            Size factors for normalization, shape (n_samples,).
 
         Returns
         -------
@@ -854,7 +837,7 @@ class DispersionEstimator:
             self.fit_mu_single_gene,
             in_axes=(1, None, None),
             out_axes=1,
-        )(counts, design_matrix, size_factors)
+        )(counts, self.design_matrix, self.size_factors)
 
     @partial(jax.jit, static_argnums=(0, 6, 7))
     def fit_dispersion_mle_single_gene(
@@ -862,7 +845,6 @@ class DispersionEstimator:
         counts: jnp.ndarray,
         mu: jnp.ndarray,
         alpha_init: float,
-        design_matrix: jnp.ndarray,
         prior_disp_var: float = 1.0,
         use_prior_reg: bool = False,
         use_cr_reg: bool = True,
@@ -874,7 +856,7 @@ class DispersionEstimator:
         counts : jnp.ndarray
             Raw count data for a single gene, shape (n_samples,).
         mu : jnp.ndarray
-            Mean expression values, shape (n_samples,).
+            Estimated mean of the NB distribution, shape (n_samples, n_genes).
         alpha_init : float
             Initial dispersion estimate.
         design_matrix : jnp.ndarray
@@ -891,7 +873,7 @@ class DispersionEstimator:
         tuple[float, bool]
             Tuple containing (optimized_dispersion, optimization_success).
         """
-        max_disp = jnp.maximum(self.max_disp, design_matrix.shape[0])
+        max_disp = jnp.maximum(self.max_disp, self.design_matrix.shape[0])
         alpha_init = jnp.clip(alpha_init, self.min_disp, max_disp)
         log_alpha_init = jnp.log(alpha_init)
 
@@ -903,7 +885,7 @@ class DispersionEstimator:
 
             if use_cr_reg:
                 W = mu / (1 + mu * alpha)
-                reg += 0.5 * safe_slogdet((design_matrix.T * W) @ design_matrix)[1]
+                reg += 0.5 * safe_slogdet((self.design_matrix.T * W) @ self.design_matrix)[1]
 
             if use_prior_reg:
                 reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
@@ -926,7 +908,7 @@ class DispersionEstimator:
             lambda x: x[0],
             lambda _: grid_fit_alpha(
                 counts,
-                design_matrix,
+                self.design_matrix,
                 mu,
                 alpha_init,
                 self.min_disp,
@@ -947,7 +929,6 @@ class DispersionEstimator:
         counts: jnp.ndarray,
         mu: jnp.ndarray,
         alpha_init: jnp.ndarray,
-        design_matrix: jnp.ndarray,
         prior_disp_var: float = 1.0,
         use_prior_reg: bool = False,
         use_cr_reg: bool = True,
@@ -959,11 +940,9 @@ class DispersionEstimator:
         counts : jnp.ndarray
             Raw count data, shape (n_samples, n_genes).
         mu : jnp.ndarray
-            Mean expression values, shape (n_samples, n_genes).
+            Estimated mean of the NB distribution, shape (n_samples, n_genes).
         alpha_init : jnp.ndarray
             Initial dispersion estimates, shape (n_genes,).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
         prior_disp_var : float, default=1.0
             Prior variance for dispersion regularization.
         use_prior_reg : bool, default=False
@@ -984,7 +963,6 @@ class DispersionEstimator:
                 x,
                 m,
                 a,
-                design_matrix,
                 prior_disp_var,
                 use_prior_reg,
                 use_cr_reg,
@@ -998,8 +976,6 @@ class DispersionEstimator:
     def fit_dispersion_single_gene(
         self,
         counts: jnp.ndarray,
-        design_matrix: jnp.ndarray,
-        size_factors: jnp.ndarray,
     ) -> tuple[float, bool]:
         """Estimate gene-wise dispersion using initial dispersions and MLE.
 
@@ -1007,10 +983,6 @@ class DispersionEstimator:
         ----------
         counts : jnp.ndarray
             Raw count data for a single gene, shape (n_samples,).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
-        size_factors : jnp.ndarray
-            Size factors for normalization, shape (n_samples,).
 
         Returns
         -------
@@ -1020,10 +992,9 @@ class DispersionEstimator:
             success_flag: Boolean indicating if the optimization was successful.
         """
         # Estimate initial dispersion
-        size_factors = size_factors or jnp.ones(counts.shape[0])
-        normed_counts = counts / size_factors
-        initial_dispersions = self.fit_initial_dispersions(normed_counts[:, None], design_matrix, size_factors)
-        mu = self.fit_mu_single_gene(counts, design_matrix, size_factors)
+        normed_counts = counts / self.size_factors
+        initial_dispersions = self.fit_initial_dispersions(normed_counts[:, None])
+        mu = self.fit_mu_single_gene(counts)
 
         # Fit MLE dispersion
         alpha_init = initial_dispersions[0]
@@ -1031,7 +1002,7 @@ class DispersionEstimator:
             counts,
             mu,
             alpha_init,
-            design_matrix,
+            self.design_matrix,
             prior_disp_var=1.0,
             use_prior_reg=False,
             use_cr_reg=True,
@@ -1117,7 +1088,7 @@ class DispersionEstimator:
         dispersions : jnp.ndarray
             Gene-wise dispersion estimates, shape (n_genes,).
         normed_means : jnp.ndarray
-            Normalized mean expression values, shape (n_genes,).
+            Mean normalized expression values, shape (n_genes,).
 
         Returns
         -------
@@ -1172,7 +1143,7 @@ class DispersionEstimator:
         dispersions : jnp.ndarray
             Gene-wise dispersion estimates, shape (n_genes,).
         normed_means : jnp.ndarray
-            Normalized mean expression values, shape (n_genes,).
+            Mean normalized expression values, shape (n_genes,).
         trend_type : str, default="parametric"
             Type of trend to fit. Options are "parametric" or "mean".
 
@@ -1193,7 +1164,7 @@ class DispersionEstimator:
         else:
             raise ValueError(f"Unknown trend_type: {trend_type}")
 
-    def fit_dispersion_prior(self, dispersions: jnp.ndarray, trend: jnp.ndarray, design_matrix: jnp.ndarray) -> float:
+    def fit_dispersion_prior(self, dispersions: jnp.ndarray, trend: jnp.ndarray) -> float:
         """Fit dispersion variance priors and standard deviation of log-residuals.
 
         Parameters
@@ -1202,8 +1173,6 @@ class DispersionEstimator:
             Gene-wise dispersion estimates, shape (n_genes,).
         trend : jnp.ndarray
             Fitted trend values, shape (n_genes,).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
 
         Returns
         -------
@@ -1211,7 +1180,7 @@ class DispersionEstimator:
             Prior variance for dispersion estimates.
         """
         # Exclude genes with all zeroes
-        num_samples, num_vars = design_matrix.shape
+        num_samples, num_vars = self.design_matrix.shape
 
         # Check the degrees of freedom
         if (num_samples - num_vars) <= 3:
@@ -1244,8 +1213,7 @@ class DispersionEstimator:
         counts: jnp.ndarray,
         dispersions: jnp.ndarray,
         trend: jnp.ndarray,
-        design_matrix: jnp.ndarray,
-        mu_hat: jnp.ndarray,
+        mu: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Fit Maximum a Posteriori dispersion estimates.
 
@@ -1259,10 +1227,8 @@ class DispersionEstimator:
             Gene-wise dispersion estimates, shape (n_genes,).
         trend : jnp.ndarray
             Fitted trend values, shape (n_genes,).
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
-        mu_hat : jnp.ndarray
-            Estimated mean expression values, shape (n_samples, n_genes).
+        mu : jnp.ndarray
+            Estimated mean of the NB distribution, shape (n_samples, n_genes).
 
         Returns
         -------
@@ -1275,14 +1241,14 @@ class DispersionEstimator:
         prior_disp_var = self.fit_dispersion_prior(
             dispersions=dispersions,
             trend=trend,
-            design_matrix=design_matrix,
+            design_matrix=self.design_matrix,
         )
 
         return self.fit_dispersion_mle(
             counts=counts,
-            mu=mu_hat,
+            mu=mu,
             alpha_init=trend,
-            design_matrix=design_matrix,
+            design_matrix=self.design_matrix,
             prior_disp_var=prior_disp_var,
             use_prior_reg=True,
             use_cr_reg=True,
