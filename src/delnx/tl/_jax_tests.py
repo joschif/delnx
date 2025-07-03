@@ -169,7 +169,6 @@ def _run_nb_test(
     size_factors: jnp.ndarray | None = None,
     optimizer: str = "BFGS",
     maxiter: int = 100,
-    dispersion_method: str = "mle",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Run negative binomial regression tests for a batch of features.
 
@@ -199,10 +198,6 @@ def _run_nb_test(
         Optimization method to use for model fitting.
     maxiter : int, default=100
         Maximum number of iterations for the optimizer.
-    dispersion_method : str, default='mle'
-        Method to estimate gene-wise dispersions if not provided:
-        - 'mle': Maximum likelihood estimation (more accurate but slower)
-        - 'moments': Method of moments (faster but less accurate)
 
     Returns
     -------
@@ -221,7 +216,6 @@ def _run_nb_test(
             size_factors=size_factors,
             optimizer=optimizer,
             maxiter=maxiter,
-            dispersion_method=dispersion_method,
         )
 
     if disp is None:
@@ -360,7 +354,6 @@ def _run_batched_de(
     dispersions: np.ndarray | None = None,
     size_factors: np.ndarray | None = None,
     covariate_keys: list[str] | None = None,
-    dispersion_method: str = "mle",
     batch_size: int = 32,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -398,10 +391,6 @@ def _run_batched_de(
         log-transformed and used as offset in the model.
     covariate_keys : list[str] | None, default=None
         Names of covariate columns in model_data to include in the design matrix.
-    dispersion_method : str, default='mle'
-        Method for estimating gene-wise dispersions for negative binomial models if not provided:
-        - 'mle': Maximum likelihood estimation based an intercept-only model
-        - 'moments': Method of moments
     batch_size : int, default=32
         Number of features to process in each batch for memory efficiency.
     optimizer : str, default='BFGS'
@@ -444,7 +433,6 @@ def _run_batched_de(
                 size_factors=size_factors,
                 optimizer=optimizer,
                 maxiter=maxiter,
-                dispersion_method=dispersion_method,
             )
 
     # Prepare data for ANOVA tests
