@@ -90,6 +90,9 @@ def _estimate_dispersion_batched(
     init_dispersions = []
     mle_dispersions = []
 
+    if verbose:
+        print("Fitting initial dispersions")
+
     # Compute genewise estimates in batches
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
         batch = slice(i, min(i + batch_size, n_features))
@@ -106,6 +109,9 @@ def _estimate_dispersion_batched(
     init_dispersions = jnp.concatenate(init_dispersions, axis=0)
     mle_dispersions = jnp.concatenate(mle_dispersions, axis=0)
 
+    if verbose:
+        print("Fitting dispersion trend curve")
+
     # Fit trend across genes on genewise dispersion estimates
     fitted_trend = estimator.fit_dispersion_trend(
         mle_dispersions,
@@ -118,6 +124,9 @@ def _estimate_dispersion_batched(
         mle_dispersions,
         fitted_trend,
     )
+
+    if verbose:
+        print("Fitting MAP dispersions")
 
     map_dispersions = []
 
