@@ -1009,7 +1009,6 @@ class DispersionEstimator:
             counts,
             mu,
             alpha_init,
-            self.design_matrix,
             prior_disp_var=1.0,
             use_prior_reg=False,
             use_cr_reg=True,
