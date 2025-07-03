@@ -1220,6 +1220,7 @@ class DispersionEstimator:
         dispersions: jnp.ndarray,
         trend: jnp.ndarray,
         mu: jnp.ndarray,
+        prior_disp_var: float | None = None,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Fit Maximum a Posteriori dispersion estimates.
 
@@ -1235,6 +1236,9 @@ class DispersionEstimator:
             Fitted trend values, shape (n_genes,).
         mu : jnp.ndarray
             Estimated mean of the NB distribution, shape (n_samples, n_genes).
+        prior_disp_var : float | None, default=None
+            Prior variance for dispersion estimates. If :obj:`None`, it will be estimated
+            from the data using the `fit_dispersion_prior` method.
 
         Returns
         -------
@@ -1243,11 +1247,12 @@ class DispersionEstimator:
             MAP dispersion estimates: Estimated dispersion values, shape (n_genes,).
             success flags: Boolean flags indicating convergence success for each gene, shape (n_genes,).
         """
-        # Compute prior variance for dispersion
-        prior_disp_var = self.fit_dispersion_prior(
-            dispersions=dispersions,
-            trend=trend,
-        )
+        if prior_disp_var is None:
+            # Compute prior variance for dispersion
+            prior_disp_var = self.fit_dispersion_prior(
+                dispersions=dispersions,
+                trend=trend,
+            )
 
         return self.fit_dispersion_mle(
             counts=counts,
