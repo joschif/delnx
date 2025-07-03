@@ -150,3 +150,13 @@ def test_gsea_dotplot(de_results, gene_sets):
     # Check if the figure is created
     assert fig is not None
     assert isinstance(fig, ma.heatmap.SizedHeatmap)
+
+def test_filter_genes(adata_small):
+    """Test that filter genes returns a boolean mask"""
+
+    # Get boolean mask
+    keep_mask = dx.pp.filter_genes(adata_small, mode="quantile", quantile=0.25)
+
+    assert isinstance(keep_mask, np.ndarray), "Result is not a NumPy array"
+    assert keep_mask.dtype == bool, "Result is not a boolean array"
+    assert keep_mask.shape[0] == adata_small.var.shape[0], f"Length mismatch: {keep_mask.shape[0]} != {adata_small.var.shape[0]}"

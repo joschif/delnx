@@ -42,7 +42,20 @@ class MatrixPlot(BasePlot):
         else:
             flat_markers = self.markers
 
-        df = pd.DataFrame(self.adata[:, flat_markers].X.toarray(), index=group_col)
+        # Extract data matrix from layer or X
+        if getattr(self, "layer", None):
+            if self.layer not in self.adata.layers:
+                raise ValueError(f"Layer '{self.layer}' not found in adata.layers.")
+            mat = self.adata[:, flat_markers].layers[self.layer]
+        else:
+            mat = self.adata[:, flat_markers].X
+
+        # Convert to dense if sparse
+        if hasattr(mat, "toarray"):
+            mat = mat.toarray()
+
+        # Compute group-averaged expression
+        df = pd.DataFrame(mat, index=group_col)
         self.mean_df = df.groupby(df.index).mean()
         self.mean_df.columns = flat_markers
 
@@ -190,14 +203,14 @@ class MatrixPlot(BasePlot):
 
                     data = self._build_data()
 
+        # Scale the data if scaling is enabled
+        data = self._scale_data(data)
+
         m = ma.Heatmap(
             data,
             cmap=self.cmap,
             height=self.height,
             width=self.width,
-            vmin=self.vmin,
-            vmax=self.vmax,
-            center=self.center,
             cbar_kws={"title": "Expression\nin group"},
         )
 

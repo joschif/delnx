@@ -1,11 +1,9 @@
-import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import marsilea as ma
 import numpy as np
-import pandas as pd
 
 from delnx.pp._utils import group_by_max
 
@@ -54,39 +52,20 @@ class DotPlot(MatrixPlot):
 
                     data = self._build_data()
 
-        # Flatten markers if given as dict
-        if isinstance(self.markers, dict):
-            flat_markers = list(itertools.chain.from_iterable(self.markers.values()))
-        else:
-            flat_markers = self.markers
-
-        # Get detection data from raw or specified layer — do not fall back to .X
-        if self.adata.raw is None:
-            raise ValueError("DotPlot requires `adata.raw` to be set and contain raw counts.")
-
-        X_raw = self.adata.raw.to_adata()[:, flat_markers].X
-        X_raw = X_raw.toarray() if hasattr(X_raw, "toarray") else X_raw
-
-        # Check if any value is not "integer-valued"
-        if not np.all(np.equal(np.mod(X_raw, 1), 0)):
-            raise ValueError("Array contains non-integer float values.")
-
-        group_labels = self.adata.obs["_group"].astype(str)
-        df = pd.DataFrame(X_raw > 0, index=group_labels)
-
+        df = data > 0
         agg_count = df.gt(0).groupby(df.index).sum().loc[self.mean_df.index]
         agg_cell_counts = df.groupby(df.index).size().loc[self.mean_df.index].to_numpy()
         size = agg_count.to_numpy() / agg_cell_counts[:, np.newaxis]
+
+        # Scale the data if scaling is enabled
+        data = self._scale_data(data)
 
         m = ma.SizedHeatmap(
             size=size,
             color=data,
             sizes=(1, self.scale * 100),
-            vmin=self.vmin,
-            vmax=self.vmax,
             width=self.width,
             height=self.height,
-            center=self.center,
             cmap=self.cmap,
             edgecolor=None,
             linewidth=0,

@@ -32,6 +32,8 @@ class BasePlot:
         If a string is provided, it is converted to a list internally.
     layer : str or None, optional
         If specified, use this layer from `adata` instead of the default `.X` matrix
+    scale: bool, default=True
+        Whether to scale gene expression values before plotting.
     row_grouping : str, list[str], pd.Series, pd.Categorical, or None, default="auto"
         How to group rows in the heatmap. Can be:
         - "auto": Use the group labels defined by `groupby_keys`.
@@ -45,7 +47,7 @@ class BasePlot:
         Height of the plot in inches.
     width : float, default=3
         Width of the plot in inches.
-    scale : float, default=1.0
+    scale_render : float, default=1.0
         Scale factor for the plot size.
     show_column_names : bool, default=True
         Whether to display column (gene) names on the plot.
@@ -77,6 +79,9 @@ class BasePlot:
     # If None, uses the default `.X` matrix from `adata`
     layer: str | None = None
 
+    # Whether to scale the data before plotting
+    scale: bool = True
+
     # Row grouping options
     row_grouping: str | list[str] | pd.Series | pd.Categorical | None = "auto"
 
@@ -85,14 +90,11 @@ class BasePlot:
 
     # Plotting parameters for heatmap
     cmap: str = "viridis"
-    vmin: float | None = None
-    vmax: float | None = None
-    center: float | None = None
 
     # Layout and appearance parameters
     height: float = 3.5
     width: float = 3
-    scale: float = 1.0
+    scale_render: float = 1.0
 
     # Annotations and labels
     show_column_names: bool = True
@@ -116,9 +118,6 @@ class BasePlot:
 
     def __post_init__(self):
         """Initialize group labels and add them to adata.obs as '_group'."""
-        # Make copy of adata to avoid modifying the original object
-        self.adata = self.adata.copy()
-
         # Make category dtype for groupby_keys if not already categorical
         if isinstance(self.groupby_keys, str):
             if self.groupby_keys not in self.adata.obs.columns:
@@ -131,10 +130,6 @@ class BasePlot:
                     raise ValueError(f"Key '{key}' not found in adata.obs.")
                 if not pd.api.types.is_categorical_dtype(self.adata.obs[key]):
                     self.adata.obs[key] = self.adata.obs[key].astype("category")
-
-        # If layer is specified, set as X
-        if self.layer is not None:
-            self.adata.X = self.adata.layers[self.layer]
 
         if isinstance(self.groupby_keys, str):
             self.groupby_keys = [self.groupby_keys]
@@ -202,13 +197,26 @@ class BasePlot:
             raise ValueError("Invalid value for row_grouping")
 
     def _build_data(self) -> np.ndarray:
-        """Extracts the data matrix for the selected markers."""
-        # Flatten markers if given as dict
+        """Extracts the data matrix for the selected markers from .X or a specified layer."""
+        # Flatten markers if given as a dict
         if isinstance(self.markers, dict):
             flat_markers = list(itertools.chain.from_iterable(self.markers.values()))
         else:
             flat_markers = self.markers
-        return self.adata[:, flat_markers].X.toarray()
+
+        # Extract matrix from specified layer if provided
+        if getattr(self, "layer", None):
+            if self.layer not in self.adata.layers:
+                raise ValueError(f"Layer '{self.layer}' not found in adata.layers.")
+            mat = self.adata[:, flat_markers].layers[self.layer]
+        else:
+            mat = self.adata[:, flat_markers].X
+
+        # Convert to dense array if sparse
+        if hasattr(mat, "toarray"):
+            mat = mat.toarray()
+
+        return mat
 
     def _add_row_labels(self, m: ma.Heatmap):
         """
@@ -347,19 +355,41 @@ class BasePlot:
             m.add_legends()
         return m
 
+    def _scale_data(self, data: np.ndarray) -> np.ndarray:
+        """
+        Scale the data matrix if scaling is enabled.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            The data matrix to scale.
+
+        Returns
+        -------
+        np.ndarray
+            The scaled data matrix.
+        """
+        if self.scale:
+            # Scale the data to [0, 1] range
+            data_min = np.min(data, axis=0)
+            data_max = np.max(data, axis=0)
+            data = (data - data_min) / (data_max - data_min)
+        return data
+
     def _build_plot(self):
         """Build the base heatmap plot."""
         # Build the data matrix for the heatmap
         data = self._build_data()
+
+        # Scale the data if scaling is enabled
+        data = self._scale_data(data)
+
         # Create heatmap
         m = ma.Heatmap(
             data,
             cmap=self.cmap,
             height=self.height,
             width=self.width,
-            vmin=self.vmin,
-            vmax=self.vmax,
-            center=self.center,
             cbar_kws={"title": "Expression\nin group"},
         )
         # Extract grouping information
@@ -376,7 +406,7 @@ class BasePlot:
         m = self._build_plot()
         # Render the plot
         with plt.rc_context(rc={"axes.grid": False, "grid.color": ".8"}):
-            m.render(scale=self.scale)
+            m.render(scale=self.scale_render)
 
     def save(self, filename: str, **kwargs):
         """
