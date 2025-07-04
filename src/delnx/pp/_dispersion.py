@@ -27,6 +27,7 @@ def _estimate_dispersion_batched(
     X: jnp.ndarray,
     design_matrix: jnp.ndarray | None = None,
     size_factors: jnp.ndarray | None = None,
+    method: str = "full",
     trend_type: str = "parametric",
     min_disp: float = 1e-8,
     max_disp: float = 10.0,
@@ -46,6 +47,11 @@ def _estimate_dispersion_batched(
     size_factors : jnp.ndarray | None, default=None
         Size factors for normalization, shape (n_cells,).
         If :obj:`None`, assumes all samples have equal size.
+    method : str, default="full"
+        Method for dispersion estimation:
+            - "full": Use full DESeq2-style estimation with trend fitting and MAP estimation.
+            - "approx": Use approximate estimation by skipping initial MLE fitting.
+            - "fast": Fast approximation using only initial dispersion estimates.
     trend_type : str, default="parametric"
         Type of trend to fit for dispersion estimates:
             - "parametric": Fit a parametric trend (e.g., gamma distribution).
@@ -104,6 +110,14 @@ def _estimate_dispersion_batched(
 
         # Fit initial dispersions, mu, and MLE dispersion (genewise)
         disp_init = estimator.fit_initial_dispersions(X_batch)
+
+        if method in ["fast", "approx"]:
+            # Skip MLE fitting for fast and approx method
+            mle_dispersions.append(disp_init)
+            mle_success.append(jnp.zeros_like(disp_init, dtype=bool))
+            init_dispersions.append(disp_init)
+            continue
+
         mu_hat = estimator.fit_mu(X_batch)
         disp_mle, success = estimator.fit_dispersion_mle(X_batch, mu_hat, disp_init)
 
@@ -115,19 +129,34 @@ def _estimate_dispersion_batched(
     mle_dispersions = jnp.concatenate(mle_dispersions, axis=0)
     mle_success = jnp.concatenate(mle_success, axis=0)
 
+    if method == "fast":
+        # If method is "fast", return initial dispersions only
+        return {
+            "init_dispersions": init_dispersions,
+            "mle_dispersions": None,
+            "mle_converged": None,
+            "fitted_trend": None,
+            "map_dispersions": None,
+            "normed_means": normed_means,
+            "non_zero_mask": non_zero_mask,
+        }
+
     if verbose:
         print("Fitting dispersion trend curve")
 
+    # Use MLE dispersions for trend fitting if method is "full", otherwise use initial dispersions
+    dispersions_use = mle_dispersions if method == "full" else init_dispersions
+
     # Fit trend across genes on genewise dispersion estimates
     fitted_trend = estimator.fit_dispersion_trend(
-        mle_dispersions,
+        dispersions_use,
         normed_means,
         trend_type=trend_type,
     )
 
     # Get prior variance
     prior_disp_var = estimator.fit_dispersion_prior(
-        mle_dispersions,
+        dispersions_use,
         fitted_trend,
     )
 
@@ -144,7 +173,7 @@ def _estimate_dispersion_batched(
         # Fit mu and MAP dispersions
         mu_hat = estimator.fit_mu(X_batch)
         map_disp, _ = estimator.fit_MAP_dispersions(
-            X_batch, mle_dispersions[batch], fitted_trend[batch], mu_hat, prior_disp_var
+            X_batch, dispersions_use[batch], fitted_trend[batch], mu_hat, prior_disp_var
         )
 
         map_dispersions.append(map_disp)
@@ -166,6 +195,7 @@ def dispersion(
     adata: AnnData,
     layer: str | None = None,
     size_factor_key: str | None = None,
+    method: str = "full",
     var_key_added: str = "dispersion",
     trend_type: str = "parametric",
     dispersion_range: tuple[float, float] = (1e-8, 10.0),
@@ -190,6 +220,11 @@ def dispersion(
         counts will be normalized by these factors before dispersion estimation.
         This is important for accurate dispersion estimation in datasets with
         variable sequencing depth.
+    method : str, default="full"
+        Method for dispersion estimation:
+            - "full": Use full DESeq2-style estimation with trend fitting and MAP estimation.
+            - "approx": Use approximate estimation by skipping initial MLE fitting.
+            - "fast": Fast approximation using only initial dispersion estimates.
     var_key_added : str, default="dispersion"
         Key in `adata.var` where the final estimated dispersion values will be stored.
         Existing values will be overwritten.
@@ -246,6 +281,7 @@ def dispersion(
         X=X,
         design_matrix=None,  # TODO: Add design matrix support
         size_factors=size_factors,
+        method=method,
         min_disp=dispersion_range[0],
         max_disp=max(dispersion_range[1], X.shape[0]),
         trend_type=trend_type,
@@ -253,18 +289,29 @@ def dispersion(
         verbose=verbose,
     )
 
-    # Store results in adata.var
+    # Store results in adata.var depending on the method used
     adata.var[var_key_added] = np.nan
     adata.var["dispersion_init"] = np.nan
-    adata.var["dispersion_mle"] = np.nan
-    adata.var["mle_converged"] = np.nan
+
+    mask = dispersions["non_zero_mask"]
+    adata.var.loc[mask, var_key_added] = np.array(dispersions["init_dispersions"])
+    adata.var.loc[mask, "dispersion_init"] = np.array(dispersions["init_dispersions"])
+
+    if method == "fast":
+        return
+
     adata.var["dispersion_trend"] = np.nan
     adata.var["dispersion_map"] = np.nan
 
-    mask = dispersions["non_zero_mask"]
     adata.var.loc[mask, var_key_added] = np.array(dispersions["map_dispersions"])
-    adata.var.loc[mask, "dispersion_init"] = np.array(dispersions["init_dispersions"])
-    adata.var.loc[mask, "dispersion_mle"] = np.array(dispersions["mle_dispersions"])
-    adata.var.loc[mask, "mle_converged"] = np.array(dispersions["mle_converged"])
     adata.var.loc[mask, "dispersion_trend"] = np.array(dispersions["fitted_trend"])
     adata.var.loc[mask, "dispersion_map"] = np.array(dispersions["map_dispersions"])
+
+    if method == "approx":
+        return
+
+    adata.var["dispersion_mle"] = np.nan
+    adata.var["mle_converged"] = np.nan
+
+    adata.var.loc[mask, "dispersion_mle"] = np.array(dispersions["mle_dispersions"])
+    adata.var.loc[mask, "mle_converged"] = np.array(dispersions["mle_converged"])
