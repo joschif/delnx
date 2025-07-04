@@ -848,7 +848,7 @@ class DispersionEstimator:
         )(counts)
 
     @partial(jax.jit, static_argnums=(0, 5, 6))
-    def _fit_mle_opt(
+    def fit_dispersion_mle_single_gene(
         self,
         counts: jnp.ndarray,
         mu: jnp.ndarray,
@@ -857,7 +857,7 @@ class DispersionEstimator:
         use_prior_reg: bool = False,
         use_cr_reg: bool = True,
     ) -> tuple[float, bool]:
-        """Estimate dispersion using MLE.
+        """Estimate dispersion using MLE following PyDESeq2 exactly.
 
         Parameters
         ----------
@@ -910,58 +910,27 @@ class DispersionEstimator:
             options={"maxiter": 100, "gtol": 1e-2},
         )
 
-        log_alpha_opt = jnp.clip(jnp.exp(res.x[0]), self.min_disp, self.max_disp)
-        return log_alpha_opt, res.success
-
-    def _fit_mle_grid_search(
-        self,
-        counts: jnp.ndarray,
-        mu: jnp.ndarray,
-        alpha_init: jnp.ndarray,
-        prior_disp_var: float = 1.0,
-        use_prior_reg: bool = False,
-        use_cr_reg: bool = True,
-    ) -> jnp.ndarray:
-        """Estimate gene-wise dispersion using MLE with grid search.
-
-        Parameters
-        ----------
-        counts : jnp.ndarray
-            Raw count data for a single gene, shape (n_samples,).
-        mu : jnp.ndarray
-            Estimated mean of the NB distribution, shape (n_samples, n_genes).
-        alpha_init : float
-            Initial dispersion estimate.
-        design_matrix : jnp.ndarray
-            Design matrix for the experiment, shape (n_samples, n_covariates).
-        prior_disp_var : float, default=1.0
-            Prior variance for dispersion regularization.
-        use_prior_reg : bool, default=False
-            Whether to use prior regularization.
-        use_cr_reg : bool, default=True
-            Whether to use Cox-Reid regularization.
-
-        Returns
-        -------
-        tuple[float, bool]
-            Tuple containing (optimized_dispersion, optimization_success).
-        """
-        alpha_init = jnp.clip(alpha_init, self.min_disp, self.max_disp)
-
-        log_alpha_opt = grid_fit_alpha(
-            counts,
-            self.design_matrix,
-            mu,
-            alpha_init,
-            self.min_disp,
-            self.max_disp,
-            prior_disp_var,
-            use_prior_reg,
-            use_cr_reg,
-            grid_length=100,
+        # If optimization fails, fallback to grid search
+        log_alpha_opt = jax.lax.cond(
+            res.success,
+            lambda x: x[0],
+            lambda _: grid_fit_alpha(
+                counts,
+                self.design_matrix,
+                mu,
+                alpha_init,
+                self.min_disp,
+                self.max_disp,
+                prior_disp_var,
+                use_prior_reg,
+                use_cr_reg,
+                grid_length=100,
+            ),
+            res.x,
         )
 
-        return jnp.clip(jnp.exp(log_alpha_opt), self.min_disp, self.max_disp)
+        log_alpha_opt = jnp.clip(jnp.exp(res.x[0]), self.min_disp, self.max_disp)
+        return log_alpha_opt, res.success
 
     def fit_dispersion_mle(
         self,
@@ -997,8 +966,8 @@ class DispersionEstimator:
             optimization_success_flags: Boolean flags indicating success for each gene, shape (n_genes,).
         """
 
-        def fit_mle(x, m, a):
-            return self._fit_mle_opt(
+        def fit_dispersion(x, m, a):
+            return self.fit_dispersion_mle_single_gene(
                 x,
                 m,
                 a,
@@ -1007,38 +976,10 @@ class DispersionEstimator:
                 use_cr_reg,
             )
 
-        # First do MLE dispersion fitting
-        disp_opt, success = jax.vmap(fit_mle, in_axes=(1, 1, 0))(counts, mu, alpha_init)
-
-        # If MLE fails, do grid search for failed genes
-        if not success.all():
-
-            def fit_grid_search(x, m, a):
-                return self._fit_mle_grid_search(
-                    x,
-                    m,
-                    a,
-                    prior_disp_var,
-                    use_prior_reg,
-                    use_cr_reg,
-                )
-
-            failed_genes = jnp.where(~success)[0].flatten()
-
-            # Use grid search for failed genes
-            alpha_init_failed = alpha_init[failed_genes]
-            mu_failed = mu[:, failed_genes]
-            counts_failed = counts[:, failed_genes]
-
-            disp_opt_failed = jax.vmap(
-                fit_grid_search,
-                in_axes=(1, 1, 0),
-            )(counts_failed, mu_failed, alpha_init_failed)
-
-            # Update the dispersion estimates for failed genes
-            disp_opt = disp_opt.at[failed_genes].set(disp_opt_failed)
-
-        return disp_opt, success
+        return jax.vmap(
+            fit_dispersion,
+            in_axes=(1, 1, 0),
+        )(counts, mu, alpha_init)
 
     def fit_dispersion_single_gene(
         self,
@@ -1065,7 +1006,7 @@ class DispersionEstimator:
 
         # Fit MLE dispersion
         alpha_init = initial_dispersions[0]
-        dispersion, _ = self._fit_mle_opt(
+        dispersion, _ = self.fit_dispersion_mle_single_gene(
             counts,
             mu,
             alpha_init,
