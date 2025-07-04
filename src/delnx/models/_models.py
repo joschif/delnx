@@ -883,8 +883,9 @@ class DispersionEstimator:
         """
         alpha_init = jnp.clip(alpha_init, self.min_disp, self.max_disp)
         log_alpha_init = jnp.log(alpha_init)
+        # Precompute design matrix transpose for efficiency
+        XTX = self.design_matrix.T @ self.design_matrix
 
-        @jax.jit
         def loss(log_alpha: jnp.ndarray) -> jnp.ndarray:
             # closure to be minimized
             alpha = jnp.exp(log_alpha)
@@ -892,7 +893,7 @@ class DispersionEstimator:
 
             if use_cr_reg:
                 W = mu / (1 + mu * alpha)
-                reg += 0.5 * safe_slogdet((self.design_matrix.T * W) @ self.design_matrix)[1]
+                reg += 0.5 * safe_slogdet(XTX * W.sum())[1]
 
             if use_prior_reg:
                 reg += (log_alpha - log_alpha_init) ** 2 / (2 * prior_disp_var)
@@ -928,7 +929,7 @@ class DispersionEstimator:
             res.x,
         )
 
-        log_alpha_opt = jnp.clip(jnp.exp(log_alpha_opt), self.min_disp, self.max_disp)
+        log_alpha_opt = jnp.clip(jnp.exp(res.x[0]), self.min_disp, self.max_disp)
         return log_alpha_opt, res.success
 
     def fit_dispersion_mle(

@@ -69,15 +69,18 @@ def _estimate_dispersion_batched(
     """
     if design_matrix is None:
         # If no design matrix is provided, use a simple intercept model
-        design_matrix = jnp.ones((X.shape[0], 1), dtype=jnp.float32)
+        design_matrix = jnp.ones((X.shape[0], 1), dtype=jnp.float64)
 
     if size_factors is None:
         # If no size factors are provided, assume all samples have equal size
-        size_factors = jnp.ones(X.shape[0], dtype=jnp.float32)
+        size_factors = jnp.ones(X.shape[0], dtype=jnp.float64)
 
-    n_features = X.shape[1]
-    normed_means = jnp.mean(X / size_factors[:, None], axis=0)
     max_disp = max(max_disp, X.shape[0])
+    normed_means = np.array((X / size_factors[:, None]).mean(axis=0)).flatten()
+    non_zero_mask = normed_means > 0
+    n_features = sum(non_zero_mask).item()
+    X_use = X[:, non_zero_mask]
+    normed_means = jnp.array(normed_means[non_zero_mask], dtype=jnp.float64)
 
     estimator = DispersionEstimator(
         design_matrix=design_matrix,
@@ -96,7 +99,7 @@ def _estimate_dispersion_batched(
     # Compute genewise estimates in batches
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
         batch = slice(i, min(i + batch_size, n_features))
-        X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
+        X_batch = jnp.asarray(_to_dense(X_use[:, batch]), dtype=jnp.float32)
 
         # Fit initial dispersions, mu, and MLE dispersion (genewise)
         disp_init = estimator.fit_initial_dispersions(X_batch)
@@ -133,7 +136,7 @@ def _estimate_dispersion_batched(
     # Genewise MAP estimation in batches
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
         batch = slice(i, min(i + batch_size, n_features))
-        X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
+        X_batch = jnp.asarray(_to_dense(X_use[:, batch]), dtype=jnp.float32)
 
         # Fit mu and MAP dispersions
         mu_hat = estimator.fit_mu(X_batch)
@@ -150,6 +153,8 @@ def _estimate_dispersion_batched(
         "mle_dispersions": mle_dispersions,
         "fitted_trend": fitted_trend,
         "map_dispersions": map_dispersions,
+        "normed_means": normed_means,
+        "non_zero_mask": non_zero_mask,
     }
 
 
@@ -245,8 +250,15 @@ def dispersion(
     )
 
     # Store results in adata.var
-    adata.var[var_key_added] = np.array(dispersions["map_dispersions"])
-    adata.var["dispersion_init"] = np.array(dispersions["init_dispersions"])
-    adata.var["dispersion_mle"] = np.array(dispersions["mle_dispersions"])
-    adata.var["dispersion_trend"] = np.array(dispersions["fitted_trend"])
-    adata.var["dispersion_map"] = np.array(dispersions["map_dispersions"])
+    adata.var[var_key_added] = np.nan
+    adata.var["dispersion_init"] = np.nan
+    adata.var["dispersion_mle"] = np.nan
+    adata.var["dispersion_trend"] = np.nan
+    adata.var["dispersion_map"] = np.nan
+
+    mask = dispersions["non_zero_mask"]
+    adata.var.loc[mask, var_key_added] = np.array(dispersions["map_dispersions"])
+    adata.var.loc[mask, "dispersion_init"] = np.array(dispersions["init_dispersions"])
+    adata.var.loc[mask, "dispersion_mle"] = np.array(dispersions["mle_dispersions"])
+    adata.var.loc[mask, "dispersion_trend"] = np.array(dispersions["fitted_trend"])
+    adata.var.loc[mask, "dispersion_map"] = np.array(dispersions["map_dispersions"])
