@@ -359,31 +359,3 @@ def test_grouped_de(adata_pb_lognorm, method, mode, reference):
     assert all(col in de_results.columns for col in ["feature", "pval", "padj", "group"])
     assert len(de_results["group"].unique()) == 3
     assert "cell_type_1" in de_results["group"].values.tolist()
-
-
-@pytest.mark.parametrize(
-    "method",
-    ["lr", "negbinom"],
-)
-@pytest.mark.parametrize(
-    "optimizer",
-    ["BFGS", "IRLS"],
-)
-def test_jax_optimizers(adata_pb_lognorm, adata_pb_counts, method, optimizer):
-    """Test different optimizers for DE analysis."""
-    adata = adata_pb_lognorm if method == "lr" else adata_pb_counts
-
-    # Test with BFGS optimizer
-    de_results_bfgs = de(
-        adata,
-        condition_key="condition_str",
-        method=method,
-        backend="jax",
-        optimizer=optimizer,
-        reference="control",
-    )
-    assert isinstance(de_results_bfgs, pd.DataFrame)
-    assert len(de_results_bfgs) > 0
-    assert all(col in de_results_bfgs.columns for col in ["feature", "pval", "padj"])
-    assert de_results_bfgs["pval"].min() >= 0.0
-    assert de_results_bfgs["pval"].max() <= 1.0

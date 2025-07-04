@@ -113,8 +113,8 @@ def _run_lr_test(
     return coefs, pvals
 
 
-@partial(jax.jit, static_argnums=(5, 6, 7))
-def _fit_nb(x, y, covars, disp, size_factors=None, optimizer="BFGS", maxiter=100, dispersion_method="mle"):
+@partial(jax.jit, static_argnums=(5, 6))
+def _fit_nb(x, y, covars, disp, size_factors=None, optimizer="BFGS", maxiter=100):
     """Fit a single negative binomial regression model using JAX.
 
     This function fits a negative binomial regression model for a single feature,
@@ -138,17 +138,13 @@ def _fit_nb(x, y, covars, disp, size_factors=None, optimizer="BFGS", maxiter=100
         Optimization method to use for fitting the model.
     maxiter : int, default=100
         Maximum number of iterations for the optimizer.
-    dispersion_method : str, default='mle'
-        Method for estimating dispersion if not provided. Options are 'mle' or 'moments'.
 
     Returns
     -------
     tuple
         Coefficient estimates and p-values from the model.
     """
-    model = NegativeBinomialRegression(
-        dispersion=disp, optimizer=optimizer, maxiter=maxiter, dispersion_method=dispersion_method
-    )
+    model = NegativeBinomialRegression(dispersion=disp, optimizer=optimizer, maxiter=maxiter)
 
     # Covars should already include intercept
     X = jnp.column_stack([covars, x])
@@ -169,7 +165,6 @@ def _run_nb_test(
     size_factors: jnp.ndarray | None = None,
     optimizer: str = "BFGS",
     maxiter: int = 100,
-    dispersion_method: str = "mle",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Run negative binomial regression tests for a batch of features.
 
@@ -199,10 +194,6 @@ def _run_nb_test(
         Optimization method to use for model fitting.
     maxiter : int, default=100
         Maximum number of iterations for the optimizer.
-    dispersion_method : str, default='mle'
-        Method to estimate gene-wise dispersions if not provided:
-        - 'mle': Maximum likelihood estimation (more accurate but slower)
-        - 'moments': Method of moments (faster but less accurate)
 
     Returns
     -------
@@ -221,7 +212,6 @@ def _run_nb_test(
             size_factors=size_factors,
             optimizer=optimizer,
             maxiter=maxiter,
-            dispersion_method=dispersion_method,
         )
 
     if disp is None:
@@ -360,7 +350,6 @@ def _run_batched_de(
     dispersions: np.ndarray | None = None,
     size_factors: np.ndarray | None = None,
     covariate_keys: list[str] | None = None,
-    dispersion_method: str = "mle",
     batch_size: int = 32,
     optimizer: str = "BFGS",
     maxiter: int = 100,
@@ -398,10 +387,6 @@ def _run_batched_de(
         log-transformed and used as offset in the model.
     covariate_keys : list[str] | None, default=None
         Names of covariate columns in model_data to include in the design matrix.
-    dispersion_method : str, default='mle'
-        Method for estimating gene-wise dispersions for negative binomial models if not provided:
-        - 'mle': Maximum likelihood estimation based an intercept-only model
-        - 'moments': Method of moments
     batch_size : int, default=32
         Number of features to process in each batch for memory efficiency.
     optimizer : str, default='BFGS'
@@ -422,18 +407,18 @@ def _run_batched_de(
     """
     # Prepare data for logistic regression
     if method == "lr":
-        conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
+        conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float64)
         covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
-        covars = jnp.asarray(covars, dtype=jnp.float32)
+        covars = jnp.asarray(covars, dtype=jnp.float64)
 
         def test_fn(x):
             return _run_lr_test(x, conditions, covars, optimizer=optimizer, maxiter=maxiter)
 
     # Prepare data for negative binomial regression
     elif method == "negbinom":
-        conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
+        conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float64)
         covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
-        covars = jnp.asarray(covars, dtype=jnp.float32)
+        covars = jnp.asarray(covars, dtype=jnp.float64)
 
         def test_fn(x, disp=None):
             return _run_nb_test(
@@ -444,14 +429,13 @@ def _run_batched_de(
                 size_factors=size_factors,
                 optimizer=optimizer,
                 maxiter=maxiter,
-                dispersion_method=dispersion_method,
             )
 
     # Prepare data for ANOVA tests
     elif method in ["anova", "anova_residual"]:
-        conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float32)
+        conditions = jnp.asarray(model_data[condition_key].values, dtype=jnp.float64)
         covars = patsy.dmatrix(" + ".join(covariate_keys), model_data) if covariate_keys else np.ones((X.shape[0], 1))
-        covars = jnp.asarray(covars, dtype=jnp.float32)
+        covars = jnp.asarray(covars, dtype=jnp.float64)
         anova_method = "anova" if method == "anova" else "residual"
 
         def test_fn(x):
@@ -469,10 +453,10 @@ def _run_batched_de(
     }
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
         batch = slice(i, min(i + batch_size, n_features))
-        X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float32)
+        X_batch = jnp.asarray(_to_dense(X[:, batch]), dtype=jnp.float64)
 
         if method == "negbinom" and dispersions is not None:
-            disp_batch = jnp.asarray(dispersions[batch], dtype=jnp.float32)
+            disp_batch = jnp.asarray(dispersions[batch], dtype=jnp.float64)
             coefs, pvals = test_fn(X_batch, disp_batch)
         else:
             coefs, pvals = test_fn(X_batch)

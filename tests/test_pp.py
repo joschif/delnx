@@ -58,18 +58,33 @@ def test_size_factors(adata_pb_counts, method):
     assert np.isclose(np.mean(size_factors), 1.0, atol=1e-5)
 
 
-@pytest.mark.parametrize("method", ["mle", "deseq2", "edger", "moments"])
-def test_dispersion_estimation(adata_pb_counts, method):
+@pytest.mark.parametrize("size_factor_key", ["size_factors", None])
+@pytest.mark.parametrize("method", ["full", "approx", "fast"])
+def test_dispersion_estimation(adata_pb_counts, size_factor_key, method):
     """Test dispersion estimation."""
     import numpy as np
 
     import delnx
 
     # Test dispersion estimation
-    delnx.pp.dispersion(adata_pb_counts, method=method)
+    delnx.pp.dispersion(adata_pb_counts, size_factor_key=size_factor_key, method=method)
 
-    # Check if dispersion column exists
-    assert "dispersion" in adata_pb_counts.var.columns
+    # Check if dispersion, dispersion_init, dispersion_mle, dispersion_trend, dispersion_map columns exist
+    if method == "fast":
+        dispersion_columns = ["dispersion_init", "dispersion"]
+    elif method == "approx":
+        dispersion_columns = ["dispersion_init", "dispersion_trend", "dispersion_map", "dispersion"]
+    else:  # method == "full"
+        dispersion_columns = [
+            "dispersion_init",
+            "dispersion_mle",
+            "dispersion_trend",
+            "dispersion_map",
+            "dispersion",
+        ]
+
+    for col in dispersion_columns:
+        assert any(adata_pb_counts.var.columns == col)
 
     # Check that dispersion values not NaN
     assert not np.any(np.isnan(adata_pb_counts.var["dispersion"]))
