@@ -92,6 +92,7 @@ def _estimate_dispersion_batched(
 
     init_dispersions = []
     mle_dispersions = []
+    mle_success = []
 
     if verbose:
         print("Fitting initial dispersions")
@@ -104,13 +105,15 @@ def _estimate_dispersion_batched(
         # Fit initial dispersions, mu, and MLE dispersion (genewise)
         disp_init = estimator.fit_initial_dispersions(X_batch)
         mu_hat = estimator.fit_mu(X_batch)
-        disp_mle, _ = estimator.fit_dispersion_mle(X_batch, mu_hat, disp_init)
+        disp_mle, success = estimator.fit_dispersion_mle(X_batch, mu_hat, disp_init)
 
         init_dispersions.append(disp_init)
         mle_dispersions.append(disp_mle)
+        mle_success.append(success)
 
     init_dispersions = jnp.concatenate(init_dispersions, axis=0)
     mle_dispersions = jnp.concatenate(mle_dispersions, axis=0)
+    mle_success = jnp.concatenate(mle_success, axis=0)
 
     if verbose:
         print("Fitting dispersion trend curve")
@@ -151,6 +154,7 @@ def _estimate_dispersion_batched(
     return {
         "init_dispersions": init_dispersions,
         "mle_dispersions": mle_dispersions,
+        "mle_converged": mle_success,
         "fitted_trend": fitted_trend,
         "map_dispersions": map_dispersions,
         "normed_means": normed_means,
@@ -253,6 +257,7 @@ def dispersion(
     adata.var[var_key_added] = np.nan
     adata.var["dispersion_init"] = np.nan
     adata.var["dispersion_mle"] = np.nan
+    adata.var["mle_converged"] = np.nan
     adata.var["dispersion_trend"] = np.nan
     adata.var["dispersion_map"] = np.nan
 
@@ -260,5 +265,6 @@ def dispersion(
     adata.var.loc[mask, var_key_added] = np.array(dispersions["map_dispersions"])
     adata.var.loc[mask, "dispersion_init"] = np.array(dispersions["init_dispersions"])
     adata.var.loc[mask, "dispersion_mle"] = np.array(dispersions["mle_dispersions"])
+    adata.var.loc[mask, "mle_converged"] = np.array(dispersions["mle_converged"])
     adata.var.loc[mask, "dispersion_trend"] = np.array(dispersions["fitted_trend"])
     adata.var.loc[mask, "dispersion_map"] = np.array(dispersions["map_dispersions"])
