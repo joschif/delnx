@@ -112,6 +112,9 @@ def _grouped_de(
     """
     results = []
     for group in adata.obs[group_key].unique():
+        if verbose:
+            print(f"Running DE for group '{group}'")
+
         mask = adata.obs[group_key].values == group
         if sum(mask) < (min_samples * 2):
             if verbose:
@@ -441,6 +444,9 @@ def de(
     # Run tests for each comparison
     results = []
     for group1, group2 in comparisons:
+        if verbose:
+            print(f"Testing {group1} vs {group2}")
+
         # Get cell masks
         mask1 = adata.obs[condition_key].values == group1
         mask2 = adata.obs[condition_key].values == group2
