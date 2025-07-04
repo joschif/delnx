@@ -312,6 +312,7 @@ def dispersion(
 
     adata.var["dispersion_mle"] = np.nan
     adata.var["mle_converged"] = np.nan
+    adata.var["mle_converged"] = adata.var["mle_converged"].astype(bool)
 
     adata.var.loc[mask, "dispersion_mle"] = np.array(dispersions["mle_dispersions"])
     adata.var.loc[mask, "mle_converged"] = np.array(dispersions["mle_converged"])

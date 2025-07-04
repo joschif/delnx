@@ -59,23 +59,29 @@ def test_size_factors(adata_pb_counts, method):
 
 
 @pytest.mark.parametrize("size_factor_key", ["size_factors", None])
-def test_dispersion_estimation(adata_pb_counts, size_factor_key):
+@pytest.mark.parametrize("method", ["full", "approx", "fast"])
+def test_dispersion_estimation(adata_pb_counts, size_factor_key, method):
     """Test dispersion estimation."""
     import numpy as np
 
     import delnx
 
     # Test dispersion estimation
-    delnx.pp.dispersion(adata_pb_counts, size_factor_key=size_factor_key)
+    delnx.pp.dispersion(adata_pb_counts, size_factor_key=size_factor_key, method=method)
 
     # Check if dispersion, dispersion_init, dispersion_mle, dispersion_trend, dispersion_map columns exist
-    dispersion_columns = [
-        "dispersion_init",
-        "dispersion_mle",
-        "dispersion_trend",
-        "dispersion_map",
-        "dispersion",
-    ]
+    if method == "fast":
+        dispersion_columns = ["dispersion_init", "dispersion"]
+    elif method == "approx":
+        dispersion_columns = ["dispersion_init", "dispersion_trend", "dispersion_map", "dispersion"]
+    else:  # method == "full"
+        dispersion_columns = [
+            "dispersion_init",
+            "dispersion_mle",
+            "dispersion_trend",
+            "dispersion_map",
+            "dispersion",
+        ]
 
     for col in dispersion_columns:
         assert any(adata_pb_counts.var.columns == col)
