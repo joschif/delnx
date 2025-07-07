@@ -209,6 +209,33 @@ class TestLinearRegression:
         assert jnp.isfinite(result["llf"])
         np.testing.assert_allclose(result["coef"], [0, 2], atol=1e-6)
 
+    def test_predict(self):
+        """Test LinearRegression.predict with and without intercept."""
+        reg = LinearRegression()
+
+        # Test with intercept
+        X_with_intercept = jnp.array([[1.0, 2.0], [1.0, 3.0], [1.0, 4.0]])
+        params_with_intercept = jnp.array([1.0, 0.5])  # intercept=1.0, slope=0.5
+        offset = jnp.array([0.1, 0.2, 0.3])
+
+        # Without offset
+        pred_no_offset = reg.predict(X_with_intercept, params_with_intercept)
+        expected_no_offset = jnp.array([2.0, 2.5, 3.0])  # [1 + 0.5*2, 1 + 0.5*3, 1 + 0.5*4]
+        assert jnp.allclose(pred_no_offset, expected_no_offset)
+
+        # With offset
+        pred_with_offset = reg.predict(X_with_intercept, params_with_intercept, offset=offset)
+        expected_with_offset = jnp.array([2.1, 2.7, 3.3])  # [2.0 + 0.1, 2.5 + 0.2, 3.0 + 0.3]
+        assert jnp.allclose(pred_with_offset, expected_with_offset)
+
+        # Test without intercept (no constant column)
+        X_no_intercept = jnp.array([[2.0], [3.0], [4.0]])
+        params_no_intercept = jnp.array([0.5])  # slope only
+
+        pred_no_intercept = reg.predict(X_no_intercept, params_no_intercept)
+        expected_no_intercept = jnp.array([1.0, 1.5, 2.0])  # [0.5*2, 0.5*3, 0.5*4]
+        assert jnp.allclose(pred_no_intercept, expected_no_intercept)
+
 
 class TestLogisticRegression:
     """Test suite for LogisticRegression class."""
@@ -286,6 +313,41 @@ class TestLogisticRegression:
 
         with pytest.raises(ValueError, match="Unsupported optimizer"):
             reg.fit(logistic_data["X"], logistic_data["y"])
+
+    def test_predict(self):
+        """Test LogisticRegression.predict with and without intercept."""
+        reg = LogisticRegression()
+
+        # Test with intercept
+        X_with_intercept = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+        params_with_intercept = jnp.array([0.0, 1.0])  # intercept=0.0, slope=1.0
+        offset = jnp.array([0.5, -0.5, 0.0])
+
+        # Without offset
+        pred_no_offset = reg.predict(X_with_intercept, params_with_intercept)
+        # Logits: [0, 1, 2], sigmoid([0, 1, 2]) = [0.5, 0.731, 0.881]
+        expected_no_offset = jnp.array([0.5, 0.7310585786, 0.8807970779])
+        assert jnp.allclose(pred_no_offset, expected_no_offset, rtol=1e-6)
+
+        # With offset
+        pred_with_offset = reg.predict(X_with_intercept, params_with_intercept, offset=offset)
+        # Logits: [0 + 0.5, 1 - 0.5, 2 + 0.0] = [0.5, 0.5, 2.0]
+        expected_with_offset = jnp.array([0.6224593312, 0.6224593312, 0.8807970779])
+        assert jnp.allclose(pred_with_offset, expected_with_offset, rtol=1e-6)
+
+        # Test without intercept
+        X_no_intercept = jnp.array([[1.0], [2.0], [3.0]])
+        params_no_intercept = jnp.array([0.5])  # slope only
+
+        pred_no_intercept = reg.predict(X_no_intercept, params_no_intercept)
+        # Logits: [0.5, 1.0, 1.5], sigmoid values
+        expected_no_intercept = jnp.array([0.6224593312, 0.7310585786, 0.8175744762])
+        assert jnp.allclose(pred_no_intercept, expected_no_intercept, rtol=1e-6)
+
+        # Check probabilities are in [0, 1]
+        assert jnp.all(pred_no_offset >= 0.0) and jnp.all(pred_no_offset <= 1.0)
+        assert jnp.all(pred_with_offset >= 0.0) and jnp.all(pred_with_offset <= 1.0)
+        assert jnp.all(pred_no_intercept >= 0.0) and jnp.all(pred_no_intercept <= 1.0)
 
 
 class TestNegativeBinomialRegression:
@@ -414,6 +476,41 @@ class TestNegativeBinomialRegression:
 
         assert jnp.isfinite(nll)
 
+    def test_predict(self):
+        """Test NegativeBinomialRegression.predict with and without intercept."""
+        reg = NegativeBinomialRegression()
+
+        # Test with intercept
+        X_with_intercept = jnp.array([[1.0, 0.0], [1.0, 1.0], [1.0, 2.0]])
+        params_with_intercept = jnp.array([1.0, 0.5])  # intercept=1.0, slope=0.5
+        offset = jnp.array([0.5, -0.5, 0.0])  # log(size_factors)
+
+        # Without offset
+        pred_no_offset = reg.predict(X_with_intercept, params_with_intercept)
+        # Linear predictors: [1, 1.5, 2], exp([1, 1.5, 2]) = [2.718, 4.482, 7.389]
+        expected_no_offset = jnp.array([2.7182818285, 4.4816890703, 7.3890560989])
+        assert jnp.allclose(pred_no_offset, expected_no_offset, rtol=1e-6)
+
+        # With offset
+        pred_with_offset = reg.predict(X_with_intercept, params_with_intercept, offset=offset)
+        # Linear predictors with offset: [1 + 0.5, 1.5 - 0.5, 2 + 0.0] = [1.5, 1.0, 2.0]
+        expected_with_offset = jnp.array([4.4816890703, 2.7182818285, 7.3890560989])
+        assert jnp.allclose(pred_with_offset, expected_with_offset, rtol=1e-6)
+
+        # Test without intercept
+        X_no_intercept = jnp.array([[1.0], [2.0], [3.0]])
+        params_no_intercept = jnp.array([0.5])  # slope only
+
+        pred_no_intercept = reg.predict(X_no_intercept, params_no_intercept)
+        # Linear predictors: [0.5, 1.0, 1.5], exp([0.5, 1.0, 1.5]) = [1.649, 2.718, 4.482]
+        expected_no_intercept = jnp.array([1.6487212707, 2.7182818285, 4.4816890703])
+        assert jnp.allclose(pred_no_intercept, expected_no_intercept, rtol=1e-6)
+
+        # Check all predictions are positive
+        assert jnp.all(pred_no_offset > 0.0)
+        assert jnp.all(pred_with_offset > 0.0)
+        assert jnp.all(pred_no_intercept > 0.0)
+
 
 class TestDispersionEstimator:
     """Test suite for DispersionEstimator class."""
@@ -541,8 +638,6 @@ class TestDispersionEstimator:
 
         assert dispersions.shape == (2,)  # Two genes
         assert bool(jnp.all(jnp.isfinite(dispersions)))
-        assert bool(jnp.all(dispersions >= estimator.min_disp))
-        assert bool(jnp.all(dispersions <= estimator.max_disp))
 
     def test_fit_moments_dispersions_realistic(self, synthetic_data):
         """Test moments dispersion estimation with realistic data."""
@@ -554,7 +649,6 @@ class TestDispersionEstimator:
 
         assert dispersions.shape == (synthetic_data["n_genes"],)
         assert bool(jnp.all(jnp.isfinite(dispersions)))
-        assert bool(jnp.all(dispersions >= estimator.min_disp))
 
         # Check that estimates are in reasonable range (not exact due to sampling)
         assert bool(jnp.all(dispersions < 1.0))  # Should be reasonable for our data
@@ -573,7 +667,6 @@ class TestDispersionEstimator:
 
         assert dispersions.shape == (2,)
         assert bool(jnp.all(jnp.isfinite(dispersions)))
-        assert bool(jnp.all(dispersions >= estimator.min_disp))
 
     def test_fit_initial_dispersions(self, synthetic_data):
         """Test initial dispersion estimation (minimum of rough and moments)."""
@@ -650,7 +743,7 @@ class TestDispersionEstimator:
             max_disp=0.25,
         )
 
-        dispersions = restrictive_estimator.fit_moments_dispersions(extreme_counts)
+        dispersions = restrictive_estimator.fit_initial_dispersions(extreme_counts)
 
         # Should be clipped to the specified range
         assert bool(jnp.all(dispersions >= 0.15))
@@ -665,7 +758,7 @@ class TestDispersionEstimator:
             design_matrix=jnp.ones((5, 1)),  # Intercept only
             size_factors=size_factors,
         )
-        dispersions = estimator.fit_moments_dispersions(zero_counts)
+        dispersions = estimator.fit_initial_dispersions(zero_counts)
 
         assert dispersions.shape == (3,)
         assert bool(jnp.all(jnp.isfinite(dispersions)))

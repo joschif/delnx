@@ -46,16 +46,12 @@ class Regression:
         (Iteratively Reweighted Least Squares) for GLM-type models.
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics (for faster computation).
-    offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
-        Offset terms (on log scale for GLMs) to include in the model. Used for
-        incorporating normalization factors like size factors in RNA-seq data.
     """
 
     maxiter: int = 100
     tol: float = 1e-6
     optimizer: str = "BFGS"
     skip_stats: bool = False
-    offset: jnp.ndarray | None = None
 
     def _fit_bfgs(self, neg_ll_fn: Callable, init_params: jnp.ndarray, **kwargs) -> jnp.ndarray:
         """Fit model using the BFGS optimizer.
@@ -155,41 +151,80 @@ class Regression:
         _, _, beta_final = final_state
         return beta_final
 
-    def _compute_wald_test(
-        self, neg_ll_fn: Callable, params: jnp.ndarray, test_idx: int = -1
-    ) -> tuple[jnp.ndarray, float, float]:
-        """Compute Wald test statistics for model coefficients.
-
-        This method calculates standard errors, test statistics, and p-values
-        for coefficient estimates using the Hessian of the negative log-likelihood.
+    def _compute_stats(
+        self,
+        X: jnp.ndarray,
+        neg_ll_fn: Callable,
+        params: jnp.ndarray,
+        test_idx: int = -1,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        """Compute test statistics for fitted parameters.
+        This method computes the Wald test statistics and p-values for the
+        fitted parameters using the Hessian of the negative log-likelihood function.
+        If the Hessian is ill-conditioned, it falls back to a likelihood ratio test.
 
         Parameters
         ----------
+        X : jnp.ndarray
+            Design matrix of shape (n_samples, n_features).
         neg_ll_fn : Callable
             Function that computes the negative log-likelihood.
         params : jnp.ndarray
-            Parameter estimates.
+            Fitted parameter estimates.
         test_idx : int, default=-1
-            Index of the parameter to test (default is the last parameter).
+            Index of the parameter to test. If -1, tests the last parameter.
 
         Returns
         -------
-        tuple[jnp.ndarray, float, float]
-            Tuple containing (standard errors, test statistics, p-values).
-        """
+        tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
+            Standard errors, test statistics, and p-values.
+        """  # noqa: D205
         hess_fn = jax.hessian(neg_ll_fn)
         hessian = hess_fn(params)
-        hessian = 0.5 * (hessian + hessian.T)  # Ensure symmetry
+        hessian = 0.5 * (hessian + hessian.T)
 
-        # Use pseudoinverse for better numerical stability
-        cov = jnp.linalg.pinv(hessian)
-        se = jnp.sqrt(jnp.clip(jnp.diag(cov), 1e-8))
+        # Check condition number
+        condition_number = jnp.linalg.cond(hessian)
 
-        # Compute test statistic and p-value only if SE is valid
-        stat = (params / se) ** 2
-        pval = jsp.stats.chi2.sf(stat, df=1)
+        def wald_test():
+            """Perform Wald test."""
+            se = jnp.sqrt(jnp.clip(jnp.diag(jnp.linalg.inv(hessian)), 1e-8))
+            stat = (params / se) ** 2
+            pval = jsp.stats.chi2.sf(stat, df=1)
+            return se, stat, pval
 
-        return se, stat, pval
+        def likelihood_ratio_test():
+            """Perform likelihood ratio test as a fallback for ill-conditioned cases."""
+            ll_full = -neg_ll_fn(params)
+            params_reduced = params.at[test_idx].set(0.0)
+            ll_reduced = -neg_ll_fn(params_reduced)
+            # Compute likelihood ratio statistic
+            lr_stat = 2 * (ll_full - ll_reduced)
+            lr_stat = jnp.maximum(lr_stat, 0.0)
+            # Compute correction for small sample sizes
+            n_samples = X.shape[0]
+            n_params = X.shape[1]
+            correction = 1 + n_params / (n_samples - n_params)
+            correction = jnp.maximum(1.0, correction)
+            corrected_lr_stat = lr_stat / correction
+            # Compute p-value for the likelihood ratio statistic
+            lr_pval = jsp.stats.chi2.sf(corrected_lr_stat, df=1)
+            # Return dummy values for SE and stat
+            se = jnp.full_like(params, jnp.nan)
+            stat = jnp.zeros_like(params)
+            stat = stat.at[test_idx].set(lr_stat)
+            pval = jnp.ones_like(params)
+            pval = pval.at[test_idx].set(lr_pval)
+            return se, stat, pval
+
+        stats = jax.lax.cond(
+            condition_number < 1e5,  # Relatively conservative threshold
+            lambda _: wald_test(),
+            lambda _: likelihood_ratio_test(),
+            operand=None,
+        )
+
+        return stats
 
     def _exact_solution(self, X: jnp.ndarray, y: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
         """Compute exact Ordinary Least Squares solution.
@@ -266,8 +301,6 @@ class LinearRegression(Regression):
         Optimization method (inherited from Regression).
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics (inherited from Regression).
-    offset : jnp.ndarray | None, default=None
-        Offset terms to include in the model (inherited from Regression).
 
     Examples
     --------
@@ -341,6 +374,27 @@ class LinearRegression(Regression):
 
         return {"coef": params, "llf": llf, "se": se, "stat": stat, "pval": pval}
 
+    def predict(self, X: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
+        """Predict response variable using fitted model.
+
+        Parameters
+        ----------
+        X : jnp.ndarray
+            Design matrix of shape (n_samples, n_features).
+        offset : jnp.ndarray | None, default=None
+            Offset term to include in the prediction. If provided, overrides
+            the offset set during class initialization.
+
+        Returns
+        -------
+        jnp.ndarray
+            Predicted response variable.
+        """
+        pred = X @ params
+        if offset is not None:
+            pred += offset
+        return pred
+
 
 @dataclass(frozen=True)
 class LogisticRegression(Regression):
@@ -360,8 +414,6 @@ class LogisticRegression(Regression):
         Optimization method to use. Options are "BFGS" or "IRLS" (recommended).
     skip_stats : bool, default=False
         Whether to skip calculating test statistics.
-    offset : jnp.ndarray | None, default=None
-        Offset terms to include in the model.
 
     Examples
     --------
@@ -409,6 +461,7 @@ class LogisticRegression(Regression):
         X: jnp.ndarray,
         y: jnp.ndarray,
         offset: jnp.ndarray | None = None,
+        test_idx: int = -1,
     ) -> dict:
         """Fit logistic regression model.
 
@@ -449,7 +502,7 @@ class LogisticRegression(Regression):
         se = stat = pval = None
         if not self.skip_stats:
             nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset)
-            se, stat, pval = self._compute_wald_test(nll, params)
+            se, stat, pval = self._compute_stats(X, nll, params, test_idx=test_idx)
 
         return {
             "coef": params,
@@ -458,6 +511,29 @@ class LogisticRegression(Regression):
             "stat": stat,
             "pval": pval,
         }
+
+    def predict(self, X: jnp.ndarray, params: jnp.ndarray, offset: jnp.ndarray | None = None) -> jnp.ndarray:
+        """Predict probabilities using fitted model.
+
+        Parameters
+        ----------
+        X : jnp.ndarray
+            Design matrix of shape (n_samples, n_features).
+        params : jnp.ndarray
+            Fitted parameter estimates.
+        offset : jnp.ndarray | None, default=None
+            Offset term to include in the prediction. If provided, overrides
+            the offset set during class initialization.
+
+        Returns
+        -------
+        jnp.ndarray
+            Predicted probabilities of the positive class.
+        """
+        logits = X @ params
+        if offset is not None:
+            logits += offset
+        return jax.nn.sigmoid(logits)
 
 
 @dataclass(frozen=True)
@@ -479,15 +555,11 @@ class NegativeBinomialRegression(Regression):
         Optimization method to use. Options are "BFGS" or "IRLS".
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics.
-    offset : jnp.ndarray | None, default=None
-        Offset terms (log scale) to include in the model. Typically log(size_factors)
-        to account for differences in sequencing depth in RNA-seq analysis.
     dispersion : float | None, default=None
         Fixed dispersion parameter. If :obj:`None`, dispersion is estimated from the data.
     dispersion_range : tuple[float, float], default=(1e-6, 10.0)
-        Range for valid dispersion values to prevent numerical issues.
-    dispersion_method : str, default="moments"
-        Method for estimating dispersion. Options are "moments" or "mle".
+        Range for the dispersion parameter. Used to constrain the estimated dispersion
+        to avoid numerical issues.
 
     Examples
     --------
@@ -586,6 +658,7 @@ class NegativeBinomialRegression(Regression):
         X: jnp.ndarray,
         y: jnp.ndarray,
         offset: jnp.ndarray | None = None,
+        test_idx: int = -1,
     ) -> dict:
         """Fit negative binomial regression model with optional offset.
 
@@ -604,6 +677,8 @@ class NegativeBinomialRegression(Regression):
             Offset term (log scale) to include in the model. Typically
             log(size_factors) for RNA-seq data. If provided, overrides
             the offset set during class initialization.
+        test_idx : int, default=-1
+            Index of the parameter to test. If -1, tests the last parameter.
 
         Returns
         -------
@@ -657,7 +732,7 @@ class NegativeBinomialRegression(Regression):
         se = stat = pval = None
         if not self.skip_stats:
             nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset, dispersion=dispersion)
-            se, stat, pval = self._compute_wald_test(nll, params)
+            se, stat, pval = self._compute_stats(X, nll, params, test_idx=test_idx)
 
         return {
             "coef": params,
@@ -667,6 +742,36 @@ class NegativeBinomialRegression(Regression):
             "pval": pval,
             "dispersion": dispersion,
         }
+
+    def predict(
+        self,
+        X: jnp.ndarray,
+        params: jnp.ndarray,
+        offset: jnp.ndarray | None = None,
+    ) -> jnp.ndarray:
+        """Predict count response variable using fitted model.
+
+        Parameters
+        ----------
+        X : jnp.ndarray
+            Design matrix of shape (n_samples, n_features).
+        params : jnp.ndarray
+            Fitted parameter estimates.
+        offset : jnp.ndarray | None, default=None
+            Offset term to include in the prediction. If provided, overrides
+            the offset set during class initialization.
+
+        Returns
+        -------
+        jnp.ndarray
+            Predicted count response variable.
+        """
+        eta = X @ params
+        if offset is not None:
+            eta += offset
+        eta = jnp.clip(eta, -50, 50)
+        mu = jnp.exp(eta)
+        return mu
 
 
 @dataclass(frozen=True)
@@ -728,7 +833,7 @@ class DispersionEstimator:
         model = LinearRegression(skip_stats=True)
         results = model.fit(self.design_matrix, normed_counts)
 
-        y_hat = results["coef"] @ self.design_matrix.T  # (num_samples, num_genes)
+        y_hat = (results["coef"] @ self.design_matrix.T).T  # (num_samples, )
         y_hat = jnp.maximum(y_hat, 1.0)  # Threshold as in PyDESeq2
 
         nominator = (normed_counts - y_hat) ** 2 - y_hat
@@ -736,7 +841,7 @@ class DispersionEstimator:
 
         dispersions = (nominator / denom).sum(0)
 
-        return jnp.clip(dispersions, self.min_disp, self.max_disp)
+        return jnp.maximum(dispersions, 0)  # Clip negatives as in PyDESeq2
 
     def fit_rough_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate rough dispersions for multiple genes.
@@ -775,14 +880,9 @@ class DispersionEstimator:
 
         # Gene-wise means and variances
         mu = jnp.mean(normed_counts, axis=0)
-        sigma_sq = jnp.var(normed_counts, axis=0, ddof=1)  # Unbiased estimator
+        sigma = jnp.var(normed_counts, axis=0, ddof=1)  # Unbiased estimator
 
-        # Dispersion: alpha = (sigma^2 - s_mean_inv * mu) / mu^2
-        # Handle division by zero and NaN
-        dispersions = jnp.where(mu > 1e-10, (sigma_sq - s_mean_inv * mu) / (mu**2), 0.0)
-        dispersions = jnp.nan_to_num(dispersions, nan=0.0, posinf=0.0, neginf=0.0)
-
-        return jnp.clip(dispersions, self.min_disp, self.max_disp)
+        return jnp.nan_to_num((sigma - s_mean_inv * mu) / mu**2)
 
     @partial(jax.jit, static_argnums=(0,))
     def fit_initial_dispersions(self, counts: jnp.ndarray) -> jnp.ndarray:
@@ -804,7 +904,8 @@ class DispersionEstimator:
         moments_disp = self.fit_moments_dispersions(normed_counts)
 
         # Take minimum as in PyDESeq2
-        return jnp.minimum(rough_disp, moments_disp)
+        init_disp = jnp.minimum(rough_disp, moments_disp)
+        return jnp.clip(init_disp, self.min_disp, self.max_disp)
 
     def fit_mu_single_gene(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate gene-wise means of the NB distribution (mu).
