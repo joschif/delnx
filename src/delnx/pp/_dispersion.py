@@ -196,7 +196,7 @@ def dispersion(
     layer: str | None = None,
     size_factor_key: str | None = None,
     method: str = "full",
-    var_key_added: str = "dispersion",
+    var_key_added: str = "dispersions",
     trend_type: str = "parametric",
     dispersion_range: tuple[float, float] = (1e-8, 10.0),
     batch_size: int = 2048,

@@ -728,7 +728,7 @@ class DispersionEstimator:
         model = LinearRegression(skip_stats=True)
         results = model.fit(self.design_matrix, normed_counts)
 
-        y_hat = results["coef"] @ self.design_matrix.T  # (num_samples, num_genes)
+        y_hat = (results["coef"] @ self.design_matrix.T).T  # (num_samples, )
         y_hat = jnp.maximum(y_hat, 1.0)  # Threshold as in PyDESeq2
 
         nominator = (normed_counts - y_hat) ** 2 - y_hat
@@ -736,7 +736,7 @@ class DispersionEstimator:
 
         dispersions = (nominator / denom).sum(0)
 
-        return jnp.clip(dispersions, self.min_disp, self.max_disp)
+        return jnp.maximum(dispersions, 0)  # Clip negatives as in PyDESeq2
 
     def fit_rough_dispersions(self, normed_counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate rough dispersions for multiple genes.
@@ -775,14 +775,9 @@ class DispersionEstimator:
 
         # Gene-wise means and variances
         mu = jnp.mean(normed_counts, axis=0)
-        sigma_sq = jnp.var(normed_counts, axis=0, ddof=1)  # Unbiased estimator
+        sigma = jnp.var(normed_counts, axis=0, ddof=1)  # Unbiased estimator
 
-        # Dispersion: alpha = (sigma^2 - s_mean_inv * mu) / mu^2
-        # Handle division by zero and NaN
-        dispersions = jnp.where(mu > 1e-10, (sigma_sq - s_mean_inv * mu) / (mu**2), 0.0)
-        dispersions = jnp.nan_to_num(dispersions, nan=0.0, posinf=0.0, neginf=0.0)
-
-        return jnp.clip(dispersions, self.min_disp, self.max_disp)
+        return jnp.nan_to_num((sigma - s_mean_inv * mu) / mu**2)
 
     @partial(jax.jit, static_argnums=(0,))
     def fit_initial_dispersions(self, counts: jnp.ndarray) -> jnp.ndarray:
@@ -804,7 +799,8 @@ class DispersionEstimator:
         moments_disp = self.fit_moments_dispersions(normed_counts)
 
         # Take minimum as in PyDESeq2
-        return jnp.minimum(rough_disp, moments_disp)
+        init_disp = jnp.minimum(rough_disp, moments_disp)
+        return jnp.clip(init_disp, self.min_disp, self.max_disp)
 
     def fit_mu_single_gene(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate gene-wise means of the NB distribution (mu).
