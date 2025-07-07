@@ -203,7 +203,7 @@ class Regression:
             lr_stat = jnp.maximum(lr_stat, 0.0)
             # Compute correction for small sample sizes
             n_samples = X.shape[0]
-            n_params = X.shape[1]
+            n_params = X.shape[1] - 1
             correction = 1 + n_params / (n_samples - n_params)
             correction = jnp.maximum(1.0, correction)
             corrected_lr_stat = lr_stat / correction
