@@ -46,14 +46,14 @@ def test_size_factors(adata_pb_counts, method):
     import delnx
 
     # Test size factors calculation
-    var_key = "size_factors_test"
-    delnx.pp.size_factors(adata_pb_counts, method=method, var_key_added=var_key)
+    obs_key = "size_factors_test"
+    delnx.pp.size_factors(adata_pb_counts, method=method, obs_key_added=obs_key)
 
     # Check if size_factor column exists
-    assert any(adata_pb_counts.obs.columns.str.startswith(var_key))
+    assert any(adata_pb_counts.obs.columns.str.startswith(obs_key))
 
     # Check that size factors are positive and normalized over mean
-    size_factor_col = adata_pb_counts.obs.columns[adata_pb_counts.obs.columns.str.startswith(var_key)][0]
+    size_factor_col = adata_pb_counts.obs.columns[adata_pb_counts.obs.columns.str.startswith(obs_key)][0]
     size_factors = adata_pb_counts.obs[size_factor_col].values
     assert np.all(size_factors > 0)
     assert np.isclose(np.mean(size_factors), 1.0, atol=1e-5)
