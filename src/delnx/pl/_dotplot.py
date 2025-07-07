@@ -1,9 +1,10 @@
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import marsilea as ma
-import numpy as np
+import pandas as pd
 
 from delnx.pp._utils import group_by_max
 
@@ -18,6 +19,49 @@ class DotPlot(MatrixPlot):
     Inherits from MatrixPlot and uses marsilea's SizedHeatmap for visualization.
     """
 
+    def _build_size(self) -> pd.DataFrame:
+        """
+        Computes group-level detection rate (fraction of cells with non-zero expression).
+
+        Returns
+        -------
+            pd.DataFrame: Detection rate matrix (groups x markers).
+        """
+        group_col = self.adata.obs["_group"].astype(str)
+
+        # Flatten markers if given as dict
+        if isinstance(self.markers, dict):
+            flat_markers = list(itertools.chain.from_iterable(self.markers.values()))
+        else:
+            flat_markers = self.markers
+
+        # Extract data matrix from layer or X
+        if getattr(self, "layer", None):
+            if self.layer not in self.adata.layers:
+                raise ValueError(f"Layer '{self.layer}' not found in adata.layers.")
+            mat = self.adata[:, flat_markers].layers[self.layer]
+        else:
+            mat = self.adata[:, flat_markers].X
+
+        # Convert to dense if sparse
+        if hasattr(mat, "toarray"):
+            mat = mat.toarray()
+
+        # Create DataFrame with group index
+        df = pd.DataFrame(mat, index=group_col, columns=flat_markers)
+
+        # Compute detection: non-zero → 1, else 0
+        detection = df.gt(0).astype(int)
+
+        # Compute detection rate: mean across cells in each group
+        detection_rate = detection.groupby(detection.index).mean()
+
+        # Reorder to match group category order if categorical
+        if hasattr(self.adata.obs["_group"], "cat"):
+            detection_rate = detection_rate.reindex(self.adata.obs["_group"].cat.categories)
+
+        return detection_rate
+
     def _build_plot(self):
         """
         Build the plot.
@@ -28,6 +72,7 @@ class DotPlot(MatrixPlot):
             The build dot plot object.
         """
         data = self._build_data()
+        size = self._build_size()
 
         # Resolve row grouping
         self.row_group, self.order = self._resolve_row_grouping(self.mean_df.index.astype(str))
@@ -51,11 +96,6 @@ class DotPlot(MatrixPlot):
                     self.markers = group_by_max(data_reordered.T)
 
                     data = self._build_data()
-
-        df = data > 0
-        agg_count = df.gt(0).groupby(df.index).sum().loc[self.mean_df.index]
-        agg_cell_counts = df.groupby(df.index).size().loc[self.mean_df.index].to_numpy()
-        size = agg_count.to_numpy() / agg_cell_counts[:, np.newaxis]
 
         # Scale the data if scaling is enabled
         data = self._scale_data(data)
