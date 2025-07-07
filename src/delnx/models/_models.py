@@ -46,16 +46,12 @@ class Regression:
         (Iteratively Reweighted Least Squares) for GLM-type models.
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics (for faster computation).
-    offset : jnp.ndarray | :obj:`None`, default=:obj:`None`
-        Offset terms (on log scale for GLMs) to include in the model. Used for
-        incorporating normalization factors like size factors in RNA-seq data.
     """
 
     maxiter: int = 100
     tol: float = 1e-6
     optimizer: str = "BFGS"
     skip_stats: bool = False
-    offset: jnp.ndarray | None = None
 
     def _fit_bfgs(self, neg_ll_fn: Callable, init_params: jnp.ndarray, **kwargs) -> jnp.ndarray:
         """Fit model using the BFGS optimizer.
@@ -214,7 +210,7 @@ class Regression:
             return se, stat, pval
 
         stats = jax.lax.cond(
-            condition_number < 1e5,  # Relatively conservative threshold
+            condition_number < 1e6,  # Relatively conservative threshold
             lambda _: wald_test(),
             lambda _: likelihood_ratio_test(),
             operand=None,
@@ -297,8 +293,6 @@ class LinearRegression(Regression):
         Optimization method (inherited from Regression).
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics (inherited from Regression).
-    offset : jnp.ndarray | None, default=None
-        Offset terms to include in the model (inherited from Regression).
 
     Examples
     --------
@@ -412,8 +406,6 @@ class LogisticRegression(Regression):
         Optimization method to use. Options are "BFGS" or "IRLS" (recommended).
     skip_stats : bool, default=False
         Whether to skip calculating test statistics.
-    offset : jnp.ndarray | None, default=None
-        Offset terms to include in the model.
 
     Examples
     --------
@@ -555,15 +547,11 @@ class NegativeBinomialRegression(Regression):
         Optimization method to use. Options are "BFGS" or "IRLS".
     skip_stats : bool, default=False
         Whether to skip calculating Wald test statistics.
-    offset : jnp.ndarray | None, default=None
-        Offset terms (log scale) to include in the model. Typically log(size_factors)
-        to account for differences in sequencing depth in RNA-seq analysis.
     dispersion : float | None, default=None
         Fixed dispersion parameter. If :obj:`None`, dispersion is estimated from the data.
     dispersion_range : tuple[float, float], default=(1e-6, 10.0)
-        Range for valid dispersion values to prevent numerical issues.
-    dispersion_method : str, default="moments"
-        Method for estimating dispersion. Options are "moments" or "mle".
+        Range for the dispersion parameter. Used to constrain the estimated dispersion
+        to avoid numerical issues.
 
     Examples
     --------
@@ -580,7 +568,6 @@ class NegativeBinomialRegression(Regression):
 
     dispersion: float | None = None
     dispersion_range: tuple[float, float] = (1e-8, 100.0)
-    stats_method: str = "fisher"
 
     def _negative_log_likelihood(
         self,
@@ -663,6 +650,7 @@ class NegativeBinomialRegression(Regression):
         X: jnp.ndarray,
         y: jnp.ndarray,
         offset: jnp.ndarray | None = None,
+        test_idx: int = -1,
     ) -> dict:
         """Fit negative binomial regression model with optional offset.
 
@@ -681,6 +669,8 @@ class NegativeBinomialRegression(Regression):
             Offset term (log scale) to include in the model. Typically
             log(size_factors) for RNA-seq data. If provided, overrides
             the offset set during class initialization.
+        test_idx : int, default=-1
+            Index of the parameter to test. If -1, tests the last parameter.
 
         Returns
         -------
@@ -734,7 +724,7 @@ class NegativeBinomialRegression(Regression):
         se = stat = pval = None
         if not self.skip_stats:
             nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset, dispersion=dispersion)
-            se, stat, pval = self._compute_stats(nll, params)
+            se, stat, pval = self._compute_stats(nll, params, test_idx=test_idx)
 
         return {
             "coef": params,
