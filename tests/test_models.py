@@ -541,8 +541,6 @@ class TestDispersionEstimator:
 
         assert dispersions.shape == (2,)  # Two genes
         assert bool(jnp.all(jnp.isfinite(dispersions)))
-        assert bool(jnp.all(dispersions >= estimator.min_disp))
-        assert bool(jnp.all(dispersions <= estimator.max_disp))
 
     def test_fit_moments_dispersions_realistic(self, synthetic_data):
         """Test moments dispersion estimation with realistic data."""
@@ -554,7 +552,6 @@ class TestDispersionEstimator:
 
         assert dispersions.shape == (synthetic_data["n_genes"],)
         assert bool(jnp.all(jnp.isfinite(dispersions)))
-        assert bool(jnp.all(dispersions >= estimator.min_disp))
 
         # Check that estimates are in reasonable range (not exact due to sampling)
         assert bool(jnp.all(dispersions < 1.0))  # Should be reasonable for our data
@@ -573,7 +570,6 @@ class TestDispersionEstimator:
 
         assert dispersions.shape == (2,)
         assert bool(jnp.all(jnp.isfinite(dispersions)))
-        assert bool(jnp.all(dispersions >= estimator.min_disp))
 
     def test_fit_initial_dispersions(self, synthetic_data):
         """Test initial dispersion estimation (minimum of rough and moments)."""
@@ -650,7 +646,7 @@ class TestDispersionEstimator:
             max_disp=0.25,
         )
 
-        dispersions = restrictive_estimator.fit_moments_dispersions(extreme_counts)
+        dispersions = restrictive_estimator.fit_initial_dispersions(extreme_counts)
 
         # Should be clipped to the specified range
         assert bool(jnp.all(dispersions >= 0.15))
@@ -665,7 +661,7 @@ class TestDispersionEstimator:
             design_matrix=jnp.ones((5, 1)),  # Intercept only
             size_factors=size_factors,
         )
-        dispersions = estimator.fit_moments_dispersions(zero_counts)
+        dispersions = estimator.fit_initial_dispersions(zero_counts)
 
         assert dispersions.shape == (3,)
         assert bool(jnp.all(jnp.isfinite(dispersions)))
