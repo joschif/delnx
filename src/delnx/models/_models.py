@@ -153,6 +153,7 @@ class Regression:
 
     def _compute_stats(
         self,
+        X: jnp.ndarray,
         neg_ll_fn: Callable,
         params: jnp.ndarray,
         test_idx: int = -1,
@@ -164,6 +165,8 @@ class Regression:
 
         Parameters
         ----------
+        X : jnp.ndarray
+            Design matrix of shape (n_samples, n_features).
         neg_ll_fn : Callable
             Function that computes the negative log-likelihood.
         params : jnp.ndarray
@@ -195,22 +198,27 @@ class Regression:
             ll_full = -neg_ll_fn(params)
             params_reduced = params.at[test_idx].set(0.0)
             ll_reduced = -neg_ll_fn(params_reduced)
-
+            # Compute likelihood ratio statistic
             lr_stat = 2 * (ll_full - ll_reduced)
             lr_stat = jnp.maximum(lr_stat, 0.0)
-            lr_pval = jsp.stats.chi2.sf(lr_stat, df=1)
-
+            # Compute correction for small sample sizes
+            n_samples = X.shape[0]
+            n_params = X.shape[1]
+            correction = 1 + n_params / (n_samples - n_params)
+            correction = jnp.maximum(1.0, correction)
+            corrected_lr_stat = lr_stat / correction
+            # Compute p-value for the likelihood ratio statistic
+            lr_pval = jsp.stats.chi2.sf(corrected_lr_stat, df=1)
             # Return dummy values for SE and stat
             se = jnp.full_like(params, jnp.nan)
             stat = jnp.zeros_like(params)
             stat = stat.at[test_idx].set(lr_stat)
             pval = jnp.ones_like(params)
             pval = pval.at[test_idx].set(lr_pval)
-
             return se, stat, pval
 
         stats = jax.lax.cond(
-            condition_number < 1e6,  # Relatively conservative threshold
+            condition_number < 1e5,  # Relatively conservative threshold
             lambda _: wald_test(),
             lambda _: likelihood_ratio_test(),
             operand=None,
@@ -494,7 +502,7 @@ class LogisticRegression(Regression):
         se = stat = pval = None
         if not self.skip_stats:
             nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset)
-            se, stat, pval = self._compute_stats(nll, params, test_idx=test_idx)
+            se, stat, pval = self._compute_stats(X, nll, params, test_idx=test_idx)
 
         return {
             "coef": params,
@@ -724,7 +732,7 @@ class NegativeBinomialRegression(Regression):
         se = stat = pval = None
         if not self.skip_stats:
             nll = partial(self._negative_log_likelihood, X=X, y=y, offset=offset, dispersion=dispersion)
-            se, stat, pval = self._compute_stats(nll, params, test_idx=test_idx)
+            se, stat, pval = self._compute_stats(X, nll, params, test_idx=test_idx)
 
         return {
             "coef": params,
