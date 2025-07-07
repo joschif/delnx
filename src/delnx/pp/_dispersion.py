@@ -291,28 +291,28 @@ def dispersion(
 
     # Store results in adata.var depending on the method used
     adata.var[var_key_added] = np.nan
-    adata.var["dispersion_init"] = np.nan
+    adata.var["dispersions_init"] = np.nan
 
     mask = dispersions["non_zero_mask"]
     adata.var.loc[mask, var_key_added] = np.array(dispersions["init_dispersions"])
-    adata.var.loc[mask, "dispersion_init"] = np.array(dispersions["init_dispersions"])
+    adata.var.loc[mask, "dispersions_init"] = np.array(dispersions["init_dispersions"])
 
     if method == "fast":
         return
 
-    adata.var["dispersion_trend"] = np.nan
-    adata.var["dispersion_map"] = np.nan
+    adata.var["dispersions_trend"] = np.nan
+    adata.var["dispersions_map"] = np.nan
 
     adata.var.loc[mask, var_key_added] = np.array(dispersions["map_dispersions"])
-    adata.var.loc[mask, "dispersion_trend"] = np.array(dispersions["fitted_trend"])
-    adata.var.loc[mask, "dispersion_map"] = np.array(dispersions["map_dispersions"])
+    adata.var.loc[mask, "dispersions_trend"] = np.array(dispersions["fitted_trend"])
+    adata.var.loc[mask, "dispersions_map"] = np.array(dispersions["map_dispersions"])
 
     if method == "approx":
         return
 
-    adata.var["dispersion_mle"] = np.nan
+    adata.var["dispersions_mle"] = np.nan
     adata.var["mle_converged"] = np.nan
     adata.var["mle_converged"] = adata.var["mle_converged"].astype(bool)
 
-    adata.var.loc[mask, "dispersion_mle"] = np.array(dispersions["mle_dispersions"])
+    adata.var.loc[mask, "dispersions_mle"] = np.array(dispersions["mle_dispersions"])
     adata.var.loc[mask, "mle_converged"] = np.array(dispersions["mle_converged"])
