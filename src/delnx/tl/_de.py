@@ -171,9 +171,15 @@ def _grouped_de(
     results["padj"] = np.nan  # Initialize with NaN
     results.loc[results["pval"].notna(), "padj"] = padj
 
-    results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj", "log2fc"],
-    ).reset_index(drop=True)
+    if mode == "continuous":
+        # For continuous mode, we don't have test/ref conditions
+        results = results.sort_values(by=["group", "padj", "coef"]).reset_index(drop=True)
+
+    else:
+        # Sort by group, test condition, reference condition, and adjusted p-value
+        results = results.sort_values(
+            by=["group", "test_condition", "ref_condition", "padj", "log2fc"],
+        ).reset_index(drop=True)
 
     return results
 
@@ -437,9 +443,12 @@ def de(
     # Run tests for each comparison
     results = []
     for group1, group2 in comparisons:
+        # In continuous mode, use the condition column directly
+        # and don't subset by comparison groups
         if mode == "continuous":
             all_mask = np.ones(adata.n_obs, dtype=bool)
             logger.info("Testing continuous condition", verbose=verbose)
+
         else:
             logger.info(f"Testing {group1} vs {group2}", verbose=verbose)
             # Get cell masks
@@ -472,20 +481,27 @@ def de(
             mode=mode,
             covariate_keys=covariate_keys,
         )
-        condition_mask = model_data[condition_key].values == 1
 
-        # Calculate log2 fold change
-        log2fc = _log2fc(X=X_norm, condition_mask=condition_mask, data_type=data_type)
-        # Clip log2fc to avoid extreme values
-        log2fc = np.clip(log2fc, -10, 10)
+        # Dont filter by log2fc in continuous mode
+        if mode == "continuous":
+            feature_names = adata.var_names.values
 
-        # Apply log2fc threshold
-        feature_mask = np.abs(log2fc) > log2fc_threshold
-        X_comp = X_comp[:, feature_mask]
-        X_norm = X_norm[:, feature_mask]
-        feature_names = adata.var_names[feature_mask].values
+        else:
+            condition_mask = model_data[condition_key].values == 1
 
-        logger.info(f"{np.sum(feature_mask)} features passed log2fc threshold of {log2fc_threshold}", verbose=verbose)
+            # Calculate log2 fold change
+            log2fc = _log2fc(X=X_norm, condition_mask=condition_mask, data_type=data_type)
+            # Clip log2fc to avoid extreme values
+            log2fc = np.clip(log2fc, -10, 10)
+
+            # Apply log2fc threshold
+            feature_mask = np.abs(log2fc) > log2fc_threshold
+            logger.info(
+                f"{np.sum(feature_mask)} features passed log2fc threshold of {log2fc_threshold}", verbose=verbose
+            )
+            X_comp = X_comp[:, feature_mask]
+            X_norm = X_norm[:, feature_mask]
+            feature_names = adata.var_names[feature_mask].values
 
         if backend == "jax":
             # Run batched DE test
@@ -519,33 +535,35 @@ def de(
                 verbose=verbose,
             )
 
-        auroc = _batched_auroc(X=X_norm, groups=model_data[condition_key].values, batch_size=batch_size)
-        auroc_df = pd.DataFrame(
-            {
-                "feature": feature_names,
-                "auroc": auroc,
-            }
-        )
-
-        # Add comparison info and rename coef to log2fc
         group_results["feature"] = group_results["feature"].astype(str)
-        group_results["test_condition"] = group1
-        group_results["ref_condition"] = group2
-        logfc_df = pd.DataFrame(
-            {
-                "log2fc": log2fc[feature_mask],
-                "feature": feature_names,
-            }
-        )
-        group_results = group_results.merge(
-            logfc_df,
-            on="feature",
-            how="left",
-        ).merge(
-            auroc_df,
-            on="feature",
-            how="left",
-        )
+
+        # Add comparison info if appropriate
+        if mode != "continuous":
+            group_results["test_condition"] = group1
+            group_results["ref_condition"] = group2
+            auroc = _batched_auroc(X=X_norm, groups=model_data[condition_key].values, batch_size=batch_size)
+            auroc_df = pd.DataFrame(
+                {
+                    "feature": feature_names,
+                    "auroc": auroc,
+                }
+            )
+            logfc_df = pd.DataFrame(
+                {
+                    "log2fc": log2fc[feature_mask],
+                    "feature": feature_names,
+                }
+            )
+            group_results = group_results.merge(
+                logfc_df,
+                on="feature",
+                how="left",
+            ).merge(
+                auroc_df,
+                on="feature",
+                how="left",
+            )
+
         results.append(group_results)
 
     results = pd.concat(results, axis=0).reset_index(drop=True)
@@ -556,7 +574,7 @@ def de(
             "Differential expression analysis failed for all comparisons. Please check the input data or set `verbose=True` for more details."
         )
 
-    # Clip p-values at 1e-15
+    # Clip p-values at 1e-50
     results["pval"] = np.clip(results["pval"], 1e-50, 1)
 
     # Perform multiple testing correction
@@ -567,20 +585,35 @@ def de(
     results["padj"] = np.nan  # Initialize with NaN
     results.loc[results["pval"].notna(), "padj"] = padj
 
-    results = results.sort_values(
-        by=["test_condition", "ref_condition", "padj", "log2fc"],
-    ).reset_index(drop=True)
+    if mode == "continuous":
+        # For continuous mode, we don't have test/ref conditions
+        results = results.sort_values(by=["padj", "coef"]).reset_index(drop=True)
 
-    # Reorder columns
-    return results[
-        [
-            "feature",
-            "test_condition",
-            "ref_condition",
-            "log2fc",
-            "auroc",
-            "coef",
-            "pval",
-            "padj",
+        # Reorder columns
+        return results[
+            [
+                "feature",
+                "coef",
+                "pval",
+                "padj",
+            ]
         ]
-    ]
+
+    else:
+        results = results.sort_values(
+            by=["test_condition", "ref_condition", "padj", "log2fc"],
+        ).reset_index(drop=True)
+
+        # Reorder columns
+        return results[
+            [
+                "feature",
+                "test_condition",
+                "ref_condition",
+                "log2fc",
+                "auroc",
+                "coef",
+                "pval",
+                "padj",
+            ]
+        ]
