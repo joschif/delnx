@@ -34,7 +34,7 @@ def test_plot_volcanoplot(adata_pb_counts):
 
     # Plot volcano plot
     fig, _ = dx.pl.volcanoplot(
-        results, thresh={"coef": 2, "-log10(pval)": -np.log10(0.05)}, label_top=5, return_fig=True
+        results, thresh={"coef": 2, "-log10(pval)": -np.log10(0.05)}, label_top=5, return_fig=True, show=False
     )
 
     # Check if the figure is created
@@ -154,6 +154,6 @@ def test_filter_genes(adata_small):
 
     assert isinstance(keep_mask, np.ndarray), "Result is not a NumPy array"
     assert keep_mask.dtype == bool, "Result is not a boolean array"
-    assert keep_mask.shape[0] == adata_small.var.shape[0], (
-        f"Length mismatch: {keep_mask.shape[0]} != {adata_small.var.shape[0]}"
-    )
+    assert (
+        keep_mask.shape[0] == adata_small.var.shape[0]
+    ), f"Length mismatch: {keep_mask.shape[0]} != {adata_small.var.shape[0]}"
