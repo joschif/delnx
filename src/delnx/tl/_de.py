@@ -424,6 +424,11 @@ def de(
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
 
+    if method == "deseq2" and mode == "continuous":
+        raise ValueError(
+            "The 'deseq2' method does not support continuous mode. Please use 'all_vs_all', 'all_vs_ref', or '1_vs_1'."
+        )
+
     if method == "deseq2":
         # Run PyDESeq2
         return _run_deseq2(

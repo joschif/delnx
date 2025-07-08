@@ -903,8 +903,8 @@ class DispersionEstimator:
         moments_disp = self.fit_moments_dispersions(normed_counts)
 
         # Take minimum as in PyDESeq2
-        init_disp = np.minimum(rough_disp, moments_disp)
-        return np.clip(init_disp, self.min_disp, self.max_disp)
+        init_disp = jnp.minimum(rough_disp, moments_disp)
+        return jnp.minimum(jnp.maximum(init_disp, self.min_disp), self.max_disp)
 
     def fit_mu_single_gene(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate gene-wise means of the NB distribution (mu).
