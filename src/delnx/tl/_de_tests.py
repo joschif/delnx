@@ -426,15 +426,16 @@ def _run_lrt_cuml(
         # Fit full model (intercept + feature)
         X_full = np.column_stack([np.ones_like(X), X])
 
-    # Fit null model
     null_model = LogisticRegression(penalty="none")
-    null_model.fit(X_null, y)
-    null_prob = null_model.predict_proba(X_null)
-
-    # Fit full model
     full_model = LogisticRegression(penalty="none")
-    full_model.fit(X_full, y)
-    full_prob = full_model.predict_proba(X_full)
+
+    with suppress_output(verbose):
+        # Fit null model
+        null_model.fit(X_null, y)
+        null_prob = null_model.predict_proba(X_null)
+        # Fit full model
+        full_model.fit(X_full, y)
+        full_prob = full_model.predict_proba(X_full)
 
     # Calculate log-likelihoods
     alt_log_likelihood = -log_loss(y, full_prob, normalize=False)
