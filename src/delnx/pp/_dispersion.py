@@ -19,6 +19,7 @@ import numpy as np
 import tqdm
 from anndata import AnnData
 
+from delnx._logging import logger
 from delnx._utils import _get_layer, _to_dense
 from delnx.models import DispersionEstimator
 
@@ -100,8 +101,7 @@ def _estimate_dispersion_batched(
     mle_dispersions = []
     mle_success = []
 
-    if verbose:
-        print("Fitting initial dispersions")
+    logger.info("Fitting initial dispersions", verbose=verbose)
 
     # Compute genewise estimates in batches
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
@@ -141,8 +141,7 @@ def _estimate_dispersion_batched(
             "non_zero_mask": non_zero_mask,
         }
 
-    if verbose:
-        print("Fitting dispersion trend curve")
+    logger.info("Fitting dispersion trend curve", verbose=verbose)
 
     # Use MLE dispersions for trend fitting if method is "full", otherwise use initial dispersions
     dispersions_use = mle_dispersions if method == "full" else init_dispersions
@@ -160,8 +159,7 @@ def _estimate_dispersion_batched(
         fitted_trend,
     )
 
-    if verbose:
-        print("Fitting MAP dispersions")
+    logger.info("Fitting MAP dispersions", verbose=verbose)
 
     map_dispersions = []
 
