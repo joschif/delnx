@@ -14,8 +14,6 @@ optimization (JAX, statsmodels, cuML), size factor normalization via offset term
 and grouped analysis for cell type-specific differential expression.
 """
 
-import warnings
-
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -24,6 +22,7 @@ from scipy.sparse import csr_matrix, issparse
 
 import delnx as dx
 from delnx._constants import SUPPORTED_BACKENDS
+from delnx._logging import logger
 from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
@@ -112,16 +111,11 @@ def _grouped_de(
     """
     results = []
     for group in adata.obs[group_key].unique():
-        if verbose:
-            print(f"Running DE for group '{group}'")
+        logger.info(f"Running DE for group: {group}", verbose=verbose)
 
         mask = adata.obs[group_key].values == group
         if sum(mask) < (min_samples * 2):
-            if verbose:
-                warnings.warn(
-                    f"Skipping group {group} with < {min_samples * 2} samples",
-                    stacklevel=2,
-                )
+            logger.warning("Skipping group {group} with < {min_samples * 2} samples", verbose=verbose)
             continue
 
         # Run DE for group with error handling
@@ -152,11 +146,10 @@ def _grouped_de(
             results.append(group_results)
 
         except ValueError as e:
-            if verbose:
-                warnings.warn(
-                    f"Differential expression analysis failed for group '{group}': {str(e)}. Skipping this group.",
-                    stacklevel=2,
-                )
+            logger.warning(
+                f"Differential expression analysis failed for group '{group}': {str(e)}. Skipping this group.",
+                verbose=verbose,
+            )
             continue
 
         group_results["group"] = group
@@ -253,6 +246,7 @@ def de(
             - "all_vs_all": Compare all pairs of condition levels
             - "all_vs_ref": Compare all levels against reference
             - "1_vs_1": Compare only reference vs comparison (requires tuple reference)
+            - "continuous": Compare continuous condition levels (e.g., time points).
     layer : str | None, default=None
         Layer name in :attr:`~anndata.AnnData.layers` to use for expression data.
         If :obj:`None`, uses :attr:`~anndata.AnnData.X`.
@@ -382,7 +376,7 @@ def de(
     dispersions = adata.var[dispersion_key].values if dispersion_key else None
 
     # Validate conditions and get comparison levels
-    levels, comparisons = _validate_conditions(condition_values, reference, mode)
+    comparisons = _validate_conditions(condition_values, reference, mode)
 
     # Check if grouping requested
     if group_key is not None:
@@ -417,10 +411,9 @@ def de(
     # Infer data type if auto
     if data_type == "auto":
         data_type = _infer_data_type(X)
-        if verbose:
-            print(f"Inferred data type: {data_type}")
-    elif verbose:
-        print(f"Using specified data type: {data_type}")
+        logger.info(f"Inferred data type: {data_type}", verbose=verbose)
+    else:
+        logger.info(f"Using specified data type: {data_type}", verbose=verbose)
 
     # Validate method and data type combinations
     _check_method_and_data_type(method, data_type)
@@ -444,23 +437,23 @@ def de(
     # Run tests for each comparison
     results = []
     for group1, group2 in comparisons:
-        if verbose:
-            print(f"Testing {group1} vs {group2}")
+        if mode == "continuous":
+            all_mask = np.ones(adata.n_obs, dtype=bool)
+            logger.info("Testing continuous condition", verbose=verbose)
+        else:
+            logger.info(f"Testing {group1} vs {group2}", verbose=verbose)
+            # Get cell masks
+            mask1 = adata.obs[condition_key].values == group1
+            mask2 = adata.obs[condition_key].values == group2
 
-        # Get cell masks
-        mask1 = adata.obs[condition_key].values == group1
-        mask2 = adata.obs[condition_key].values == group2
-
-        if np.sum(mask1) < min_samples or np.sum(mask2) < min_samples:
-            if verbose:
-                warnings.warn(
-                    f"Skipping comparison {group1} vs {group2} with < {min_samples} samples",
-                    stacklevel=2,
+            if np.sum(mask1) < min_samples or np.sum(mask2) < min_samples:
+                logger.warning(
+                    f"Skipping comparison {group1} vs {group2} with < {min_samples} samples", verbose=verbose
                 )
-            results.append(pd.DataFrame())
-            continue
+                results.append(pd.DataFrame())
+                continue
 
-        all_mask = mask1 | mask2
+            all_mask = mask1 | mask2
 
         # Get data for tests
         X_comp = X[all_mask, :]
@@ -476,6 +469,7 @@ def de(
             adata[all_mask, :],
             condition_key=condition_key,
             reference=group2,
+            mode=mode,
             covariate_keys=covariate_keys,
         )
         condition_mask = model_data[condition_key].values == 1
@@ -491,8 +485,7 @@ def de(
         X_norm = X_norm[:, feature_mask]
         feature_names = adata.var_names[feature_mask].values
 
-        if verbose:
-            print(f"{np.sum(feature_mask)} features passed log2fc threshold of {log2fc_threshold}")
+        logger.info(f"{np.sum(feature_mask)} features passed log2fc threshold of {log2fc_threshold}", verbose=verbose)
 
         if backend == "jax":
             # Run batched DE test
