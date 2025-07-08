@@ -14,6 +14,7 @@ import pandas as pd
 import tqdm
 from anndata import AnnData
 
+from delnx._logging import logger
 from delnx._typing import ComparisonMode, DataType
 from delnx._utils import _get_layer, _to_dense
 
@@ -156,10 +157,9 @@ def log2fc(
     # Infer data type if auto
     if data_type == "auto":
         data_type = _infer_data_type(X)
-        if verbose:
-            print(f"Inferred data type: {data_type}")
-    elif verbose:
-        print(f"Using specified data type: {data_type}")
+        logger.info(f"Inferred data type: {data_type}", verbose=verbose)
+    else:
+        logger.info(f"Using specified data type: {data_type}", verbose=verbose)
 
     # Calculate log2fc for each comparison
     results = []
@@ -169,8 +169,7 @@ def log2fc(
         mask2 = adata.obs[condition_key].values == group2
 
         if np.sum(mask1) < min_samples or np.sum(mask2) < min_samples:
-            if verbose:
-                print(f"Skipping comparison {group1} vs {group2} with < {min_samples} samples")
+            logger.info(f"Skipping comparison {group1} vs {group2} with < {min_samples} samples", verbose=verbose)
             continue
 
         all_mask = mask1 | mask2
@@ -426,8 +425,7 @@ def auroc(
         mask2 = adata.obs[condition_key].values == group2
 
         if np.sum(mask1) < min_samples or np.sum(mask2) < min_samples:
-            if verbose:
-                print(f"Skipping comparison {group1} vs {group2} with < {min_samples} samples")
+            logger.info(f"Skipping comparison {group1} vs {group2} with < {min_samples} samples", verbose=verbose)
             continue
 
         all_mask = mask1 | mask2
