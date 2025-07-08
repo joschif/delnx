@@ -13,7 +13,7 @@ Method = Literal[
     "anova_residual_jax",
     "binomial",
 ]
-Mode = Literal["sum", "mean", "median"]
-DataType = Literal["counts", "lognorm", "binary", "auto"]
-ComparisonMode = Literal["all_vs_ref", "all_vs_all", "1_vs_1"]
+Mode = Literal["sum", "mean"]
+DataType = Literal["counts", "lognorm", "binary", "scaled", "auto"]
+ComparisonMode = Literal["all_vs_ref", "all_vs_all", "1_vs_1", "continuous"]
 Backends = Literal["jax", "cuml", "statsmodels"]
