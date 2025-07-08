@@ -43,7 +43,7 @@ import delnx as dx
 adata = dx.pp.size_factors(adata, method="ratio")
 
 # Estimate dispersion parameters
-adata = dx.pp.dispersion(adata, size_factor_key="size_factor")
+adata = dx.pp.dispersion(adata, size_factor_key="size_factors")
 
 # Run differential expression analysis
 results = dx.tl.de(
