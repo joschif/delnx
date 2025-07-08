@@ -13,7 +13,8 @@ class Logger:
             self._logger.info(message)
 
     def warning(self, message: str, verbose: bool = True):
-        self._logger.warning(message)
+        if verbose:
+            self._logger.warning(message)
 
     def error(self, message: str, verbose: bool = True):
         self._logger.error(message)
