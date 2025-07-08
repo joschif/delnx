@@ -482,11 +482,11 @@ def de(
             covariate_keys=covariate_keys,
         )
 
-        # Dont filter by log2fc in continuous mode
-        if mode == "continuous":
-            feature_names = adata.var_names.values
+        # Check if genes are non-zero
+        feature_mask = np.array(X_comp.sum(axis=0) > 0).flatten()
 
-        else:
+        # Dont filter by log2fc in continuous mode
+        if mode != "continuous":
             condition_mask = model_data[condition_key].values == 1
 
             # Calculate log2 fold change
@@ -495,13 +495,13 @@ def de(
             log2fc = np.clip(log2fc, -10, 10)
 
             # Apply log2fc threshold
-            feature_mask = np.abs(log2fc) > log2fc_threshold
-            logger.info(
-                f"{np.sum(feature_mask)} features passed log2fc threshold of {log2fc_threshold}", verbose=verbose
-            )
-            X_comp = X_comp[:, feature_mask]
-            X_norm = X_norm[:, feature_mask]
-            feature_names = adata.var_names[feature_mask].values
+            feature_mask = (np.abs(log2fc) > log2fc_threshold) & feature_mask
+
+        logger.info(f"Running DE for {np.sum(feature_mask)} features", verbose=verbose)
+
+        X_comp = X_comp[:, feature_mask]
+        X_norm = X_norm[:, feature_mask]
+        feature_names = adata.var_names[feature_mask].values
 
         if backend == "jax":
             # Run batched DE test
