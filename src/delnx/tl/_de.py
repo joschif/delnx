@@ -152,9 +152,6 @@ def _grouped_de(
             )
             continue
 
-        group_results["group"] = group
-        results.append(group_results)
-
     results = pd.concat(results, axis=0).reset_index(drop=True)
 
     # Check if any results are valid
@@ -597,7 +594,7 @@ def de(
                 "pval",
                 "padj",
             ]
-        ]
+        ].copy()
 
     else:
         results = results.sort_values(
@@ -616,4 +613,4 @@ def de(
                 "pval",
                 "padj",
             ]
-        ]
+        ].copy()
