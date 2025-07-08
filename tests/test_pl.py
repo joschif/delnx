@@ -154,6 +154,6 @@ def test_filter_genes(adata_small):
 
     assert isinstance(keep_mask, np.ndarray), "Result is not a NumPy array"
     assert keep_mask.dtype == bool, "Result is not a boolean array"
-    assert (
-        keep_mask.shape[0] == adata_small.var.shape[0]
-    ), f"Length mismatch: {keep_mask.shape[0]} != {adata_small.var.shape[0]}"
+    assert keep_mask.shape[0] == adata_small.var.shape[0], (
+        f"Length mismatch: {keep_mask.shape[0]} != {adata_small.var.shape[0]}"
+    )
