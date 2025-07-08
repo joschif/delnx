@@ -1,6 +1,5 @@
 """Statistical test functions for differential expression analysis."""
 
-import warnings
 from functools import partial
 
 import numpy as np
@@ -15,6 +14,7 @@ from scipy import sparse, stats
 from sklearn.metrics import log_loss
 from statsmodels.stats.anova import anova_lm
 
+from delnx._logging import logger
 from delnx._utils import _get_layer, _to_dense, suppress_output
 
 
@@ -565,8 +565,7 @@ def _run_de(
             )
             return feature_names[i], coef, pval
         except Exception as e:  # noqa: BLE001
-            if verbose:
-                warnings.warn(f"Error testing feature {feature_names[i]}: {str(e)}", stacklevel=2)
+            logger.warning(f"Error testing feature {feature_names[i]}: {str(e)}", verbose=verbose)
             return feature_names[i], None, None
 
     # Run tests in parallel with progress bar
@@ -598,9 +597,9 @@ def _run_de(
             errors[feat] = "Test failed"
 
     if len(errors) > 0 and verbose:
-        warnings.warn(
+        logger.warning(
             f"DE analysis failed for {len(errors)} features: {list(errors.keys())}",
-            stacklevel=2,
+            verbose=verbose,
         )
 
     results_df = pd.DataFrame(results)
