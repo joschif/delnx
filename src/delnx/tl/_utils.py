@@ -1,10 +1,9 @@
-import warnings
-
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 
 from delnx._constants import COMPATIBLE_DATA_TYPES
+from delnx._logging import logger
 from delnx._typing import ComparisonMode, DataType
 from delnx._utils import _to_dense, _to_list
 
@@ -130,13 +129,18 @@ def _prepare_model_data(
     adata: AnnData,
     condition_key: str,
     reference: str,
+    mode: ComparisonMode,
     covariate_keys: list[str] | None = None,
 ) -> pd.DataFrame:
     """Prepare data frame for fitting models."""
     model_data = pd.DataFrame(index=range(adata.n_obs))
 
     # Set up condition
-    model_data[condition_key] = (adata.obs[condition_key].values != reference).astype(int)
+    if mode == "continuous":
+        # For continuous mode, we assume condition_key is numeric and use it as is
+        model_data[condition_key] = adata.obs[condition_key].values.astype(float)
+    else:
+        model_data[condition_key] = (adata.obs[condition_key].values != reference).astype(int)
 
     # Add covariates
     if covariate_keys is not None:
@@ -161,14 +165,12 @@ def _check_method_and_data_type(
     elif method == "binomial" and data_type not in COMPATIBLE_DATA_TYPES["binomial"]:
         raise ValueError(f"Binomial models require binary data. Current data type is {data_type}.")
     elif method == "lr" and data_type not in COMPATIBLE_DATA_TYPES["lr"]:
-        warnings.warn(
+        logger.warning(
             f"Logistic regression is designed for {' or '.join(COMPATIBLE_DATA_TYPES['lr'])} data. "
             f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
         )
     elif method.startswith("anova") and data_type not in COMPATIBLE_DATA_TYPES[method]:
-        warnings.warn(
+        logger.warning(
             f"ANOVA is designed for {' or '.join(COMPATIBLE_DATA_TYPES['anova'])} data. "
             f"Current data type is {data_type}, which may give unreliable results.",
-            stacklevel=2,
         )
