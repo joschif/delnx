@@ -71,6 +71,7 @@ def _validate_conditions(
         - all_vs_ref: Compare all levels to reference
         - all_vs_all: Compare all pairs of levels
         - 1_vs_1: Compare only two levels (reference and comparison group)
+        - "continuous": Compare continuous condition levels (e.g., time points).
 
     Returns
     -------
@@ -78,6 +79,13 @@ def _validate_conditions(
         levels: List of unique condition levels
         comparisons: List of tuples (treatment, reference) to compare
     """
+    if mode == "continuous":
+        # Check if values are numeric
+        if not np.issubdtype(condition_values.dtype, np.number):
+            raise ValueError("For continuous mode, condition values must be numeric")
+        # Dummhy values to make it compatible with loop
+        return [(None, None)]
+
     # Get unique levels
     levels = sorted(set(_to_list(condition_values)))
 
@@ -115,7 +123,7 @@ def _validate_conditions(
     else:
         raise ValueError(f"Invalid comparison mode: {mode}")
 
-    return list(levels), comparisons
+    return comparisons
 
 
 def _prepare_model_data(
