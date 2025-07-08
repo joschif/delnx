@@ -16,6 +16,7 @@ All methods support batch processing for efficient computation with large datase
 
 import jax.numpy as jnp
 import numpy as np
+import patsy
 import tqdm
 from anndata import AnnData
 
@@ -193,6 +194,7 @@ def dispersion(
     adata: AnnData,
     layer: str | None = None,
     size_factor_key: str | None = None,
+    covariate_keys: list[str] | None = None,
     method: str = "full",
     var_key_added: str = "dispersions",
     trend_type: str = "parametric",
@@ -274,10 +276,19 @@ def dispersion(
     X = _get_layer(adata, layer)
     size_factors = adata.obs[size_factor_key].values if size_factor_key else None
 
+    # Get design matrix
+    if covariate_keys is not None:
+        # Create design matrix using patsy for covariates
+        formula = " + ".join(covariate_keys)
+        design_matrix = patsy.dmatrix(formula, adata.obs, return_type="dataframe").values
+    else:
+        # If no covariates, use a simple intercept model
+        design_matrix = None
+
     # Estimate dispersions using the specified method
     dispersions = _estimate_dispersion_batched(
         X=X,
-        design_matrix=None,  # TODO: Add design matrix support
+        design_matrix=design_matrix,
         size_factors=size_factors,
         method=method,
         min_disp=dispersion_range[0],
