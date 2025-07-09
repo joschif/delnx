@@ -70,13 +70,12 @@ def _validate_conditions(
         - all_vs_ref: Compare all levels to reference
         - all_vs_all: Compare all pairs of levels
         - 1_vs_1: Compare only two levels (reference and comparison group)
-        - "continuous": Compare continuous condition levels (e.g., time points).
+        - continuous: Compare continuous condition levels (e.g., time points).
 
     Returns
     -------
-    tuple
-        levels: List of unique condition levels
-        comparisons: List of tuples (treatment, reference) to compare
+    comparisons
+        List of tuples with comparisons (level1, level2)
     """
     if mode == "continuous":
         # Check if values are numeric
