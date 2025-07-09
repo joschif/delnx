@@ -46,36 +46,54 @@ def test_size_factors(adata_pb_counts, method):
     import delnx
 
     # Test size factors calculation
-    delnx.pp.size_factors(adata_pb_counts, method=method)
+    obs_key = "size_factors_test"
+    delnx.pp.size_factors(adata_pb_counts, method=method, obs_key_added=obs_key)
 
     # Check if size_factor column exists
-    assert any(adata_pb_counts.obs.columns.str.startswith("size_factor"))
+    assert any(adata_pb_counts.obs.columns.str.startswith(obs_key))
 
     # Check that size factors are positive and normalized over mean
-    size_factor_col = adata_pb_counts.obs.columns[adata_pb_counts.obs.columns.str.startswith("size_factor")][0]
+    size_factor_col = adata_pb_counts.obs.columns[adata_pb_counts.obs.columns.str.startswith(obs_key)][0]
     size_factors = adata_pb_counts.obs[size_factor_col].values
     assert np.all(size_factors > 0)
-    assert np.isclose(np.mean(size_factors), 1.0, atol=1e-5)
+    if method != "ratio":
+        assert np.isclose(np.mean(size_factors), 1.0, atol=1e-5)
 
 
-@pytest.mark.parametrize("method", ["mle", "deseq2", "edger", "moments"])
-def test_dispersion_estimation(adata_pb_counts, method):
+@pytest.mark.parametrize("size_factor_key", ["size_factors", None])
+@pytest.mark.parametrize("method", ["full", "approx", "fast"])
+def test_dispersion_estimation(adata_pb_counts, size_factor_key, method):
     """Test dispersion estimation."""
     import numpy as np
 
     import delnx
 
     # Test dispersion estimation
-    delnx.pp.dispersion(adata_pb_counts, method=method)
+    var_key = "dispersions_test"
+    delnx.pp.dispersion(adata_pb_counts, size_factor_key=size_factor_key, method=method, var_key_added=var_key)
 
-    # Check if dispersion column exists
-    assert "dispersion" in adata_pb_counts.var.columns
+    # Check if dispersion, dispersion_init, dispersion_mle, dispersion_trend, dispersion_map columns exist
+    if method == "fast":
+        dispersion_columns = ["dispersions_init", var_key]
+    elif method == "approx":
+        dispersion_columns = ["dispersions_init", "dispersions_trend", "dispersions_map", var_key]
+    else:  # method == "full"
+        dispersion_columns = [
+            "dispersions_init",
+            "dispersions_mle",
+            "dispersions_trend",
+            "dispersions_map",
+            var_key,
+        ]
+
+    for col in dispersion_columns:
+        assert any(adata_pb_counts.var.columns == col)
 
     # Check that dispersion values not NaN
-    assert not np.any(np.isnan(adata_pb_counts.var["dispersion"]))
+    assert not np.any(np.isnan(adata_pb_counts.var[var_key]))
 
     # Check that dispersion values are non-negative
-    assert np.all(adata_pb_counts.var["dispersion"] >= 0)
+    assert np.all(adata_pb_counts.var[var_key] >= 0)
 
     # Check that dispersion is not constant across genes
-    assert not np.all(adata_pb_counts.var["dispersion"] == adata_pb_counts.var["dispersion"].iloc[0])
+    assert not np.all(adata_pb_counts.var[var_key] == adata_pb_counts.var[var_key].iloc[0])

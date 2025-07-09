@@ -48,7 +48,6 @@ def _grouped_de(
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
     min_samples: int = 1,
-    dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
     n_cpus: int = 1,
     batch_size: int = 2048,
@@ -93,10 +92,6 @@ def _grouped_de(
         Minimum absolute log2 fold change threshold.
     min_samples : int, default=2
         Minimum number of samples required per condition level.
-    dispersion_method : str, default='mle'
-        Method for estimating gene-wise dispersions for negative binomial models if not provided:
-        - 'mle': Maximum likelihood estimation based on the intercept
-        - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction.
     n_cpus : int, default=1
@@ -117,6 +112,9 @@ def _grouped_de(
     """
     results = []
     for group in adata.obs[group_key].unique():
+        if verbose:
+            print(f"Running DE for group '{group}'")
+
         mask = adata.obs[group_key].values == group
         if sum(mask) < (min_samples * 2):
             if verbose:
@@ -143,7 +141,6 @@ def _grouped_de(
                 data_type=data_type,
                 log2fc_threshold=log2fc_threshold,
                 min_samples=min_samples,
-                dispersion_method=dispersion_method,
                 multitest_method=multitest_method,
                 n_cpus=n_cpus,
                 batch_size=batch_size,
@@ -203,7 +200,6 @@ def de(
     data_type: DataType = "auto",
     log2fc_threshold: float = 0.0,
     min_samples: int = 1,
-    dispersion_method: str = "mle",
     multitest_method: str = "fdr_bh",
     n_cpus: int = 1,
     batch_size: int = 2048,
@@ -236,7 +232,7 @@ def de(
     size_factor_key : str | None, default=None
         Column name in `adata.obs` containing size factors for normalization. When using a negative binomial model, this is used as an offset term to account for library size differences. If not provided, size are computed internally based on library size normalization.
     dispersion_key : str | None, default=None
-        Column name in `adata.var` containing precomputed dispersions. Only used for negative binomial methods. If not provided, the function will estimate gene-wise dispersions using the specified `dispersion_method`.
+        Column name in `adata.var` containing precomputed dispersions. Only used for negative binomial methods. If not provided, the function will estimate gene-wise dispersions.
     covariate_keys : list[str] | None, default=None
         List of column names in `adata.obs` to include as covariates in the model.
     method : Method, default='lr'
@@ -273,10 +269,6 @@ def de(
     min_samples : int, default=2
         Minimum number of samples required per condition level.
         Comparisons with fewer samples are skipped.
-    dispersion_method : str, default='mle'
-        Method for estimating gene-wise dispersions for negative binomial models if not provided:
-            - 'mle': Maximum likelihood estimation based an intercept-only model
-            - 'moments': Method of moments
     multitest_method : str, default='fdr_bh'
         Method for multiple testing correction. Accepts any method supported by :func:`statsmodels.stats.multipletests`. Common options include:
             - "fdr_bh": Benjamini-Hochberg FDR correction
@@ -382,7 +374,7 @@ def de(
     # Get size factors and compute if not provided
     if size_factor_key is None and method == "negbinom":
         dx.pp.size_factors(adata, method="library_size")
-        size_factor_key = "size_factor"
+        size_factor_key = "size_factors"
 
     size_factors = adata.obs[size_factor_key].values if size_factor_key else None
 
@@ -411,7 +403,6 @@ def de(
             data_type=data_type,
             log2fc_threshold=log2fc_threshold,
             min_samples=min_samples,
-            dispersion_method=dispersion_method,
             multitest_method=multitest_method,
             n_cpus=n_cpus,
             batch_size=batch_size,
@@ -453,6 +444,9 @@ def de(
     # Run tests for each comparison
     results = []
     for group1, group2 in comparisons:
+        if verbose:
+            print(f"Testing {group1} vs {group2}")
+
         # Get cell masks
         mask1 = adata.obs[condition_key].values == group1
         mask2 = adata.obs[condition_key].values == group2

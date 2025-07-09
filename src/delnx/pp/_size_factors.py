@@ -208,7 +208,7 @@ def _compute_quantile_regression(adata, layer=None, min_counts=1, quantiles=np.l
     return size_factors / np.mean(size_factors)
 
 
-def size_factors(adata, method="library_size", layer=None, obs_key_added="size_factor", **kwargs):
+def size_factors(adata, method="library_size", layer=None, obs_key_added="size_factors", **kwargs):
     """Compute size factors for (single-cell) RNA-seq normalization.
 
     This function calculates sample/cell-specific normalization factors (size factors)
