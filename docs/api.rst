@@ -13,8 +13,10 @@ Preprocessing
     size_factors
     dispersion
 
+
 Differential Expression
 ~~~~~~~~~~~~~~~~~~~~~~
+
 .. module:: delnx.tl
 .. currentmodule:: delnx.tl
 .. autosummary::
@@ -22,8 +24,10 @@ Differential Expression
 
     de
 
+
 Models
 ~~~~~~
+
 .. module:: delnx.models
 .. currentmodule:: delnx.models
 .. autosummary::
@@ -34,8 +38,10 @@ Models
     NegativeBinomialRegression
     DispersionEstimator
 
+
 Plotting
 ~~~~~~~~
+
 .. module:: delnx.pl
 .. currentmodule:: delnx.pl
 .. autosummary::
