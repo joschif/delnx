@@ -12,7 +12,7 @@ def test_plot_volcanoplot(adata_pb_counts):
     dx.pp.size_factors(adata_pb_counts, method="ratio")
 
     # Estimate dispersion parameters
-    dx.pp.dispersion(adata_pb_counts, size_factor_key="size_factor", method="deseq2")
+    dx.pp.dispersion(adata_pb_counts, size_factor_key="size_factors", method="deseq2")
 
     # Run differential expression analysis
     results = dx.tl.de(
@@ -22,7 +22,7 @@ def test_plot_volcanoplot(adata_pb_counts):
         mode="all_vs_ref",
         reference="control",
         method="negbinom",
-        size_factor_key="size_factor",
+        size_factor_key="size_factors",
         dispersion_key="dispersion",
     )
 
