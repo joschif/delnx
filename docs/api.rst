@@ -33,3 +33,18 @@ Models
     LogisticRegression
     NegativeBinomialRegression
     DispersionEstimator
+
+Plotting
+~~~~~~~~
+.. module:: delnx.pl
+.. currentmodule:: delnx.pl
+.. autosummary::
+    :toctree: genapi
+
+    dotplot
+    gsea_dotplot
+    gsea_heatmap
+    heatmap
+    matrixplot
+    violinplot
+    volcanoplot
