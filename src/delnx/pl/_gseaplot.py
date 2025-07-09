@@ -13,13 +13,21 @@ class BaseGSEA:
 
     Handles data preparation, top-N selection, and color palette assignment.
 
-    Args:
-        enrichment_results (pd.DataFrame): GSEA results table.
-        group_key (str or list): Column(s) to group by.
-        top_n (int): Number of top terms per group to plot.
-        adata (AnnData, optional): Annotated data object for color extraction.
-        values (list, optional): List of group values for color mapping.
-        colors (list, optional): List of colors corresponding to `values`.
+    Parameters
+    ----------
+    enrichment_results : pd.DataFrame
+        DataFrame containing GSEA results with columns like "Term", "Adjusted P-value", and
+        group keys.
+    group_key : str or list[str]
+        Column name(s) to group by in the results DataFrame.
+    top_n : int
+        Number of top terms to select per group based on smallest adjusted p-value.
+    adata : AnnData, optional
+        Annotated data object for extracting colors based on group keys.
+    values : list, optional
+        List of group values for color mapping if `adata` is not provided.
+    colors : list, optional
+        List of colors corresponding to `values` for custom color mapping.
     """
 
     def __init__(self, enrichment_results, group_key, top_n=5, adata=None, values=None, colors=None):
@@ -96,9 +104,12 @@ class GSEAHeatmap(BaseGSEA):
         """
         Plot the GSEA heatmap.
 
-        Args:
-            figsize (tuple): Figure size (width, height).
-            show (bool): Whether to render the plot immediately.
+        Parameters
+        ----------
+        figsize : tuple
+            Figure size (width, height).
+        show : bool
+            Whether to render the plot immediately.
 
         Returns
         -------
@@ -133,10 +144,14 @@ class GSEADot(BaseGSEA):
         """
         Plot the GSEA dot plot.
 
-        Args:
-            figsize (tuple): Figure size (width, height).
-            scale (float): Scaling factor for dot sizes.
-            show (bool): Whether to render the plot immediately.
+        Parameters
+        ----------
+        figsize : tuple
+            Figure size (width, height).
+        scale : float
+            Scale factor for dot sizes.
+        show : bool
+            Whether to render the plot immediately.
 
         Returns
         -------
@@ -175,15 +190,24 @@ def gsea_heatmap(
     """
     Convenience function to plot a GSEA heatmap.
 
-    Args:
-        enrichment_results (pd.DataFrame): GSEA results table.
-        group_key (str or list): Column(s) to group by.
-        top_n (int): Number of top terms per group to plot.
-        adata (AnnData, optional): Annotated data object for color extraction.
-        values (list, optional): List of group values for color mapping.
-        colors (list, optional): List of colors corresponding to `values`.
-        figsize (tuple): Figure size (width, height).
-        show (bool): Whether to render the plot immediately.
+    Parameters
+    ----------
+    enrichment_results : pd.DataFrame
+        GSEA results table with columns like "Term", "Adjusted P-value", and group keys
+    group_key : str or list[str]
+        Column name(s) to group by in the results DataFrame.
+    top_n : int
+        Number of top terms to select per group based on smallest adjusted p-value.
+    adata : AnnData, optional
+        Annotated data object for extracting colors based on group keys.
+    values : list, optional
+        List of group values for color mapping if `adata` is not provided.
+    colors : list, optional
+        List of colors corresponding to `values` for custom color mapping.
+    figsize : tuple
+        Figure size (width, height).
+    show : bool
+        Whether to render the plot immediately.
 
     Returns
     -------
@@ -199,15 +223,24 @@ def gsea_dotplot(
     """
     Convenience function to plot a GSEA dot plot.
 
-    Args:
-        enrichment_results (pd.DataFrame): GSEA results table.
-        group_key (str or list): Column(s) to group by.
-        top_n (int): Number of top terms per group to plot.
-        adata (AnnData, optional): Annotated data object for color extraction.
-        values (list, optional): List of group values for color mapping.
-        colors (list, optional): List of colors corresponding to `values`.
-        figsize (tuple): Figure size (width, height).
-        show (bool): Whether to render the plot immediately.
+    Parameters
+    ----------
+    enrichment_results : pd.DataFrame
+        GSEA results table with columns like "Term", "Adjusted P-value", and group keys
+    group_key : str or list[str]
+        Column name(s) to group by in the results DataFrame.
+    top_n : int
+        Number of top terms to select per group based on smallest adjusted p-value.
+    adata : AnnData, optional
+        Annotated data object for extracting colors based on group keys.
+    values : list, optional
+        List of group values for color mapping if `adata` is not provided.
+    colors : list, optional
+        List of colors corresponding to `values` for custom color mapping.
+    figsize : tuple
+        Figure size (width, height).
+    show : bool
+        Whether to render the plot immediately.
 
     Returns
     -------
