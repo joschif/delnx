@@ -779,10 +779,11 @@ class DispersionEstimator:
     """Dispersion estimator in JAX.
 
     This implementation cosely follows the PyDESeq2 approach:
-    - Method of moments and rough dispersion initialization
-    - MLE for initial genewise dispersion estimation
-    - Iterative trend fitting with outlier filtering
-    - MAP estimation for final dispersion values
+
+        - Method of moments and rough dispersion initialization
+        - MLE for initial genewise dispersion estimation
+        - Iterative trend fitting with outlier filtering
+        - MAP estimation for final dispersion values
 
     Parameters
     ----------
