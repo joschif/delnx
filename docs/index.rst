@@ -95,43 +95,6 @@ Development version
 - `cuML <https://github.com/rapidsai/cuml>`_
 - `PyDESeq2 <https://pydeseq2.readthedocs.io/en/stable/>`_
 
-🗺️ Roadmap
------------
-
-- ✅ Provide a common interface to standard GLM-based DE tests (inspired by `Seurat::FindMarkers <https://satijalab.org/seurat/reference/findmarkers>`_)
-
-  - ✅ Logistic regression and likelihood ratio test
-
-    - ✅ statsmodels
-    - ✅ JAX
-    - ✅ cuML
-
-  - ✅ Negative binomial regression
-
-    - ✅ statsmodels
-    - ✅ JAX
-
-  - ✅ ANOVA
-
-    - ✅ statsmodels
-    - ✅ JAX
-
-  - ✅ Binomial regression for binary data
-
-    - ✅ statsmodels
-    - ⬜ JAX
-
-- ✅ Implement DESeq2 wrapper using `PyDESeq2 <https://pydeseq2.readthedocs.io/en/stable/>`_
-- ✅ Implement size factor estimation methods
-- ✅ Add dispersion estimation methods
-
-  - ✅ Basic gene-wise dispersion estimation
-  - ✅ DESeq2 and edgeR-inspired dispersion estimation with shrinkage
-  - ✅ Take design and covariates into account for dispersion estimation
-
-- ⬜ Plotting functions to visualize DE results
-- ⬜ Gene set enrichment analysis for DE results
-
 
 .. toctree::
     :maxdepth: 3
