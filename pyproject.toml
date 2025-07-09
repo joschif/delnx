@@ -29,6 +29,7 @@ dependencies = [
   "pandas>=2.2.3",
   "pydeseq2>=0.5",
   "pynndescent>=0.5",
+  "rich>=14",
   "scanpy>=1.11.2",
   "scikit-learn>=1.5.1",
   "scipy>=1.15.3,<1.16",

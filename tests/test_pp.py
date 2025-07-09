@@ -97,3 +97,37 @@ def test_dispersion_estimation(adata_pb_counts, size_factor_key, method):
 
     # Check that dispersion is not constant across genes
     assert not np.all(adata_pb_counts.var[var_key] == adata_pb_counts.var[var_key].iloc[0])
+
+
+def test_dispersion_estimation_with_covariates(adata_pb_counts):
+    """Test dispersion estimation with covariates."""
+    import numpy as np
+
+    import delnx
+
+    # Add a covariate to the adata
+    adata_pb_counts.obs["covariate"] = np.random.rand(adata_pb_counts.n_obs)
+
+    # Test dispersion estimation with covariates
+    var_key = "dispersions_with_covariates"
+    delnx.pp.dispersion(
+        adata_pb_counts,
+        size_factor_key="size_factors",
+        covariate_keys=["covariate"],
+        var_key_added=var_key,
+    )
+
+    # Check if dispersion values are computed
+    assert any(adata_pb_counts.var.columns == var_key)
+    assert not np.any(np.isnan(adata_pb_counts.var[var_key]))
+    assert np.all(adata_pb_counts.var[var_key] >= 0)
+    assert not np.all(adata_pb_counts.var[var_key] == adata_pb_counts.var[var_key].iloc[0])
+
+    # Check that dispersion values are different from the original dispersion
+    var_key_orig = "dispersions_test"
+    delnx.pp.dispersion(
+        adata_pb_counts,
+        size_factor_key="size_factors",
+        var_key_added=var_key_orig,
+    )
+    assert not np.all(adata_pb_counts.var[var_key] == adata_pb_counts.var[var_key_orig])

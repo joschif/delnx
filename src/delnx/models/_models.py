@@ -884,7 +884,6 @@ class DispersionEstimator:
 
         return jnp.nan_to_num((sigma - s_mean_inv * mu) / mu**2)
 
-    @partial(jax.jit, static_argnums=(0,))
     def fit_initial_dispersions(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate initial dispersions as minimum of rough and moments estimates (JIT-compiled).
 
@@ -905,7 +904,7 @@ class DispersionEstimator:
 
         # Take minimum as in PyDESeq2
         init_disp = jnp.minimum(rough_disp, moments_disp)
-        return jnp.clip(init_disp, self.min_disp, self.max_disp)
+        return jnp.minimum(jnp.maximum(init_disp, self.min_disp), self.max_disp)
 
     def fit_mu_single_gene(self, counts: jnp.ndarray) -> jnp.ndarray:
         """Estimate gene-wise means of the NB distribution (mu).

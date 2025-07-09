@@ -98,24 +98,20 @@ def test_validate_conditions(conditions):
     from delnx.tl._utils import _validate_conditions
 
     # Test all_vs_ref mode
-    levels, comps = _validate_conditions(conditions, reference="A", mode="all_vs_ref")
-    assert sorted(levels) == ["A", "B", "C"]
+    comps = _validate_conditions(conditions, reference="A", mode="all_vs_ref")
     assert sorted(comps) == sorted([("B", "A"), ("C", "A")])
 
     # Test all_vs_all mode
-    levels, comps = _validate_conditions(conditions, mode="all_vs_all")
-    assert sorted(levels) == ["A", "B", "C"]
+    comps = _validate_conditions(conditions, mode="all_vs_all")
     assert sorted(comps) == sorted([("A", "B"), ("A", "C"), ("B", "C")])
 
     # Test pairwise mode
-    levels, comps = _validate_conditions(conditions, reference=("A", "B"), mode="1_vs_1")
-    assert sorted(levels) == ["A", "B", "C"]
+    comps = _validate_conditions(conditions, reference=("A", "B"), mode="1_vs_1")
     assert comps == [("B", "A")]
 
     # Test binary conditions
     binary = (conditions == "A").astype(bool)
-    levels, comps = _validate_conditions(binary, reference=True, mode="all_vs_ref")
-    assert sorted(levels) == [False, True]
+    comps = _validate_conditions(binary, reference=True, mode="all_vs_ref")
     assert comps == [(False, True)]
 
     # Test error cases

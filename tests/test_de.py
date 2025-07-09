@@ -125,6 +125,70 @@ def test_de_methods_pb_lognorm(adata_pb_lognorm, method, backend):
     assert all(col in de_results.columns for col in ["feature", "pval", "padj"])
 
 
+def test_de_with_covariates(adata_pb_counts):
+    """Test DE analysis with covariates."""
+    # Add a covariate to the adata
+    adata_pb_counts.obs["covariate"] = np.random.rand(adata_pb_counts.n_obs)
+
+    # Run DE analysis with covariates
+    de_results = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method="negbinom",
+        backend="statsmodels",
+        reference="control",
+        size_factor_key="size_factors",
+        covariate_keys=["covariate"],
+    )
+
+    # Basic checks
+    assert isinstance(de_results, pd.DataFrame)
+    assert len(de_results) > 0
+    assert len(de_results) > 50
+    assert all(col in de_results.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check that the results are different from the one without covariates
+    de_results_no_cov = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method="negbinom",
+        backend="statsmodels",
+        reference="control",
+        size_factor_key="size_factors",
+        covariate_keys=None,
+    )
+    # Basic checks
+    assert isinstance(de_results_no_cov, pd.DataFrame)
+    assert len(de_results_no_cov) > 0
+    assert len(de_results_no_cov) > 50
+    assert all(col in de_results_no_cov.columns for col in ["feature", "pval", "padj", "coef"])
+
+    # Check that results are different
+    assert not de_results[["pval", "padj", "coef"]].equals(de_results_no_cov[["pval", "padj", "coef"]])
+
+
+def test_de_with_continuous_condition(adata_pb_lognorm):
+    """Test DE analysis with continuous condition."""
+    # Add a continuous condition to the adata
+    adata_pb_lognorm.obs["continuous_condition"] = np.random.rand(adata_pb_lognorm.n_obs)
+
+    # Run DE analysis with continuous condition
+    de_results = de(
+        adata_pb_lognorm,
+        condition_key="continuous_condition",
+        mode="continuous",
+        method="anova",
+        backend="statsmodels",
+    )
+
+    # Basic checks
+    assert isinstance(de_results, pd.DataFrame)
+    assert len(de_results) > 0
+    assert len(de_results) > 50
+    assert all(col in de_results.columns for col in ["feature", "pval", "padj", "coef"])
+    assert not any(col in de_results.columns for col in ["test_condition", "ref_condition", "log2fc"])
+
+
 @pytest.mark.parametrize(
     "method,backend,layer",
     [
@@ -306,22 +370,20 @@ def test_de_data_type_validation(adata_pb_counts):
         )
 
     # Test ANOVA with non-log-normalized data
-    with pytest.warns(UserWarning, match="ANOVA is designed for"):
-        de(
-            adata_pb_counts,
-            condition_key="condition",
-            method="anova",
-            reference="control",
-        )
+    _ = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method="anova",
+        reference="control",
+    )
 
     # Test logistic regression with count data
-    with pytest.warns(UserWarning, match="Logistic regression is designed for"):
-        de(
-            adata_pb_counts,
-            condition_key="condition",
-            method="lr",
-            reference="control",
-        )
+    _ = de(
+        adata_pb_counts,
+        condition_key="condition",
+        method="lr",
+        reference="control",
+    )
 
 
 @pytest.mark.parametrize(

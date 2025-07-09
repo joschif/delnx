@@ -16,9 +16,11 @@ All methods support batch processing for efficient computation with large datase
 
 import jax.numpy as jnp
 import numpy as np
+import patsy
 import tqdm
 from anndata import AnnData
 
+from delnx._logging import logger
 from delnx._utils import _get_layer, _to_dense
 from delnx.models import DispersionEstimator
 
@@ -100,8 +102,7 @@ def _estimate_dispersion_batched(
     mle_dispersions = []
     mle_success = []
 
-    if verbose:
-        print("Fitting initial dispersions")
+    logger.info("Fitting initial dispersions", verbose=verbose)
 
     # Compute genewise estimates in batches
     for i in tqdm.tqdm(range(0, n_features, batch_size), disable=not verbose):
@@ -141,8 +142,7 @@ def _estimate_dispersion_batched(
             "non_zero_mask": non_zero_mask,
         }
 
-    if verbose:
-        print("Fitting dispersion trend curve")
+    logger.info("Fitting dispersion trend curve", verbose=verbose)
 
     # Use MLE dispersions for trend fitting if method is "full", otherwise use initial dispersions
     dispersions_use = mle_dispersions if method == "full" else init_dispersions
@@ -160,8 +160,7 @@ def _estimate_dispersion_batched(
         fitted_trend,
     )
 
-    if verbose:
-        print("Fitting MAP dispersions")
+    logger.info("Fitting MAP dispersions", verbose=verbose)
 
     map_dispersions = []
 
@@ -195,6 +194,7 @@ def dispersion(
     adata: AnnData,
     layer: str | None = None,
     size_factor_key: str | None = None,
+    covariate_keys: list[str] | None = None,
     method: str = "full",
     var_key_added: str = "dispersions",
     trend_type: str = "parametric",
@@ -276,10 +276,19 @@ def dispersion(
     X = _get_layer(adata, layer)
     size_factors = adata.obs[size_factor_key].values if size_factor_key else None
 
+    # Get design matrix
+    if covariate_keys is not None:
+        # Create design matrix using patsy for covariates
+        formula = " + ".join(covariate_keys)
+        design_matrix = patsy.dmatrix(formula, adata.obs, return_type="dataframe").values
+    else:
+        # If no covariates, use a simple intercept model
+        design_matrix = None
+
     # Estimate dispersions using the specified method
     dispersions = _estimate_dispersion_batched(
         X=X,
-        design_matrix=None,  # TODO: Add design matrix support
+        design_matrix=design_matrix,
         size_factors=size_factors,
         method=method,
         min_disp=dispersion_range[0],

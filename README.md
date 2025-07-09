@@ -43,7 +43,11 @@ import delnx as dx
 adata = dx.pp.size_factors(adata, method="ratio")
 
 # Estimate dispersion parameters
-adata = dx.pp.dispersion(adata, size_factor_key="size_factor", method="deseq2")
+adata = dx.pp.dispersion(
+    adata,
+    size_factor_key="size_factors",
+    covariate_keys=["condition"]
+)
 
 # Run differential expression analysis
 results = dx.tl.de(
@@ -53,8 +57,8 @@ results = dx.tl.de(
     mode="all_vs_ref",
     reference="control",
     method="negbinom",
-    size_factor_key="size_factor",
-    dispersion_key="dispersion",
+    size_factor_key="size_factors",
+    dispersion_key="dispersions",
 )
 ```
 
@@ -99,7 +103,7 @@ results = dx.tl.de(
 - [x] Add dispersion estimation methods
     - [x] Basic gene-wise dispersion estimation
     - [x] DESeq2 and edgeR-inspired dispersion estimation with shrinkage
-    - [ ] Take design and covariates into account for dispersion estimation
+    - [x] Take design and covariates into account for dispersion estimation
 - [ ] Plotting functions to visualize DE results
 - [ ] Gene set enrichment analysis for DE results
 

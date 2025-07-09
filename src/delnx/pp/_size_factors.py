@@ -16,7 +16,6 @@ These size factors can be used for:
 3. Normalizing counts prior to log-transformation
 """
 
-import warnings
 from functools import partial
 
 import jax
@@ -25,6 +24,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from delnx._logging import logger
 from delnx._utils import _get_layer, _to_dense
 from delnx.models import LinearRegression
 
@@ -276,9 +276,8 @@ def size_factors(adata, method="library_size", layer=None, obs_key_added="size_f
 
     # Warn if size factors contain zeros
     if np.any(size_factors <= 0):
-        warnings.warn(
+        logger.warning(
             "Size factors contain zero or negative values. This may indicate issues with the data and can be problematic for downstream analyses.",
-            stacklevel=2,
         )
 
     # Store size factors in adata.obs
