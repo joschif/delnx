@@ -56,7 +56,7 @@ def _validate_conditions(
     condition_values: np.ndarray | pd.Series | pd.Categorical,
     reference: str | tuple[str, str] | None = None,
     mode: ComparisonMode = "all_vs_ref",
-) -> tuple[list[str], list[tuple[str, str]]]:
+) -> list[tuple[str, str]]:
     """Validate condition values and return valid comparisons.
 
     Parameters
