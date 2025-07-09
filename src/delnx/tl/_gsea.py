@@ -129,6 +129,25 @@ def de_enrichment_analysis(
         Minimum number of genes in a gene set to include in the analysis. Default is 5.
     max_genes : int
         Maximum number of genes in a gene set to include in the analysis. Default is 500.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing enrichment results for each group and direction, filtered by the specified cutoff.
+        Columns include 'geneset', 'genesymbol', 'Adjusted P-value', 'up_dw', and 'group'.
+
+    Examples
+    --------
+    >>> de_results = pd.DataFrame(
+    ...     {
+    ...         "group": ["A", "A", "B", "B"],
+    ...         "direction": ["up", "down", "up", "down"],
+    ...         "gene": ["gene1", "gene2", "gene3", "gene4"],
+    ...     }
+    ... )
+    >>> enrichment_results = de_enrichment_analysis(de_results, top_n=10)
+    >>> print(enrichment_results.head())
+    >>> # This will run enrichment analysis on the up and down genes for each group in de_results.
     """
     de_genes_dict = get_de_genes(de_results, top_n=top_n)
     all_enrichment_results = []

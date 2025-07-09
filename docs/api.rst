@@ -23,6 +23,7 @@ Differential Expression
     :toctree: genapi
 
     de
+    de_enrichment_analysis
 
 
 Models
