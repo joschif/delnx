@@ -149,7 +149,7 @@ def log2fc(
 
     # Get condition values
     condition_values = adata.obs[condition_key].values
-    levels, comparisons = _validate_conditions(condition_values, reference, mode)
+    comparisons = _validate_conditions(condition_values, reference, mode)
 
     # Get expression matrix and size factors
     X = _get_layer(adata, layer)
@@ -412,7 +412,7 @@ def auroc(
 
     # Get condition values
     condition_values = adata.obs[condition_key].values
-    _, comparisons = _validate_conditions(condition_values, reference, mode)
+    comparisons = _validate_conditions(condition_values, reference, mode)
 
     # Get expression matrix
     X = _get_layer(adata, layer)
