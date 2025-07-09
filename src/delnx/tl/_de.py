@@ -381,6 +381,27 @@ def de(
     # Validate conditions and get comparison levels
     comparisons = _validate_conditions(condition_values, reference, mode)
 
+    # Get expression matrix
+    X = _get_layer(adata, layer)
+
+    # Infer data type if auto
+    if data_type == "auto":
+        data_type = _infer_data_type(X)
+        logger.info(f"Inferred data type: {data_type}", verbose=verbose)
+    else:
+        logger.info(f"Using specified data type: {data_type}", verbose=verbose)
+
+    # Validate method and data type combinations
+    _check_method_and_data_type(method, data_type)
+
+    if backend not in SUPPORTED_BACKENDS:
+        raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
+
+    if method == "deseq2" and mode == "continuous":
+        raise ValueError(
+            "The 'deseq2' method does not support continuous mode. Please use 'all_vs_all', 'all_vs_ref', or '1_vs_1'."
+        )
+
     # Check if grouping requested
     if group_key is not None:
         if group_key not in adata.obs.columns:
@@ -406,27 +427,6 @@ def de(
             optimizer=optimizer,
             maxiter=maxiter,
             verbose=verbose,
-        )
-
-    # Get expression matrix
-    X = _get_layer(adata, layer)
-
-    # Infer data type if auto
-    if data_type == "auto":
-        data_type = _infer_data_type(X)
-        logger.info(f"Inferred data type: {data_type}", verbose=verbose)
-    else:
-        logger.info(f"Using specified data type: {data_type}", verbose=verbose)
-
-    # Validate method and data type combinations
-    _check_method_and_data_type(method, data_type)
-
-    if backend not in SUPPORTED_BACKENDS:
-        raise ValueError(f"Unsupported backend: {backend}. Supported backends are 'jax', 'statsmodels', 'cuml'.")
-
-    if method == "deseq2" and mode == "continuous":
-        raise ValueError(
-            "The 'deseq2' method does not support continuous mode. Please use 'all_vs_all', 'all_vs_ref', or '1_vs_1'."
         )
 
     if method == "deseq2":
