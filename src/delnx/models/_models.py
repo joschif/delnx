@@ -204,13 +204,7 @@ class Regression:
             # Compute correction for small sample sizes (where appropriate)
             n_samples = X.shape[0]
             n_params = X.shape[1]
-            correction = jax.lax.cond(
-                n_samples > n_params + 2,
-                lambda _: 1 + n_params / (n_samples - n_params),
-                lambda _: 1.0,  # No correction for very small samples
-                operand=None,
-            )
-            correction = jnp.maximum(1.0, correction)
+            correction = 1 + n_params / jnp.maximum(1.0, n_samples - n_params)
             corrected_lr_stat = lr_stat / correction
             # Compute p-value for the likelihood ratio statistic
             lr_pval = jsp.stats.chi2.sf(corrected_lr_stat, df=1)
