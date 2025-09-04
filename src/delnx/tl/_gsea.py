@@ -86,7 +86,7 @@ def de_enrichment_analysis(
     group_key: str = "group",
     effect_key: str = "log2fc",
     pval_key: str = "padj",
-    gene_key: str = "feature",
+    feature_key: str = "feature",
     effect_thresh: float = 0.5,
     pval_thresh: float = 0.01,
     gene_sets: dict[str, list[str]] | None = None,
@@ -116,7 +116,7 @@ def de_enrichment_analysis(
         Column with effect size values for DE analysis.
     pval_key : str, default="pval"
         Column with p-values for DE analysis.
-    gene_key : str, default="feature"
+    feature_key : str, default="feature"
         Column containing gene names.
     effect_thresh : float, default=0.5
         Threshold for absolute effect size. Threshold for significance of DE genes.
@@ -172,7 +172,7 @@ def de_enrichment_analysis(
         group_key=group_key,
         effect_key=effect_key,
         pval_key=pval_key,
-        gene_key=gene_key,
+        feature_key=feature_key,
         effect_thresh=effect_thresh,
         pval_thresh=pval_thresh,
         top_n=top_n,

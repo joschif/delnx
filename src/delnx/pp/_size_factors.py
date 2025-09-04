@@ -83,7 +83,7 @@ def size_factors(adata, method="normed_sum", layer=None, obs_key_added="size_fac
                 f"All genes have a least one zero count. Cannot compute size factors with the '{method}' method."
             )
         log_ratios = log_X[:, filtered_genes] - log_geo_means[filtered_genes]
-        size_factors = np.exp(np.median(log_ratios, 0))
+        size_factors = np.exp(np.median(log_ratios, axis=1))
 
     elif method == "normed_sum":
         if sparse.issparse(X):
