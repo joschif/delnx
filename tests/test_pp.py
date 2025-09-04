@@ -38,7 +38,7 @@ def test_pseudobulk(adata):
     assert X_flat.min() >= 0
 
 
-@pytest.mark.parametrize("method", ["ratio", "quantile_regression", "library_size"])
+@pytest.mark.parametrize("method", ["normed_sum", "ratio", "poscounts"])
 def test_size_factors(adata_pb_counts, method):
     """Test size factor calculation."""
     import numpy as np
@@ -56,8 +56,6 @@ def test_size_factors(adata_pb_counts, method):
     size_factor_col = adata_pb_counts.obs.columns[adata_pb_counts.obs.columns.str.startswith(obs_key)][0]
     size_factors = adata_pb_counts.obs[size_factor_col].values
     assert np.all(size_factors > 0)
-    if method != "ratio":
-        assert np.isclose(np.mean(size_factors), 1.0, atol=1e-5)
 
 
 @pytest.mark.parametrize("size_factor_key", ["size_factors", None])

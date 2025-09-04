@@ -83,10 +83,10 @@ def single_enrichment_analysis(
 
 def de_enrichment_analysis(
     de_results: pd.DataFrame,
-    group_col: str = "group",
+    group_key: str = "group",
     effect_key: str = "log2fc",
     pval_key: str = "padj",
-    gene_col: str = "feature",
+    gene_key: str = "feature",
     effect_thresh: float = 0.5,
     pval_thresh: float = 0.01,
     gene_sets: dict[str, list[str]] | None = None,
@@ -110,13 +110,13 @@ def de_enrichment_analysis(
     ----------
     de_results : pd.DataFrame
         DataFrame containing differential expression results.
-    group_col : str, default="group"
+    group_key : str, default="group"
         Column indicating the group or condition.
     effect_key : str, default="log2fc"
         Column with effect size values for DE analysis.
     pval_key : str, default="pval"
         Column with p-values for DE analysis.
-    gene_col : str, default="feature"
+    gene_key : str, default="feature"
         Column containing gene names.
     effect_thresh : float, default=0.5
         Threshold for absolute effect size. Threshold for significance of DE genes.
@@ -169,10 +169,10 @@ def de_enrichment_analysis(
     """  # noqa: D205
     de_genes_dict = get_de_genes(
         de_results,
-        group_col=group_col,
+        group_key=group_key,
         effect_key=effect_key,
         pval_key=pval_key,
-        gene_col=gene_col,
+        gene_key=gene_key,
         effect_thresh=effect_thresh,
         pval_thresh=pval_thresh,
         top_n=top_n,

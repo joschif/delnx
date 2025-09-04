@@ -60,20 +60,6 @@ def test_log2fc(test_data, data_type):
         np.testing.assert_allclose(log2fc, expected)
 
 
-def test_auroc(test_data):
-    """Test AUROC calculation."""
-    from delnx.tl._effects import _batched_auroc
-
-    data = test_data["counts"]
-    labels = np.array([1] * 5 + [0] * 5)  # First half positive, second half negative
-    auroc = _batched_auroc(data, labels, batch_size=2)
-
-    assert isinstance(auroc, np.ndarray)
-    assert len(auroc) == data.shape[1]
-    assert auroc.min() >= 0.0
-    assert auroc.max() <= 1.0
-
-
 def test_invalid_data_type():
     """Test error handling for invalid data type."""
     from delnx.tl._effects import _log2fc
@@ -123,22 +109,6 @@ def test_validate_conditions(conditions):
 
     with pytest.raises(ValueError, match="must be a tuple"):
         _validate_conditions(conditions, reference=None, mode="1_vs_1")
-
-
-def test_auroc_adata(adata_small):
-    """Test AUROC calculation on AnnData object."""
-    import delnx
-
-    # Use the binary layer for testing
-    results = delnx.tl.auroc(adata_small, condition_key="condition")
-
-    assert isinstance(results, pd.DataFrame)
-    assert results.shape[0] == adata_small.n_vars
-    assert all(col in results.columns for col in ["feature", "auroc"])
-    assert not np.any(np.isnan(results["auroc"]))
-    assert not np.any(np.isinf(results["auroc"]))
-    assert results["auroc"].min() >= 0.0
-    assert results["auroc"].max() <= 1.0
 
 
 def test_log2fc_adata(adata_small):

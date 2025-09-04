@@ -369,7 +369,7 @@ def de(
 
     # Get size factors and compute if not provided
     if size_factor_key is None and method == "negbinom":
-        dx.pp.size_factors(adata, method="library_size")
+        dx.pp.size_factors(adata, method="normed_sum")
         size_factor_key = "size_factors"
 
     size_factors = adata.obs[size_factor_key].values if size_factor_key else None
