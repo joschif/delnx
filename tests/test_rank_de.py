@@ -11,7 +11,7 @@ from scipy.stats import mannwhitneyu, rankdata
 
 # Import the module to test
 from delnx.tl import rank_de
-from delnx.tl.rank_de import (
+from delnx.tl._rank_de import (
     _determine_algorithm,
     _rank_sparse_batch_parallel,
     _rank_sparse_batch_serial,
