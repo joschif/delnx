@@ -27,7 +27,7 @@ from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
-from ._effects import _batched_auroc, _log2fc
+from ._efects import _log2fc
 from ._jax_tests import _run_batched_de
 from ._utils import _check_method_and_data_type, _infer_data_type, _prepare_model_data, _validate_conditions
 
@@ -543,13 +543,6 @@ def de(
         if mode != "continuous":
             group_results["test_condition"] = group1
             group_results["ref_condition"] = group2
-            auroc = _batched_auroc(X=X_norm, groups=model_data[condition_key].values, batch_size=batch_size)
-            auroc_df = pd.DataFrame(
-                {
-                    "feature": feature_names,
-                    "auroc": auroc,
-                }
-            )
             logfc_df = pd.DataFrame(
                 {
                     "log2fc": log2fc[feature_mask],
@@ -558,10 +551,6 @@ def de(
             )
             group_results = group_results.merge(
                 logfc_df,
-                on="feature",
-                how="left",
-            ).merge(
-                auroc_df,
                 on="feature",
                 how="left",
             )
