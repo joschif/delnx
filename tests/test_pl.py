@@ -26,9 +26,6 @@ def test_plot_volcanoplot(adata_pb_counts):
         dispersion_key="dispersion",
     )
 
-    # Label differentially expressed genes
-    dx.pp.label_de_genes(results, coef_thresh=0.5)
-
     # Select one cell type at a time
     results = results[results["group"] == "cell_type_1"]
 
