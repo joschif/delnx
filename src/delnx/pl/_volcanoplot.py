@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from adjustText import adjust_text
 
-from delnx.pp._get_de_genes import get_de_genes
+from delnx._utils import get_de_genes
 
 
 class VolcanoPlot:
@@ -134,8 +134,13 @@ class VolcanoPlot:
 
 def volcanoplot(
     df: pd.DataFrame,
-    x: str = "coef",
+    x: str = "log2fc",
     y: str = "-log10(pval)",
+    effect_key: str = "log2fc",
+    pval_key: str = "pval",
+    gene_col: str = "feature",
+    effect_thresh: float = 1.0,
+    pval_thresh: float = 0.05,
     thresh: dict[str, float] | None = None,
     label_top: int = 0,
     color_legend_title: str | None = None,
@@ -146,32 +151,44 @@ def volcanoplot(
     return_fig: bool = False,
 ):
     """
-    Create a volcano plot using matplotlib.
+    Create a volcano plot using matplotlib. Labels significant genes based on thresholds or uses "significant" column if present.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Must contain 'coef', 'pval', 'significant', and optionally 'feature'.
-    x : str
-        Column name for x-axis.
-    y : str
-        Column name for y-axis.
+        DataFrame containing differential expression results.
+    x : str, default="log2fc"
+        Column name for x-axis (effect size).
+    y : str, default="-log10(pval)"
+        Column name for y-axis (significance).
+    effect_key : str, default="log2fc"
+        Column with effect size values for DE analysis.
+    pval_key : str, default="pval"
+        Column with p-values for DE analysis.
+    gene_col : str, default="feature"
+        Column containing gene names for labeling.
+    effect_thresh : float, default=1.0
+        Threshold for absolute effect size.
+    pval_thresh : float, default=0.05
+        Threshold for significance.
     thresh : dict[str, float] or None
-        Dictionary mapping axis names to threshold values, e.g. {'coef': 1.0, '-log10(pval)': 1.3}.
-    label_top : int
+        Dictionary mapping axis names to threshold values for plot lines,
+        e.g. {'log2fc': 1.0, '-log10(pval)': 1.3}.
+        If None, uses effect_thresh and -log10(pval_thresh).
+    label_top : int, default=0
         If > 0, label top N up/down genes by effect size.
     color_legend_title : str or None
         Title for the legend. Default: "-log10(p-value)".
     ax : plt.Axes or None
         If provided, use this Axes for plotting instead of creating a new one.
         If None, a new Axes will be created.
-    figsize : tuple[float, float]
-        Size of the figure in inches. Default: (8, 6).
-    show : bool or None
+    figsize : tuple[float, float], default=(8, 6)
+        Size of the figure in inches.
+    show : bool or None, default=True
         Whether to display the figure interactively.
     save : str or bool or None
         If str, path to save the image. If True, uses default name.
-    return_fig : bool
+    return_fig : bool, default=False
         Whether to return the matplotlib Figure and Axes.
 
     Returns
@@ -184,6 +201,25 @@ def volcanoplot(
         if len(unique_groups) > 1:
             raise ValueError(f"Volcano plot expects a single group, but found multiple: {unique_groups}")
 
+    # Use analyze_de_genes to label the dataframe if needed
+    df_to_plot = df.copy()
+
+    # Check if significance labels already exist, if not, add them
+    if "significant" not in df_to_plot.columns or y not in df_to_plot.columns:
+        _, df_to_plot = get_de_genes(
+            df,
+            effect_key=effect_key,
+            pval_key=pval_key,
+            gene_col=gene_col,
+            effect_thresh=effect_thresh,
+            pval_thresh=pval_thresh,
+            return_labeled_df=True,
+        )
+
+    # Set default thresholds if not provided
+    if thresh is None:
+        thresh = {x: effect_thresh, y: -np.log10(pval_thresh)}
+
     save_path = None
     if isinstance(save, str):
         save_path = save
@@ -191,7 +227,7 @@ def volcanoplot(
         save_path = f"{VolcanoPlot.DEFAULT_SAVE_PREFIX}.pdf"
 
     vp = VolcanoPlot(
-        df,
+        df_to_plot,
         x=x,
         y=y,
         thresh=thresh,
@@ -201,10 +237,24 @@ def volcanoplot(
         save_path=save_path,
     ).make_figure()
 
-    if label_top > 0 and "feature" in df.columns:
-        de_genes_dict = get_de_genes(df, top_n=label_top)
-        de_genes_dict = de_genes_dict[list(de_genes_dict.keys())[0]]
-        top_up, top_down = de_genes_dict["up"], de_genes_dict["down"]
+    # Add labels for top genes if requested
+    if label_top > 0 and gene_col in df_to_plot.columns:
+        # Extract top genes using our unified function
+        de_genes_dict = get_de_genes(
+            df_to_plot,
+            effect_key=effect_key,
+            pval_key=pval_key,
+            gene_col=gene_col,
+            effect_thresh=effect_thresh,
+            pval_thresh=pval_thresh,
+            top_n=label_top,
+        )
+
+        # Get the first (and should be only) group's genes
+        group_key = list(de_genes_dict.keys())[0]
+        top_up = de_genes_dict[group_key]["up"]
+        top_down = de_genes_dict[group_key]["down"]
+
         vp.add_labels(top_up, top_down)
 
     if save_path:

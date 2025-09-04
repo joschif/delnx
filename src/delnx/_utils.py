@@ -34,6 +34,8 @@ def get_de_genes(
         Threshold for significance.
     top_n : int or None, default=None
         Number of top genes to select per direction. If None, return all.
+    return_labeled_df : bool, default=False
+        If True, also return the labeled DataFrame.
 
     Returns
     -------
@@ -81,4 +83,7 @@ def get_de_genes(
             "down": down_df[feature_key].tolist(),
         }
 
-    return result
+    if return_labeled_df:
+        return result, df_labeled
+    else:
+        return result

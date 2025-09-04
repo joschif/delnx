@@ -4,8 +4,8 @@ from typing import Any
 import gseapy as gp
 import pandas as pd
 
+from delnx._utils import get_de_genes
 from delnx.ds._gmt import get_gene_sets
-from delnx.pp._get_de_genes import get_de_genes
 
 MIN_GENESET_SIZE = 5
 MAX_GENESET_SIZE = 500
@@ -97,7 +97,7 @@ def de_enrichment_analysis(
     max_genes: int = MAX_GENESET_SIZE,
 ) -> pd.DataFrame:
     """
-    Run enrichment for up/down gene sets per group and stack filtered results.
+    Run enrichment for up/down gene sets per group and stack filtered results. Extracts significant genes based on thresholds or uses "significant" column if present.
 
     Parameters
     ----------
