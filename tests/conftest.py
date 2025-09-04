@@ -312,4 +312,7 @@ def de_results():
         ],
     }
 
-    return pd.DataFrame(data)
+    data_df = pd.DataFrame(data)
+    data_df["padj"] = data_df["pval"]
+
+    return data_df
