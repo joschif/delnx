@@ -167,9 +167,9 @@ def volcanoplot(
         Column with p-values for DE analysis.
     gene_col : str, default="feature"
         Column containing gene names for labeling.
-    effect_thresh : float, default=1.0
+    effect_thresh : float, default=0.5
         Threshold for absolute effect size.
-    pval_thresh : float, default=0.05
+    pval_thresh : float, default=0.01
         Threshold for significance.
     thresh : dict[str, float] or None
         Dictionary mapping axis names to threshold values for plot lines,

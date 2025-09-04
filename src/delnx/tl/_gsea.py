@@ -118,10 +118,10 @@ def de_enrichment_analysis(
         Column with p-values for DE analysis.
     gene_col : str, default="feature"
         Column containing gene names.
-    effect_thresh : float, default=1.0
-        Threshold for absolute effect size.
-    pval_thresh : float, default=0.05
-        Threshold for significance.
+    effect_thresh : float, default=0.5
+        Threshold for absolute effect size. Threshold for significance of DE genes.
+    pval_thresh : float, default=0.01
+        Threshold for significance of DE genes.
     gene_sets : dict[str, list[str]] | None
         Pre-loaded gene sets as a dictionary where keys are gene set names and values are lists of gene symbols.
         If None, will load gene sets based on the provided collection, URL, or filepath.
