@@ -27,7 +27,7 @@ from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
-from ._efects import _log2fc
+from ._effects import _log2fc
 from ._jax_tests import _run_batched_de
 from ._utils import _check_method_and_data_type, _infer_data_type, _prepare_model_data, _validate_conditions
 

@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import numba
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
 import tqdm
 from anndata import AnnData
 from scipy import sparse, stats
@@ -228,7 +229,7 @@ def _process_batch(
     tie_corrections_jax = jnp.asarray(tie_corrections, dtype=jnp.float32)
 
     aucs, z_scores = _auroc_batch_with_ties(X_dense, one_hot, zero_ranks_jax, tie_corrections_jax)
-    pvals = 2 * (1.0 - stats.norm.cdf(z_scores))
+    pvals = 2 * stats.norm.sf(z_scores)
 
     return np.array(aucs), np.array(pvals), np.array(z_scores)
 
@@ -281,9 +282,10 @@ def rank_de(
     condition_key: str,
     layer: str | None = None,
     use_ties: bool = False,
+    multitest_method: str = "fdr_bh",
     n_cpus: int | None = None,
     min_samples: int = 2,
-    batch_size: int = 24,
+    batch_size: int | None = 512,
     verbose: bool = True,
 ) -> pd.DataFrame:
     """Perform rank-based differential expression analysis using AUROC statistics.
@@ -304,13 +306,17 @@ def rank_de(
     use_ties : bool, default=False
         Whether to apply tie correction to p-value calculations. Recommended for
         sparse data with many identical values (especially zeros).
+    multitest_method : str, default='fdr_bh'
+        Method for multiple testing correction. Accepts any method supported by :func:`statsmodels.stats.multipletests`. Common options include:
+            - "fdr_bh": Benjamini-Hochberg FDR correction
+            - "bonferroni": Bonferroni correction
     n_cpus : int | None, default=None
         Number of CPU cores for parallel processing. If None, uses available threads.
         Parallel processing is enabled when n_cpus >= 4 or use_ties=True.
     min_samples : int, default=2
         Minimum samples required per condition. Conditions with fewer samples excluded.
-    batch_size : int, default=24
-        Features per batch. Larger values use more memory but may be more efficient.
+    batch_size : int | None, default=512
+        Features per batch. Larger values use more memory but may be more efficient. If None, processes all features at once.
     verbose : bool, default=True
         Whether to show progress and algorithm information.
 
@@ -372,6 +378,7 @@ def rank_de(
         logger.info(f"Processing {X.shape[1]} features across {len(valid_conditions)} conditions", verbose=True)
 
     # Batch processing
+    batch_size = batch_size or X.shape[1]
     n_features = X.shape[1]
     all_aucs, all_pvals, all_z_scores = [], [], []
 
@@ -397,7 +404,7 @@ def rank_de(
     pvals_long = final_pvals.T.flatten()
     z_scores_long = final_z_scores.T.flatten()
 
-    result_df = pd.DataFrame(
+    results = pd.DataFrame(
         {
             "feature": features_long,
             "condition": conditions_long,
@@ -407,7 +414,17 @@ def rank_de(
         }
     )
 
-    if verbose:
-        logger.info(f"Analysis complete: {len(result_df)} feature-condition pairs", verbose=True)
+    results["pval"] = np.clip(results["pval"], 1e-50, 1)
+    # Perform multiple testing correction
+    padj = sm.stats.multipletests(
+        results["pval"][results["pval"].notna()].values,
+        method=multitest_method,
+    )[1]
+    results["padj"] = np.nan  # Initialize with NaN
+    results.loc[results["pval"].notna(), "padj"] = padj
 
-    return result_df
+    results = results.sort_values(by=["condition", "auroc", "pval"], ascending=[True, False, True]).reset_index(
+        drop=True
+    )
+
+    return results
