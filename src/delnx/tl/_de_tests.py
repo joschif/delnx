@@ -575,7 +575,7 @@ def _run_de(
     # Process all features in parallel with a progress bar using joblib's generator return
     feature_results = list(
         tqdm.tqdm(
-            Parallel(n_cpus=n_cpus, return_as="generator")(delayed(_process_feature)(i) for i in range(n_features)),
+            Parallel(n_jobs=n_cpus, return_as="generator")(delayed(_process_feature)(i) for i in range(n_features)),
             total=n_features,
             disable=not verbose,
         )
