@@ -414,7 +414,6 @@ def rank_de(
         }
     )
 
-    results["pval"] = np.clip(results["pval"], 1e-50, 1)
     # Perform multiple testing correction
     padj = sm.stats.multipletests(
         results["pval"][results["pval"].notna()].values,
@@ -422,6 +421,8 @@ def rank_de(
     )[1]
     results["padj"] = np.nan  # Initialize with NaN
     results.loc[results["pval"].notna(), "padj"] = padj
+    results["pval"] = np.clip(results["pval"], 1e-50, 1)
+    results["padj"] = np.clip(results["padj"], 1e-50, 1)
 
     results = results.sort_values(by=["condition", "auroc", "pval"], ascending=[True, False, True]).reset_index(
         drop=True
