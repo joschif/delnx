@@ -92,9 +92,10 @@ def size_factors(adata, method="normed_sum", layer=None, obs_key_added="size_fac
             size_factors = X.sum(axis=1).astype(float)
 
     elif method == "poscounts":
-        log_geometric_means = np.mean(np.log(X + 0.5), axis=0)
+        X = X.astype(float)
+        log_geometric_means = np.mean(np.log(X + 0.5), axis=1)
         X[X == 0] = np.nan
-        size_factors = np.exp(np.nanmedian(np.log(X) / log_geometric_means.reshape(1, -1), axis=0))
+        size_factors = np.exp(np.nanmedian(np.log(X) / log_geometric_means.reshape(-1, 1), axis=1))
 
     else:
         raise ValueError(f"Unsupported method: {method}")

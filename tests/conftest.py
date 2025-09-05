@@ -314,5 +314,6 @@ def de_results():
 
     data_df = pd.DataFrame(data)
     data_df["padj"] = data_df["pval"]
+    data_df["log2fc"] = data_df["coef"]
 
     return data_df

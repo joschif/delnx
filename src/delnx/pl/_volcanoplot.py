@@ -138,7 +138,7 @@ def volcanoplot(
     y: str = "-log10(pval)",
     effect_key: str = "log2fc",
     pval_key: str = "pval",
-    gene_col: str = "feature",
+    feature_key: str = "feature",
     effect_thresh: float = 0.5,
     pval_thresh: float = 0.01,
     thresh: dict[str, float] | None = None,
@@ -165,7 +165,7 @@ def volcanoplot(
         Column with effect size values for DE analysis.
     pval_key : str, default="pval"
         Column with p-values for DE analysis.
-    gene_col : str, default="feature"
+    feature_key : str, default="feature"
         Column containing gene names for labeling.
     effect_thresh : float, default=0.5
         Threshold for absolute effect size.
@@ -210,7 +210,7 @@ def volcanoplot(
             df,
             effect_key=effect_key,
             pval_key=pval_key,
-            gene_col=gene_col,
+            feature_key=feature_key,
             effect_thresh=effect_thresh,
             pval_thresh=pval_thresh,
             return_labeled_df=True,
@@ -238,13 +238,13 @@ def volcanoplot(
     ).make_figure()
 
     # Add labels for top genes if requested
-    if label_top > 0 and gene_col in df_to_plot.columns:
+    if label_top > 0 and feature_key in df_to_plot.columns:
         # Extract top genes using our unified function
         de_genes_dict = get_de_genes(
             df_to_plot,
             effect_key=effect_key,
             pval_key=pval_key,
-            gene_col=gene_col,
+            feature_key=feature_key,
             effect_thresh=effect_thresh,
             pval_thresh=pval_thresh,
             top_n=label_top,
