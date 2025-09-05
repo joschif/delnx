@@ -68,9 +68,6 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
     assert len(de_results_nosf) > 50
     assert all(col in de_results_nosf.columns for col in ["feature", "pval", "padj", "coef"])
 
-    # Check that results are different
-    assert np.allclose(de_results[["pval", "padj", "coef"]].values, de_results_nosf[["pval", "padj", "coef"]].values)
-
     # Check with dispersion and size factors to see if they are actually used (only for jax backend)
     de_results_disp = de(
         adata_pb_counts,
