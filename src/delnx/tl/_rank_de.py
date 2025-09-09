@@ -27,39 +27,21 @@ from delnx._utils import _get_layer
 @numba.njit
 def _rankdata(arr: np.ndarray) -> np.ndarray:
     """Fast 1D ranking with average tie handling."""
-    n = len(arr)
-    if n == 0:
-        return np.empty(0, dtype=np.float64)
-    if n == 1:
-        return np.array([1.0], dtype=np.float64)
-
     sorter = np.argsort(arr)
-    sorted_arr = arr[sorter]
 
-    # Find where values change
-    obs = np.empty(n, dtype=np.bool_)
-    obs[0] = True
-    for i in range(1, n):
-        obs[i] = sorted_arr[i] != sorted_arr[i - 1]
+    arr = arr[sorter]
+    obs = np.concatenate((np.array([True]), arr[1:] != arr[:-1]))
 
-    # Assign dense ranks
-    dense = np.empty(n, dtype=np.int64)
-    dense[sorter] = np.cumsum(obs)
+    dense = np.empty(obs.size, dtype=np.int64)
+    dense[sorter] = obs.cumsum()
 
-    # Calculate average ranks for ties
-    count = np.empty(dense.max() + 1, dtype=np.int64)
-    count[0] = 0
-    idx = 0
-    for i in range(n):
-        if obs[i]:
-            count[idx + 1] = i
-            idx += 1
-    count[idx + 1] = n
-
+    # cumulative counts of each unique value
+    count = np.concatenate((np.flatnonzero(obs), np.array([len(obs)])))
     ranks = 0.5 * (count[dense] + count[dense - 1] + 1)
     return ranks
 
 
+# TODO: fix tie correction to be done correctly for sparse data
 @numba.njit
 def _rankdata_with_ties(arr: np.ndarray) -> tuple[np.ndarray, np.float64]:
     """Fast 1D ranking with tie correction calculation."""
