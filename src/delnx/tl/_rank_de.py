@@ -27,14 +27,15 @@ from delnx._utils import _get_layer
 @numba.njit
 def _rankdata(arr: np.ndarray) -> np.ndarray:
     """Fast 1D ranking with average tie handling."""
-    sorter = np.argsort(arr)
+    n = len(arr)
+    if n <= 1:
+        return (np.array([1.0]) if n == 1 else np.empty(0, dtype=np.float64), 1.0)
 
+    sorter = np.argsort(arr)
     arr = arr[sorter]
     obs = np.concatenate((np.array([True]), arr[1:] != arr[:-1]))
-
     dense = np.empty(obs.size, dtype=np.int64)
     dense[sorter] = obs.cumsum()
-
     # cumulative counts of each unique value
     count = np.concatenate((np.flatnonzero(obs), np.array([len(obs)])))
     ranks = 0.5 * (count[dense] + count[dense - 1] + 1)
