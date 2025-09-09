@@ -41,7 +41,6 @@ def _rankdata(arr: np.ndarray) -> np.ndarray:
     return ranks
 
 
-# TODO: fix tie correction to be done correctly for sparse data
 @numba.njit
 def _rankdata_with_ties(arr: np.ndarray) -> tuple[np.ndarray, np.float64]:
     """Fast 1D ranking with tie correction calculation."""
