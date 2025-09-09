@@ -29,7 +29,7 @@ def _rankdata(arr: np.ndarray) -> np.ndarray:
     """Fast 1D ranking with average tie handling."""
     n = len(arr)
     if n <= 1:
-        return (np.array([1.0]) if n == 1 else np.empty(0, dtype=np.float64), 1.0)
+        return np.array([1.0]) if n == 1 else np.empty(0, dtype=np.float64)
 
     sorter = np.argsort(arr)
     arr = arr[sorter]
