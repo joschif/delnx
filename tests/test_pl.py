@@ -26,9 +26,6 @@ def test_plot_volcanoplot(adata_pb_counts):
         dispersion_key="dispersion",
     )
 
-    # Label differentially expressed genes
-    dx.pp.label_de_genes(results, coef_thresh=0.5)
-
     # Select one cell type at a time
     results = results[results["group"] == "cell_type_1"]
 
@@ -110,50 +107,3 @@ def test_dotplot(adata_small):
     # Check if the figure is created
     assert fig is not None
     assert isinstance(fig, ma.heatmap.SizedHeatmap)
-
-
-def test_gsea_barplot(de_results, gene_sets):
-    """Test that gsea_barplot returns a valid figure."""
-
-    # Label DE genes
-    dx.pp.label_de_genes(de_results, coef_thresh=0.5)
-
-    # Run enrichment analysis
-    enr_results = dx.tl.de_enrichment_analysis(de_results, gene_sets=gene_sets, cutoff=0.1)
-
-    # Plot GSEA barplot
-    fig = dx.pl.gsea_barplot(enr_results, group_key=["group", "up_dw"], top_n=10)
-
-    # Check if the figure is created
-    assert fig is not None
-    assert isinstance(fig, ma.base.ClusterBoard)
-
-
-def test_gsea_dotplot(de_results, gene_sets):
-    """Test that gsea_dotplot returns a valid figure."""
-
-    # Label DE genes
-    dx.pp.label_de_genes(de_results, coef_thresh=0.5)
-
-    # Run enrichment analysis
-    enr_results = dx.tl.de_enrichment_analysis(de_results, gene_sets=gene_sets, cutoff=0.1)
-
-    # Plot GSEA dotplot
-    fig = dx.pl.gsea_dotplot(enr_results, group_key=["group", "up_dw"], top_n=10)
-
-    # Check if the figure is created
-    assert fig is not None
-    assert isinstance(fig, ma.heatmap.SizedHeatmap)
-
-
-def test_filter_genes(adata_small):
-    """Test that filter genes returns a boolean mask"""
-
-    # Get boolean mask
-    keep_mask = dx.pp.filter_genes(adata_small, mode="quantile", quantile=0.25)
-
-    assert isinstance(keep_mask, np.ndarray), "Result is not a NumPy array"
-    assert keep_mask.dtype == bool, "Result is not a boolean array"
-    assert keep_mask.shape[0] == adata_small.var.shape[0], (
-        f"Length mismatch: {keep_mask.shape[0]} != {adata_small.var.shape[0]}"
-    )

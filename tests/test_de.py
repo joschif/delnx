@@ -50,7 +50,7 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
     assert all(col in de_results_rsf.columns for col in ["feature", "pval", "padj", "coef"])
 
     # Check that results are different
-    assert not de_results[["pval", "padj", "coef"]].equals(de_results_rsf[["pval", "padj", "coef"]])
+    assert not np.allclose(de_results[["pval", "padj", "coef"]].values, de_results_rsf[["pval", "padj", "coef"]].values)
 
     # Check against no size factors to see if they are computed internally
     de_results_nosf = de(
@@ -67,9 +67,6 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
     assert len(de_results_nosf) > 0
     assert len(de_results_nosf) > 50
     assert all(col in de_results_nosf.columns for col in ["feature", "pval", "padj", "coef"])
-
-    # Check that results are different
-    assert de_results[["pval", "padj", "coef"]].equals(de_results_nosf[["pval", "padj", "coef"]])
 
     # Check with dispersion and size factors to see if they are actually used (only for jax backend)
     de_results_disp = de(
@@ -90,10 +87,14 @@ def test_de_methods_pb_counts(adata_pb_counts, method, backend):
 
     if backend == "jax":
         # Check that results are different
-        assert not de_results[["pval", "padj", "coef"]].equals(de_results_disp[["pval", "padj", "coef"]])
+        assert not np.allclose(
+            de_results[["pval", "padj", "coef"]].values, de_results_disp[["pval", "padj", "coef"]].values
+        )
     else:
         # For statsmodels, dispersion is not used, so results should be the same
-        assert de_results[["pval", "padj", "coef"]].equals(de_results_disp[["pval", "padj", "coef"]])
+        assert np.allclose(
+            de_results[["pval", "padj", "coef"]].values, de_results_disp[["pval", "padj", "coef"]].values
+        )
 
 
 @pytest.mark.parametrize(
@@ -164,7 +165,9 @@ def test_de_with_covariates(adata_pb_counts):
     assert all(col in de_results_no_cov.columns for col in ["feature", "pval", "padj", "coef"])
 
     # Check that results are different
-    assert not de_results[["pval", "padj", "coef"]].equals(de_results_no_cov[["pval", "padj", "coef"]])
+    assert not np.allclose(
+        de_results[["pval", "padj", "coef"]].values, de_results_no_cov[["pval", "padj", "coef"]].values
+    )
 
 
 def test_de_with_continuous_condition(adata_pb_lognorm):

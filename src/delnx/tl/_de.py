@@ -27,7 +27,7 @@ from delnx._typing import Backends, ComparisonMode, DataType, Method
 from delnx._utils import _get_layer
 
 from ._de_tests import _run_de, _run_deseq2
-from ._effects import _batched_auroc, _log2fc
+from ._effects import _log2fc
 from ._jax_tests import _run_batched_de
 from ._utils import _check_method_and_data_type, _infer_data_type, _prepare_model_data, _validate_conditions
 
@@ -292,7 +292,6 @@ def de(
             - "test_condition": Test condition label
             - "ref_condition": Reference condition label
             - "log2fc": Log2 fold change (test vs reference)
-            - "auroc": Area under ROC curve
             - "coef": Model coefficient
             - "pval": Raw p-value
             - "padj": Adjusted p-value (multiple testing corrected)
@@ -370,7 +369,7 @@ def de(
 
     # Get size factors and compute if not provided
     if size_factor_key is None and method == "negbinom":
-        dx.pp.size_factors(adata, method="library_size")
+        dx.pp.size_factors(adata, method="normed_sum")
         size_factor_key = "size_factors"
 
     size_factors = adata.obs[size_factor_key].values if size_factor_key else None
@@ -543,13 +542,6 @@ def de(
         if mode != "continuous":
             group_results["test_condition"] = group1
             group_results["ref_condition"] = group2
-            auroc = _batched_auroc(X=X_norm, groups=model_data[condition_key].values, batch_size=batch_size)
-            auroc_df = pd.DataFrame(
-                {
-                    "feature": feature_names,
-                    "auroc": auroc,
-                }
-            )
             logfc_df = pd.DataFrame(
                 {
                     "log2fc": log2fc[feature_mask],
@@ -558,10 +550,6 @@ def de(
             )
             group_results = group_results.merge(
                 logfc_df,
-                on="feature",
-                how="left",
-            ).merge(
-                auroc_df,
                 on="feature",
                 how="left",
             )
@@ -613,7 +601,6 @@ def de(
                 "test_condition",
                 "ref_condition",
                 "log2fc",
-                "auroc",
                 "coef",
                 "pval",
                 "padj",
