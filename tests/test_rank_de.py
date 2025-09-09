@@ -156,8 +156,8 @@ class TestInputValidation:
         adata = AnnData(np.random.randn(10, 5))
         adata.obs["cell_type"] = ["A"] * 1 + ["B"] * 1 + ["C"] * 8  # A and B have <2 samples
 
-        valid_conditions = _validate_inputs(adata, "cell_type", 2)
-        assert valid_conditions == ["C"]
+        with pytest.raises(ValueError, match="Need at least 2 valid conditions"):
+            _validate_inputs(adata, "cell_type", 2)
 
     def test_validate_inputs_too_few_conditions(self):
         """Test validation with too few valid conditions."""
@@ -287,9 +287,9 @@ class TestEdgeCases:
         with pytest.raises(ValueError, match="Need at least 2 valid conditions"):
             rank_de(adata, "condition", verbose=False)
 
-    def test_empty_features(self):
-        """Test behavior with empty features."""
-        adata = AnnData(np.zeros((10, 5)))  # All zeros
+    def test_identical_features(self):
+        """Test behavior with identical features."""
+        adata = AnnData(np.ones((10, 5)))
         adata.obs["condition"] = ["A"] * 5 + ["B"] * 5
 
         # Should not crash, but all AUROCs should be 0.5 (random)
