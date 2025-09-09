@@ -1,9 +1,15 @@
+import os
+
 import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
 
 import delnx as dx
+
+
+def pytest_generate_tests(metafunc):
+    os.environ["NUMBA_DISABLE_JIT"] = "1"
 
 
 @pytest.fixture
