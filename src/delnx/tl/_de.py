@@ -73,8 +73,10 @@ def de(
     method : str, default="lr"
         Statistical method for testing:
 
-            - ``"lr"``: Logistic regression with likelihood ratio test.
-              Recommended for log-normalized single-cell data.
+            - ``"lr"``: Logistic regression predicting the (binary) contrast
+              column from expression plus the remaining design columns, with a
+              likelihood ratio test. Recommended for log-normalized single-cell
+              data. Requires a binary contrast; use ``"anova"`` for continuous ones.
             - ``"anova"``: ANOVA based on linear model.
               Recommended for log-normalized or scaled data.
             - ``"anova_residual"``: Linear model with residual F-test.
@@ -99,9 +101,17 @@ def de(
         Results with columns:
 
         - ``feature``: Gene/feature names
-        - ``log2fc``: Log2 fold change (coefficient / log(2), clipped to [-10, 10])
-        - ``coef``: Model coefficient (log scale)
-        - ``stat``: Test statistic (LR chi-squared or F-statistic)
+        - ``log2fc``: ``coef / log(2)``, clipped to [-10, 10]. A log2 fold change
+          for natural-log (e.g. log1p) data; for ``"binomial"`` a log2 odds ratio.
+        - ``coef``: Effect size of the contrast. For ``"lr"``, ``"anova"`` and
+          ``"anova_residual"``: OLS coefficient of the contrast column when
+          regressing expression on the full design (difference in mean
+          expression, per unit for continuous contrasts). For ``"binomial"``:
+          log odds ratio from the binomial GLM.
+        - ``stat``: Test statistic of the selected method (LR chi-squared for
+          ``"lr"``, partial F for ``"anova"``, residual-variance F ratio for
+          ``"anova_residual"``, deviance reduction vs. the intercept-only model
+          for ``"binomial"``, whose ``pval`` is a Wald test)
         - ``pval``: Raw p-value
         - ``padj``: Adjusted p-value
 
@@ -109,23 +119,26 @@ def de(
     --------
     Simple condition comparison:
 
-    >>> results = dx.tl.de(adata, condition_key="treatment", reference="control",
-    ...                    contrast="treatment[T.drugA]")
+    >>> results = dx.tl.de(adata, condition_key="treatment", reference="control", contrast="treatment[T.drugA]")
 
     Formula-based with covariates:
 
-    >>> results = dx.tl.de(adata, formula="~ treatment + batch",
-    ...                    contrast="treatment[T.drugA]")
+    >>> results = dx.tl.de(adata, formula="~ treatment + batch", contrast="treatment[T.drugA]")
 
     Continuous covariate:
 
-    >>> results = dx.tl.de(adata, formula="~ age + sex", contrast="age")
+    >>> results = dx.tl.de(adata, formula="~ age + sex", contrast="age", method="anova")
 
     Binomial for binary ATAC data:
 
-    >>> results = dx.tl.de(adata, condition_key="treatment", reference="control",
-    ...                    contrast="treatment[T.drugA]", method="binomial",
-    ...                    layer="binary")
+    >>> results = dx.tl.de(
+    ...     adata,
+    ...     condition_key="treatment",
+    ...     reference="control",
+    ...     contrast="treatment[T.drugA]",
+    ...     method="binomial",
+    ...     layer="binary",
+    ... )
 
     Notes
     -----
@@ -206,12 +219,9 @@ def de(
 
     # Check results
     if len(results) == 0 or results["pval"].isna().all():
-        raise ValueError(
-            "Differential expression analysis failed. "
-            "Check input data or set verbose=True for details."
-        )
+        raise ValueError("Differential expression analysis failed. Check input data or set verbose=True for details.")
 
-    # Compute log2fc from coefficient (coef is on log scale for LR/binomial)
+    # coef is a natural-log-scale effect (mean difference of log data, or log odds for binomial)
     results["log2fc"] = np.clip(results["coef"] / np.log(2), -10.0, 10.0)
 
     # Clip p-values
@@ -221,9 +231,9 @@ def de(
     valid = results["pval"].notna()
     results["padj"] = np.nan
     if valid.sum() > 0:
-        results.loc[valid, "padj"] = sm.stats.multipletests(
-            results.loc[valid, "pval"].values, method=multitest_method
-        )[1]
+        results.loc[valid, "padj"] = sm.stats.multipletests(results.loc[valid, "pval"].values, method=multitest_method)[
+            1
+        ]
 
     results = results.sort_values(by=["padj", "coef"]).reset_index(drop=True)
     return results[["feature", "log2fc", "coef", "stat", "pval", "padj"]].copy()

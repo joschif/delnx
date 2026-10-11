@@ -33,3 +33,7 @@ and this project adheres to [Semantic Versioning][].
 - `de_enrichment_analysis()`: removed from public API.
 - Pairwise comparison modes (`all_vs_ref`, `all_vs_all`, `1_vs_1`) from `de()`. These modes remain available in `log2fc()` and `auroc()`.
 - cuML and PyDESeq2 backend references from documentation.
+
+### Fixed
+
+- `de()`: `method="lr"` and `method="anova_residual"` silently ran the ANOVA F-test; the requested test now runs (`"lr"` requires a binary contrast). `coef`/`log2fc` are now the OLS coefficient of the contrast in expression ~ design (previously the reversed-role regression of condition on expression, which underestimated fold changes).

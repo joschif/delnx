@@ -95,11 +95,47 @@ def test_de_formula_continuous(adata_pb_lognorm):
         adata_pb_lognorm,
         formula="~ score",
         contrast="score",
+        method="anova",
     )
 
     assert isinstance(results, pd.DataFrame)
     assert len(results) > 0
     assert list(results.columns) == ["feature", "log2fc", "coef", "stat", "pval", "padj"]
+
+
+def _known_effect_adata(d=1.2, n=400, n_genes=20, seed=0):
+    """Log1p-like data where the first half of genes is shifted by +d (rest by -d) in 'treat'."""
+    import anndata as ad
+
+    rng = np.random.default_rng(seed)
+    cond = np.repeat(["control", "treat"], n // 2)
+    shift = np.where(np.arange(n_genes) < n_genes // 2, d, -d)
+    X = 2.0 + rng.normal(scale=0.8, size=(n, n_genes)) + (cond == "treat")[:, None] * shift
+    obs = pd.DataFrame({"condition": cond, "score": rng.normal(size=n)}, index=[f"c{i}" for i in range(n)])
+    return ad.AnnData(X=X, obs=obs, var=pd.DataFrame(index=[f"g{i}" for i in range(n_genes)])), shift
+
+
+def test_de_method_routing_and_log2fc():
+    """lr and anova run different tests; log2fc recovers the true log1p mean difference."""
+    adata, shift = _known_effect_adata()
+    res = {
+        m: de(adata, condition_key="condition", reference="control", method=m, verbose=False).set_index("feature")
+        for m in ["lr", "anova", "anova_residual"]
+    }
+
+    assert not np.allclose(res["lr"]["stat"], res["anova"].loc[res["lr"].index, "stat"])
+    expected = pd.Series(shift / np.log(2), index=adata.var_names)
+    for r in res.values():
+        np.testing.assert_allclose(r["log2fc"], expected[r.index], atol=0.4)
+    # Effect size is method-independent
+    np.testing.assert_allclose(res["lr"]["coef"], res["anova"].loc[res["lr"].index, "coef"])
+
+
+def test_de_lr_continuous_contrast_raises():
+    """lr needs a binary contrast column."""
+    adata, _ = _known_effect_adata()
+    with pytest.raises(ValueError, match="binary"):
+        de(adata, formula="~ score", contrast="score", method="lr", verbose=False)
 
 
 @pytest.mark.parametrize(
