@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "delnx"
-version = "0.2.3"
+version = "0.3.0"
 description = "Differential expression analysis for single-cell genomics"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -83,13 +83,24 @@ urls.Documentation = "https://delnx.readthedocs.io/"
 urls.Homepage = "https://github.com/joschif/delnx"
 urls.Source = "https://github.com/joschif/delnx"
 
-[tool.hatch]
-envs.default.installer = "uv"
-envs.default.features = [ "dev", "test" ]
-envs.docs.features = [ "docs" ]
-envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
-envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
-envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
+[tool.hatch.build.targets.sdist]
+exclude = [ "docs/notebooks/data" ]
+
+[tool.hatch.envs.default]
+installer = "uv"
+features = [ "dev", "test" ]
+
+[tool.hatch.envs.docs]
+features = [ "docs" ]
+scripts.build = "sphinx-build -M html docs docs/_build {args}"
+scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
+scripts.clean = "git clean -fdX -- {args:docs}"
+
+# Test the lowest and highest supported Python versions with normal deps
+[[tool.hatch.envs.hatch-test.matrix]]
+deps = [ "stable" ]
+python = [ "3.11", "3.13" ]
+
 # Test the newest supported Python version also with pre-release deps
 # [[tool.hatch.envs.hatch-test.matrix]]
 # deps = [ "pre" ]

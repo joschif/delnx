@@ -11,7 +11,6 @@ Preprocessing
 
     pseudobulk
     size_factors
-    dispersion
 
 
 Differential Expression
@@ -22,8 +21,35 @@ Differential Expression
 .. autosummary::
     :toctree: genapi
 
+    nb_fit
+    nb_test
+    nb_de
+    NBFitResult
     de
-    de_enrichment_analysis
+    rank_de
+    grouped
+
+
+Effect Sizes
+~~~~~~~~~~~~
+
+.. currentmodule:: delnx.tl
+.. autosummary::
+    :toctree: genapi
+
+    log2fc
+    auroc
+
+
+Utilities
+~~~~~~~~~
+
+.. currentmodule:: delnx.tl
+.. autosummary::
+    :toctree: genapi
+
+    build_design
+    gsea
 
 
 Models
@@ -37,7 +63,6 @@ Models
     LinearRegression
     LogisticRegression
     NegativeBinomialRegression
-    DispersionEstimator
 
 
 Plotting
@@ -49,8 +74,6 @@ Plotting
     :toctree: genapi
 
     dotplot
-    gsea_dotplot
-    gsea_heatmap
     heatmap
     matrixplot
     violinplot
