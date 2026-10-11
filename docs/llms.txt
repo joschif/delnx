@@ -19,7 +19,7 @@ Key rules: test condition effects on pseudobulked replicates (`dx.pp.pseudobulk`
 
 - [Negative binomial DE](https://delnx.readthedocs.io/en/latest/notebooks/nb.html): `nb_fit` + `nb_test` on pseudobulk counts
 - [GLI3 knockout DE](https://delnx.readthedocs.io/en/latest/notebooks/gli3KO.html): pseudobulking, DE per cell type, plots, enrichment
-- [Comparing DE methods](https://delnx.readthedocs.io/en/latest/notebooks/methods.html): runtime of ANOVA, LR, rank_de and NB
+- [Comparing DE methods](https://delnx.readthedocs.io/en/latest/notebooks/methods.html): runtime of the DE methods (LR timings predate the `de()` method-routing fix)
 - [Benchmark vs glmGamPoi](https://delnx.readthedocs.io/en/latest/notebooks/benchmark.html): concordance with R glmGamPoi and runtime scaling
 
 ## Optional

@@ -809,7 +809,8 @@ Basic usage with condition comparison:
 
 With reference level and covariates:
 
->>> fit = dx.tl.nb_fit(adata, condition_key="treatment", reference="control", covariate_keys=["batch", "sex"])
+>>> fit = dx.tl.nb_fit(adata, condition_key="treatment", reference="control",
+...                    covariate_keys=["batch", "sex"])
 
 Formula-based design with interactions:
 
@@ -942,7 +943,8 @@ Simple condition comparison:
 
 Formula-based with covariates:
 
->>> results = dx.tl.nb_de(adata, formula="~ treatment + batch", contrast="treatment[T.drugA]")
+>>> results = dx.tl.nb_de(adata, formula="~ treatment + batch",
+...                       contrast="treatment[T.drugA]")
 
 ## `dx.pl`
 
