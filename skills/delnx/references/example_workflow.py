@@ -40,10 +40,8 @@ markers = dx.tl.rank_de(adata, condition_key="cell_type", verbose=False)
 print(markers.sort_values("auroc", ascending=False).groupby("condition").head(3))
 
 # ---- 3. Covariate-adjusted DE on log-normalized single cells (exploratory only: cells are not independent) ----
-res_lr = dx.tl.de(
-    adata, formula="~ condition + cell_type", contrast="condition[T.treatment]", method="anova", verbose=False
-)
-print(res_lr.head())
+res_lr = dx.tl.de(adata, formula="~ condition + cell_type", contrast="condition[T.treatment]", verbose=False)
+print(res_lr.head())  # default method="lr"; coef = log-scale mean difference, log2fc = coef / ln 2
 
 # ---- 4. Volcano plot ----
 dx.pl.volcanoplot(res, label_top=5, show=False)

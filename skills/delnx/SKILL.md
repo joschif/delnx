@@ -21,17 +21,17 @@ Modules: `dx.pp` (preprocessing), `dx.tl` (tests and effect sizes), `dx.pl` (plo
 | Condition effect with biological replicates (the default for "is gene X DE between treatment and control?") | Raw counts, pseudobulked | `dx.pp.pseudobulk` → `dx.tl.nb_fit` + `dx.tl.nb_test` (or one-shot `dx.tl.nb_de`) |
 | Same, per cell type | Raw counts, pseudobulked by sample × cell type | `dx.tl.grouped(dx.tl.nb_de, pb, group_key="cell_type", ...)` |
 | Cluster / cell-type markers (1-vs-all) | Non-negative: counts or log-normalized (not scaled / z-scored) | `dx.tl.rank_de(adata, condition_key="cell_type")` |
-| Cell-level DE with covariates, log-normalized data | Log-normalized / scaled | `dx.tl.de(...)` (linear-model F-test; see note on effect sizes) |
+| Cell-level DE with covariates, log-normalized data | Log-normalized / scaled | `dx.tl.de(...)` (`method="lr"` default, `"anova"` for continuous contrasts; rule 3) |
 | Binary data (e.g. ATAC peaks) | 0/1 | `dx.tl.de(method="binomial")` |
 | Many comparisons (1-vs-all, pairwise, all-vs-reference) with joint FDR | Any `de`-compatible | `dx.tl.compare(dx.tl.de, adata, condition_key=..., mode=...)` |
-| Effect sizes (also the way to get fold changes for `de` results) | Any | `dx.tl.log2fc`, `dx.tl.auroc` |
+| Effect sizes | Any | `dx.tl.log2fc`, `dx.tl.auroc` |
 | Enrichment of a gene list | Gene symbols | `dx.tl.gsea(genes, background=...)` |
 
 Rules that matter most:
 
 1. **Replicates, not cells, are the unit for condition DE.** Testing conditions on single cells treats cells as independent and inflates significance. Pseudobulk by the biological replicate (`sample_key`) first, then use NB. Cell-level `de` is fine for markers and exploration, not for condition claims.
 2. **NB needs raw integer counts.** `nb_fit`/`nb_de`/`pseudobulk` read `adata.X` unless `layer=` is given — pass `layer="counts"` when X is log-normalized. Never pass log-transformed data to NB.
-3. **`de` expects log-normalized or scaled data**, not counts. Its p-values come from a linear-model F-test (in the current release `method="lr"`, `"anova"` and `"anova_residual"` all run this test whenever a design is built, which is always). Its `coef`/`log2fc` columns give the direction but **not a fold-change magnitude** — report fold changes from `dx.tl.log2fc(adata, condition_key=..., reference=..., mode="all_vs_ref")`.
+3. **`de` expects log-normalized or scaled data**, not counts. `method="lr"` (default) is a logistic-regression likelihood-ratio test: it needs a binary contrast (two-level condition) and is slower. `method="anova"` (partial F-test) is faster and also takes continuous contrasts (`contrast="age"`). `lr` with a non-binary contrast, or a contrast collinear with the design, raises `ValueError`. For all three linear methods `coef` is the OLS coefficient of the contrast in expression ~ design (log-scale mean difference for log1p data), so `log2fc` is a log2 fold change on the log1p scale, identical across `lr`/`anova`/`anova_residual`.
 4. **Fit once, test many**: with several contrasts on the same design, call `nb_fit` once and `nb_test` per contrast.
 5. **Always pass `contrast` explicitly when the design has covariates** — `None` means the *last* coefficient, which is then a covariate, not your condition.
 
@@ -70,9 +70,8 @@ res = dx.tl.grouped(
 # Markers
 markers = dx.tl.rank_de(adata, condition_key="leiden")
 
-# Cell-level DE with a covariate (log-normalized X); fold changes via log2fc
+# Cell-level DE with a covariate (log-normalized X)
 res = dx.tl.de(adata, formula="~ treatment + batch", contrast="treatment[T.drugA]")
-lfc = dx.tl.log2fc(adata, condition_key="treatment", reference="control", mode="all_vs_ref")  # default mode is all_vs_all
 
 # Plot
 dx.pl.volcanoplot(res, pval_key="padj", pval_thresh=0.05, label_top=10)  # defaults use raw pval < 0.01
@@ -82,7 +81,7 @@ A tested end-to-end script on synthetic data is in `references/example_workflow.
 
 ## Outputs
 
-`nb_test`, `nb_de`, `de` return a DataFrame with `feature, log2fc, coef, stat, pval, padj` (`log2fc = coef / ln 2`, clipped to ±10; for NB `coef` is the natural-log fold change, for `de` see rule 3). `grouped` adds `group`; `compare` adds `comparison` (1_vs_all) or `test`/`reference` (pairwise, all_vs_ref) and re-computes `padj` across all comparisons. `rank_de` returns `feature, condition, auroc, z_score, pval, padj` (AUROC > 0.5 = higher in that group). Filter significance on `padj`, not `pval`.
+`nb_test`, `nb_de`, `de` return a DataFrame with `feature, log2fc, coef, stat, pval, padj` (`log2fc = coef / ln 2`, clipped to ±10; for NB `coef` is the natural-log fold change, for `de` the log-scale mean difference (rule 3), for `binomial` a log odds ratio). `grouped` adds `group`; `compare` adds `comparison` (1_vs_all) or `test`/`reference` (pairwise, all_vs_ref) and re-computes `padj` across all comparisons. `rank_de` returns `feature, condition, auroc, z_score, pval, padj` (AUROC > 0.5 = higher in that group). Filter significance on `padj`, not `pval`.
 
 ## Performance
 
@@ -97,5 +96,5 @@ A tested end-to-end script on synthetic data is in `references/example_workflow.
 - Contrast not found (`ValueError` listing the available columns): print `fit.design_column_names` and copy the exact name.
 - Implausible NB results: check the input really is raw counts (`adata.X.max()`, integer values) and that `layer` points at them.
 - `pseudobulk` returns almost nothing: `min_cells`/`min_counts` filtered the samples — lower them for small datasets.
-- `compare` sets `condition_key`/`reference` itself (and `contrast` in `1_vs_all`). In `pairwise`/`all_vs_ref` mode it does not set `contrast`, so with covariates it tests the last covariate — don't combine those modes with covariates in the current release; loop over `de` calls with explicit `reference`/`contrast` instead.
+- `compare` sets the per-comparison `condition_key`/`reference`/`contrast` itself (don't pass them via kwargs; `reference=` is its own argument, required for `all_vs_ref`). Covariates go in `covariate_keys` and are safe in every mode.
 - Comparing `padj` from separate `de` calls: use `grouped`/`compare` to correct jointly.

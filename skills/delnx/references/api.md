@@ -112,7 +112,7 @@ Creating pseudoreplicates for assessing technical variation:
 ### `dx.pp.size_factors`
 
 ```python
-size_factors(adata, method="normed_sum", layer=None, obs_key_added="size_factors")
+size_factors(adata, method='normed_sum', layer=None, obs_key_added='size_factors')
 ```
 
 Compute size factors for (single-cell) RNA-seq normalization.
@@ -220,8 +220,10 @@ covariate_keys : list[str] | None, default=None
 method : str, default="lr"
     Statistical method for testing:
 
-        - ``"lr"``: Logistic regression with likelihood ratio test.
-          Recommended for log-normalized single-cell data.
+        - ``"lr"``: Logistic regression predicting the (binary) contrast
+          column from expression plus the remaining design columns, with a
+          likelihood ratio test. Recommended for log-normalized single-cell
+          data. Requires a binary contrast; use ``"anova"`` for continuous ones.
         - ``"anova"``: ANOVA based on linear model.
           Recommended for log-normalized or scaled data.
         - ``"anova_residual"``: Linear model with residual F-test.
@@ -246,9 +248,17 @@ pd.DataFrame
     Results with columns:
 
     - ``feature``: Gene/feature names
-    - ``log2fc``: Log2 fold change (coefficient / log(2), clipped to [-10, 10])
-    - ``coef``: Model coefficient (log scale)
-    - ``stat``: Test statistic (LR chi-squared or F-statistic)
+    - ``log2fc``: ``coef / log(2)``, clipped to [-10, 10]. A log2 fold change
+      for natural-log (e.g. log1p) data; for ``"binomial"`` a log2 odds ratio.
+    - ``coef``: Effect size of the contrast. For ``"lr"``, ``"anova"`` and
+      ``"anova_residual"``: OLS coefficient of the contrast column when
+      regressing expression on the full design (difference in mean
+      expression, per unit for continuous contrasts). For ``"binomial"``:
+      log odds ratio from the binomial GLM.
+    - ``stat``: Test statistic of the selected method (LR chi-squared for
+      ``"lr"``, partial F for ``"anova"``, residual-variance F ratio for
+      ``"anova_residual"``, deviance reduction vs. the intercept-only model
+      for ``"binomial"``, whose ``pval`` is a Wald test)
     - ``pval``: Raw p-value
     - ``padj``: Adjusted p-value
 
@@ -256,23 +266,26 @@ Examples
 --------
 Simple condition comparison:
 
->>> results = dx.tl.de(adata, condition_key="treatment", reference="control",
-...                    contrast="treatment[T.drugA]")
+>>> results = dx.tl.de(adata, condition_key="treatment", reference="control", contrast="treatment[T.drugA]")
 
 Formula-based with covariates:
 
->>> results = dx.tl.de(adata, formula="~ treatment + batch",
-...                    contrast="treatment[T.drugA]")
+>>> results = dx.tl.de(adata, formula="~ treatment + batch", contrast="treatment[T.drugA]")
 
 Continuous covariate:
 
->>> results = dx.tl.de(adata, formula="~ age + sex", contrast="age")
+>>> results = dx.tl.de(adata, formula="~ age + sex", contrast="age", method="anova")
 
 Binomial for binary ATAC data:
 
->>> results = dx.tl.de(adata, condition_key="treatment", reference="control",
-...                    contrast="treatment[T.drugA]", method="binomial",
-...                    layer="binary")
+>>> results = dx.tl.de(
+...     adata,
+...     condition_key="treatment",
+...     reference="control",
+...     contrast="treatment[T.drugA]",
+...     method="binomial",
+...     layer="binary",
+... )
 
 Notes
 -----
@@ -693,8 +706,9 @@ pd.DataFrame
     - "feature": Feature/gene names
     - "condition": Condition label (one-vs-all comparison)
     - "auroc": AUROC values (0.5=random, >0.5=upregulated, <0.5=downregulated)
+    - "z_score": Absolute Mann-Whitney U z-statistic (direction from "auroc"; tie-corrected if ``use_ties=True``)
     - "pval": Two-tailed p-values from Mann-Whitney U test
-    - "tie_corrected": Whether tie correction was applied
+    - "padj": Adjusted p-values (``multitest_method``)
 
 Examples
 --------
@@ -795,8 +809,7 @@ Basic usage with condition comparison:
 
 With reference level and covariates:
 
->>> fit = dx.tl.nb_fit(adata, condition_key="treatment", reference="control",
-...                    covariate_keys=["batch", "sex"])
+>>> fit = dx.tl.nb_fit(adata, condition_key="treatment", reference="control", covariate_keys=["batch", "sex"])
 
 Formula-based design with interactions:
 
@@ -862,7 +875,7 @@ Test for treatment effect:
 
 Test specific contrast by name:
 
->>> results = dx.tl.nb_test(adata, fit, contrast="treatmentB")
+>>> results = dx.tl.nb_test(adata, fit, contrast="treatment[T.drugB]")
 
 ### `dx.tl.nb_de`
 
@@ -929,8 +942,7 @@ Simple condition comparison:
 
 Formula-based with covariates:
 
->>> results = dx.tl.nb_de(adata, formula="~ treatment + batch",
-...                       contrast="treatment[T.drugA]")
+>>> results = dx.tl.nb_de(adata, formula="~ treatment + batch", contrast="treatment[T.drugA]")
 
 ## `dx.pl`
 
@@ -1137,18 +1149,7 @@ Raises
 ### `dx.ds.synthetic_adata`
 
 ```python
-synthetic_adata(
-    n_cells=3000,
-    n_genes=2000,
-    n_cell_types=3,
-    n_de_genes=100,
-    fc_range=(1.1, 3.0),
-    mean_counts=10,
-    dispersion=0.5,
-    dropout_rate=0.5,
-    n_samples=6,
-    random_seed=42,
-)
+synthetic_adata(n_cells=3000, n_genes=2000, n_cell_types=3, n_de_genes=100, fc_range=(1.1, 3.0), mean_counts=10, dispersion=0.5, dropout_rate=0.5, n_samples=6, random_seed=42)
 ```
 
 Create a synthetic AnnData object with simulated differential expression using negative binomial distribution.

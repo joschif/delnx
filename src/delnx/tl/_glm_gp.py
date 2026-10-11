@@ -555,7 +555,7 @@ def nb_test(
 
     Test specific contrast by name:
 
-    >>> results = dx.tl.nb_test(adata, fit, contrast="treatmentB")
+    >>> results = dx.tl.nb_test(adata, fit, contrast="treatment[T.drugB]")
     """
     n_genes = fit.beta.shape[0]
     n_coef = fit.beta.shape[1]
