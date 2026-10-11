@@ -115,6 +115,7 @@ envs.hatch-test.matrix = [
 envs.hatch-test.overrides.matrix.deps.env-vars = [
   { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
 ]
+envs.hatch-test.dependency-groups = [ "dev", "test" ]
 
 [tool.ruff]
 line-length = 120
@@ -160,6 +161,8 @@ ini_options.xfail_strict = true
 ini_options.addopts = [
   "--import-mode=importlib", # allow using test files with same name
 ]
+strict = true
+testpaths = [ "tests" ]
 
 [tool.coverage]
 run.omit = [
@@ -169,6 +172,7 @@ run.source = [ "delnx" ]
 
 [tool.cruft]
 skip = [
+  ".git",
   "tests",
   "src/**/__init__.py",
   "src/**/basic.py",
