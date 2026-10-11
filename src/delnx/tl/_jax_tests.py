@@ -102,9 +102,9 @@ def _anova_ftest_single(x, y, Q, n, p_null):
     coef = xryr / jnp.maximum(xrxr, 1e-20)
 
     # Sum of squares
-    ss_null = jnp.dot(y_resid, y_resid)          # RSS of null model
-    ss_reduction = coef * xryr                     # SS explained by x
-    ss_full = ss_null - ss_reduction               # RSS of full model
+    ss_null = jnp.dot(y_resid, y_resid)  # RSS of null model
+    ss_reduction = coef * xryr  # SS explained by x
+    ss_full = ss_null - ss_reduction  # RSS of full model
 
     df_full = n - p_null - 1
     ms_full = ss_full / jnp.maximum(df_full, 1.0)
@@ -116,9 +116,7 @@ def _anova_ftest_single(x, y, Q, n, p_null):
 
 
 # vmap over features (columns of X)
-_anova_ftest_batch = jax.vmap(
-    _anova_ftest_single, in_axes=(1, None, None, None, None), out_axes=(0, 0, None)
-)
+_anova_ftest_batch = jax.vmap(_anova_ftest_single, in_axes=(1, None, None, None, None), out_axes=(0, 0, None))
 
 
 @jax.jit
@@ -233,7 +231,8 @@ def _run_batched_de(
     design_matrix : np.ndarray | None, default=None
         Pre-built design matrix from formula. When provided, the test column at
         ``test_idx`` is used as the condition and remaining columns as covariates.
-        Uses ANOVA (linear model) regardless of ``method``.
+        ``stat``/``pval`` come from the selected ``method``; ``coef`` is always the
+        OLS coefficient of the test column when regressing expression on the design.
     test_idx : int | None, default=None
         Column index in ``design_matrix`` to test. Required when
         ``design_matrix`` is provided.
@@ -264,8 +263,39 @@ def _run_batched_de(
         reduced_cols = [i for i in range(design_matrix.shape[1]) if i != test_idx]
         covars = jnp.asarray(design_matrix[:, reduced_cols], dtype=jnp.float64)
 
+        if method == "lr":
+            test_vals = np.unique(np.asarray(test_col))
+            if not np.array_equal(test_vals, [0.0, 1.0]):
+                raise ValueError(
+                    "method='lr' requires a binary (0/1) contrast column with both values present. "
+                    "For a continuous contrast use method='anova'; for a numeric two-level condition, "
+                    "make it categorical or pass `reference`."
+                )
+
+            def run_test(x):
+                return _run_lr_test(x, test_col, covars, optimizer=optimizer, maxiter=maxiter)
+
+        elif method in ["anova", "anova_residual"]:
+            anova_method = "anova" if method == "anova" else "residual"
+
+            def run_test(x):
+                return _run_anova_test(x, test_col, covars, anova_method, maxiter=maxiter)
+
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+
+        # Effect size: OLS coefficient of the test column in x ~ design, via FWL (x residualisation not needed)
+        test_resid = _project_residual(_anova_precompute(covars), test_col)
+        test_ss = float(jnp.dot(test_resid, test_resid))
+        if test_ss < 1e-10 * test_col.shape[0]:
+            raise ValueError(
+                "Contrast column is collinear with the remaining design columns (e.g. confounded with a covariate)."
+            )
+        test_resid = test_resid / test_ss
+
         def test_fn(x):
-            return _run_anova_test(x, test_col, covars, "anova", maxiter=maxiter)
+            _, test_stats, pvals = run_test(x)
+            return x.T @ test_resid, test_stats, pvals
 
     # Prepare data for logistic regression
     elif method == "lr":
