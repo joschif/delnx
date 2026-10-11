@@ -264,9 +264,12 @@ def _run_batched_de(
         covars = jnp.asarray(design_matrix[:, reduced_cols], dtype=jnp.float64)
 
         if method == "lr":
-            if not np.isin(np.asarray(test_col), (0.0, 1.0)).all():
+            test_vals = np.unique(np.asarray(test_col))
+            if not np.array_equal(test_vals, [0.0, 1.0]):
                 raise ValueError(
-                    "method='lr' requires a binary (0/1) contrast column; use method='anova' for continuous contrasts."
+                    "method='lr' requires a binary (0/1) contrast column with both values present. "
+                    "For a continuous contrast use method='anova'; for a numeric two-level condition, "
+                    "make it categorical or pass `reference`."
                 )
 
             def run_test(x):
@@ -283,7 +286,12 @@ def _run_batched_de(
 
         # Effect size: OLS coefficient of the test column in x ~ design, via FWL (x residualisation not needed)
         test_resid = _project_residual(_anova_precompute(covars), test_col)
-        test_resid = test_resid / jnp.dot(test_resid, test_resid)
+        test_ss = float(jnp.dot(test_resid, test_resid))
+        if test_ss < 1e-10 * test_col.shape[0]:
+            raise ValueError(
+                "Contrast column is collinear with the remaining design columns (e.g. confounded with a covariate)."
+            )
+        test_resid = test_resid / test_ss
 
         def test_fn(x):
             _, test_stats, pvals = run_test(x)

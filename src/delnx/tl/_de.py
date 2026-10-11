@@ -231,9 +231,8 @@ def de(
     valid = results["pval"].notna()
     results["padj"] = np.nan
     if valid.sum() > 0:
-        results.loc[valid, "padj"] = sm.stats.multipletests(results.loc[valid, "pval"].values, method=multitest_method)[
-            1
-        ]
+        _, padj, _, _ = sm.stats.multipletests(results.loc[valid, "pval"].values, method=multitest_method)
+        results.loc[valid, "padj"] = padj
 
     results = results.sort_values(by=["padj", "coef"]).reset_index(drop=True)
     return results[["feature", "log2fc", "coef", "stat", "pval", "padj"]].copy()

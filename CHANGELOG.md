@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning][].
 - AUROC in `_effects.py` uses Mann-Whitney U rank-sum statistic instead of sort+trapezoid.
 - `rank_de()` p-values computed in JAX instead of SciPy.
 
+### Changed (affects existing results)
+
+- `de()` with the default `method="lr"` now fits a per-gene logistic regression with a likelihood ratio test, as documented. Before this release it silently ran the ANOVA F-test, so `lr` p-values change and `lr` runs are slower; results now depend on `maxiter`, and genes that perfectly separate the groups can get very large statistics.
+- `de()` `coef`/`log2fc` (methods `lr`, `anova`, `anova_residual`) are now the regression coefficient of the contrast in expression ~ design (for log1p data, the log-scale mean difference); previous values were too small. `method="lr"` with a continuous contrast now raises instead of silently running ANOVA.
+
 ### Removed
 
 - `de_enrichment_analysis()`: removed from public API.

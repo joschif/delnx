@@ -138,6 +138,14 @@ def test_de_lr_continuous_contrast_raises():
         de(adata, formula="~ score", contrast="score", method="lr", verbose=False)
 
 
+def test_de_collinear_contrast_raises():
+    """A contrast fully confounded with a covariate has no estimable effect."""
+    adata, _ = _known_effect_adata()
+    adata.obs["batch"] = adata.obs["condition"].map({"control": "b1", "treat": "b2"})
+    with pytest.raises(ValueError, match="collinear"):
+        de(adata, formula="~ condition + batch", contrast="condition[T.treat]", method="anova", verbose=False)
+
+
 @pytest.mark.parametrize(
     "method,layer",
     [
