@@ -1,7 +1,7 @@
 {
-  "template": "/tmp/tmpvf8ta0q7",
-  "commit": "6518dfa1abde7379ea7255daf0ce09c23f2b4c94",
-  "checkout": "v0.8.0",
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "9daabe6a4bc56379c0b62ac0cd4416aefce4a08b",
+  "checkout": null,
   "context": {
     "cookiecutter": {
       "project_name": "delnx",
@@ -13,7 +13,6 @@
       "github_repo": "delnx",
       "license": "GNU General Public License Version 3",
       "ide_integration": true,
-      "issue_categorization": "",
       "_copy_without_render": [
         ".github/workflows/build.yaml",
         ".github/workflows/test.yaml",
@@ -36,11 +35,9 @@
         "lstrip_blocks": true,
         "trim_blocks": true
       },
-      "_template": "/tmp/tmpvf8ta0q7",
-      "_commit": "4d6aa34fd5be7523ca3bd49fbd81a882dde01d1f"
-    },
-    "_commit": "6518dfa1abde7379ea7255daf0ce09c23f2b4c94",
-    "_template": "https://github.com/scverse/cookiecutter-scverse"
+      "_template": "https://github.com/scverse/cookiecutter-scverse",
+      "_commit": "9daabe6a4bc56379c0b62ac0cd4416aefce4a08b"
+    }
   },
   "directory": null
 }

@@ -18,10 +18,8 @@ sys.path.insert(0, str(HERE / "extensions"))
 
 
 # -- Project information -----------------------------------------------------
-
-# NOTE: If you installed your project in editable mode, this might be stale.
-#       If this is the case, reinstall it to refresh the metadata
 info = metadata("delnx")
+project_name = info["Name"]
 project = info["Name"]
 author = info["Author"]
 copyright = f"{datetime.now():%Y}, {author}."
@@ -50,21 +48,36 @@ html_context = {
 # Add any Sphinx extension module names here, as strings.
 # They can be extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = [
-    "myst_nb",
-    "sphinx_copybutton",
     "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.mathjax",
     "sphinx.ext.intersphinx",
     "sphinx.ext.autosummary",
-    "sphinx.ext.napoleon",
     "sphinxcontrib.bibtex",
-    "sphinxcontrib.katex",
+    "sphinx_copybutton",
     "sphinx_autodoc_typehints",
-    "sphinx_design",
-    "IPython.sphinxext.ipython_console_highlighting",
-    "sphinxext.opengraph",
-    "scverse_misc.sphinx_ext",
-    *[p.stem for p in (HERE / "extensions").glob("*.py")],
+    "myst_nb",
+    "sphinx_design",  # for cards
+    "sphinx_tippy",
+    "typed_returns",
 ]
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "ott": ("https://ott-jax.readthedocs.io/en/latest/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "anndata": ("https://anndata.readthedocs.io/en/latest/", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/latest/", None),
+    "flax": ("https://flax.readthedocs.io/en/latest/", None),
+    "optax": ("https://optax.readthedocs.io/en/latest/", None),
+}
+master_doc = "index"
+pygments_style = "xcode"
+pygments_dark_style = "lightbulb"
 
 autosummary_generate = True
 autodoc_member_order = "groupwise"
@@ -113,25 +126,32 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#
-html_theme = "sphinx_book_theme"
+html_theme = "furo"
 html_static_path = ["_static"]
-html_css_files = ["css/custom.css"]
-
-html_title = project
-
-html_theme_options = {
-    "repository_url": repository_url,
-    "use_repository_button": True,
-    "path_to_docs": "docs/",
-    "navigation_with_keys": False,
-}
-
-pygments_style = "default"
-katex_prerender = shutil.which(katex.NODEJS_BINARY) is not None
-
-nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+html_css_files = [
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css",
+    "css/custom.css",
 ]
+
+html_show_sphinx = False
+html_show_sourcelink = False
+html_theme_options = {
+    "sidebar_hide_name": True,
+    "light_logo": "images/delnx.png",
+    "dark_logo": "images/delnx.png",
+    "light_css_variables": {
+        "color-brand-primary": "#5B2D5E",
+        "color-brand-content": "#5B2D5E",
+        "admonition-font-size": "var(--font-size-normal)",
+        "admonition-title-font-size": "var(--font-size-normal)",
+        "code-font-size": "var(--font-size--small)",
+    },
+    "footer_icons": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/joschif/delnx",
+            "html": "",
+            "class": "fab fa-github",
+        },
+    ],
+}

@@ -1,4 +1,4 @@
-# Contributing guide
+# 👥 Contributing guide
 
 This document aims at summarizing the most important information for getting you started on contributing to this project.
 We assume that you are already familiar with git and with making pull requests on GitHub.
