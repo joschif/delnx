@@ -37,3 +37,4 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 - `de()`: `method="lr"` and `method="anova_residual"` silently ran the ANOVA F-test; the requested test now runs (`"lr"` requires a binary contrast). `coef`/`log2fc` are now the OLS coefficient of the contrast in expression ~ design (previously the reversed-role regression of condition on expression, which underestimated fold changes).
+- `compare()`: `"pairwise"` and `"all_vs_ref"` modes now pass an explicit `contrast` for the tested level. Previously `contrast` defaulted to the last design coefficient, which silently tested a covariate instead of the condition whenever `covariate_keys` was passed.

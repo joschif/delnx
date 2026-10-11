@@ -199,7 +199,13 @@ def _run_pairwise(
     logger.info(f"Running: {test_level} vs {ref_level}", verbose=verbose)
 
     try:
-        res = func(adata[mask, :].copy(), condition_key=condition_key, reference=ref_level, **kwargs)
+        res = func(
+            adata[mask, :].copy(),
+            condition_key=condition_key,
+            reference=ref_level,
+            contrast=f"{condition_key}[T.{test_level}]",
+            **kwargs,
+        )
         res["test"] = test_level
         res["reference"] = ref_level
         return res
