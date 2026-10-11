@@ -34,6 +34,16 @@ def test_plot_volcanoplot(adata_pb_counts):
     assert isinstance(fig, plt.Figure)
 
 
+def test_plot_volcanoplot_single_comparison(adata_pb_counts):
+    """Volcano plot works on results without a ``group`` column (e.g. plain nb_test output)."""
+    fit = dx.tl.nb_fit(adata_pb_counts, condition_key="condition", reference="control", verbose=False)
+    results = dx.tl.nb_test(adata_pb_counts, fit)
+    assert "group" not in results.columns
+
+    fig, _ = dx.pl.volcanoplot(results, label_top=5, return_fig=True, show=False)
+    assert isinstance(fig, plt.Figure)
+
+
 def test_plot_violinplot(adata_small):
     """Test plotting of violinplot."""
 

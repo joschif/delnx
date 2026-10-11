@@ -96,6 +96,15 @@ results = dx.tl.rank_de(adata, condition_key="cell_type")
 - **GPU acceleration**: Core methods are implemented in JAX, enabling GPU acceleration for scalable DE analysis on large datasets.
 
 
+## 🤖 Use with AI agents
+
+delnx ships an [agent skill](skills/delnx/SKILL.md) that teaches coding agents how to run DE analyses with it (method choice, pseudobulking, contrasts, common pitfalls).
+
+- **Claude Code**: `/plugin marketplace add mlbelab/delnx`, then `/plugin install delnx@delnx`
+- **Other agents** that read [Agent Skills](https://agentskills.io): copy `skills/delnx/` into the agent's skills directory
+- **Docs for LLMs**: [`llms.txt`](https://delnx.readthedocs.io/en/latest/llms.txt)
+
+
 ## 📖 Documentation
 
 For more information, check out the [documentation][documentation] and the [API reference][api documentation].

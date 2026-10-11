@@ -1,0 +1,28 @@
+# delnx
+
+> delnx is a Python package for differential expression (DE) analysis of single-cell and bulk genomics data stored in AnnData. It provides GPU-accelerated (JAX) negative binomial GLMs with glmGamPoi-style quasi-likelihood dispersion shrinkage for pseudobulk counts, linear-model and binomial tests for log-normalized or binary data, fast AUROC-based cluster markers, pseudobulking, effect sizes, gene set enrichment, and plots. Install with `pip install delnx`; import as `import delnx as dx`.
+
+Key rules: test condition effects on pseudobulked replicates (`dx.pp.pseudobulk` → `dx.tl.nb_fit` + `dx.tl.nb_test`), not on single cells; NB functions need raw counts (`layer="counts"` if `adata.X` is log-normalized); `dx.tl.de` expects log-normalized data; contrasts use patsy names such as `"treatment[T.drugA]"` (see `fit.design_column_names`).
+
+## Agent skill
+
+- [delnx agent skill (SKILL.md)](https://github.com/mlbelab/delnx/blob/main/skills/delnx/SKILL.md): method choice, designs and contrasts, recipes, outputs, common mistakes
+- [API reference for agents](https://github.com/mlbelab/delnx/blob/main/skills/delnx/references/api.md): all public signatures and docstrings
+- [Tested end-to-end example](https://github.com/mlbelab/delnx/blob/main/skills/delnx/references/example_workflow.py): pseudobulk, NB DE per cell type, markers, volcano plot
+
+## Docs
+
+- [Installation](https://delnx.readthedocs.io/en/latest/installation.html): pip install and optional GPU-enabled JAX
+- [API reference](https://delnx.readthedocs.io/en/latest/api.html): `dx.pp`, `dx.tl`, `dx.pl`, `dx.ds`
+
+## Tutorials
+
+- [Negative binomial DE](https://delnx.readthedocs.io/en/latest/notebooks/nb.html): `nb_fit` + `nb_test` on pseudobulk counts
+- [GLI3 knockout DE](https://delnx.readthedocs.io/en/latest/notebooks/gli3KO.html): pseudobulking, DE per cell type, plots, enrichment
+- [Comparing DE methods](https://delnx.readthedocs.io/en/latest/notebooks/methods.html): runtime of ANOVA, LR, rank_de and NB
+- [Benchmark vs glmGamPoi](https://delnx.readthedocs.io/en/latest/notebooks/benchmark.html): concordance with R glmGamPoi and runtime scaling
+
+## Optional
+
+- [Source code](https://github.com/mlbelab/delnx)
+- [Changelog](https://delnx.readthedocs.io/en/latest/changelog.html)
