@@ -33,3 +33,7 @@ and this project adheres to [Semantic Versioning][].
 - `de_enrichment_analysis()`: removed from public API.
 - Pairwise comparison modes (`all_vs_ref`, `all_vs_all`, `1_vs_1`) from `de()`. These modes remain available in `log2fc()` and `auroc()`.
 - cuML and PyDESeq2 backend references from documentation.
+
+### Fixed
+
+- `compare()`: `"pairwise"` and `"all_vs_ref"` modes now pass an explicit `contrast` for the tested level. Previously `contrast` defaulted to the last design coefficient, which silently tested a covariate instead of the condition whenever `covariate_keys` was passed.
