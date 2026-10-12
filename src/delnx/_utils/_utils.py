@@ -161,7 +161,8 @@ def get_de_genes(
 
     # Extract DE genes per group
     result = {}
-    grouped = df_labeled.groupby(group_key)
+    # Single-comparison results (e.g. from nb_test or de) have no group column
+    grouped = df_labeled.groupby(group_key) if group_key in df_labeled.columns else [("all", df_labeled)]
 
     for group, sub_df in grouped:
         up_df = sub_df[sub_df["significant"] == "Up"]

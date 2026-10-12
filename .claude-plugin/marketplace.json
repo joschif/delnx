@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "delnx",
+  "description": "Agent skill for differential expression analysis with delnx",
+  "owner": {
+    "name": "Jonas Simon Fleck",
+    "url": "https://github.com/mlbelab/delnx"
+  },
+  "plugins": [
+    {
+      "name": "delnx",
+      "source": "./skills/delnx",
+      "description": "Teaches agents to run differential expression analysis with delnx: method choice, pseudobulk NB, contrasts, markers, and plots",
+      "author": { "name": "Jonas Simon Fleck" },
+      "homepage": "https://delnx.readthedocs.io",
+      "repository": "https://github.com/mlbelab/delnx",
+      "license": "MIT",
+      "keywords": ["differential-expression", "single-cell", "scrna-seq", "anndata", "jax", "bioinformatics"],
+      "category": "science"
+    }
+  ]
+}

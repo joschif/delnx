@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning][].
 - `auroc()`: Pairwise AUROC effect size computation (now exported).
 - Formula interface for `de()`, `nb_fit()`, and `nb_de()` via `formula=` parameter.
 - `de()` now returns `log2fc` and `stat` columns alongside `coef`, `pval`, `padj`.
+- Agent skill (`skills/delnx/`) and Claude Code plugin marketplace (`.claude-plugin/marketplace.json`) so AI coding agents can discover and use delnx; `llms.txt` served at the docs root.
 
 ### Changed
 
@@ -43,3 +44,4 @@ and this project adheres to [Semantic Versioning][].
 
 - `de()`: `method="lr"` and `method="anova_residual"` silently ran the ANOVA F-test; the requested test now runs (`"lr"` requires a binary contrast). `coef`/`log2fc` are now the OLS coefficient of the contrast in expression ~ design (previously the reversed-role regression of condition on expression, which underestimated fold changes).
 - `compare()`: `"pairwise"` and `"all_vs_ref"` modes now pass an explicit `contrast` for the tested level. Previously `contrast` defaulted to the last design coefficient, which silently tested a covariate instead of the condition whenever `covariate_keys` was passed.
+- `volcanoplot()` with `label_top > 0` no longer raises `KeyError: 'group'` on single-comparison results (e.g. plain `nb_test()` or `de()` output).

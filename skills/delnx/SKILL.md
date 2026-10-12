@@ -1,0 +1,102 @@
+---
+name: delnx
+description: Differential expression (DE) analysis of single-cell and bulk genomics data in Python with delnx (GPU-accelerated via JAX). Use when testing genes between conditions or clusters in an AnnData object — pseudobulk negative binomial DE (glmGamPoi-style quasi-likelihood), linear-model / binomial DE on log-normalized or binary data, fast AUROC cluster markers, per-cell-type DE, formula designs with covariates, pseudobulking, size factors, log2 fold changes, gene set enrichment, and volcano / dot / violin plots.
+---
+
+# delnx
+
+Python package for differential expression on AnnData (`import delnx as dx`). Docs: https://delnx.readthedocs.io
+
+```bash
+pip install delnx            # CPU
+pip install "jax[cuda12]"    # optional: GPU acceleration (see JAX install docs)
+```
+
+Modules: `dx.pp` (preprocessing), `dx.tl` (tests and effect sizes), `dx.pl` (plots), `dx.ds` (gene sets, synthetic data).
+
+## Pick the method
+
+| Question | Data | Call |
+|---|---|---|
+| Condition effect with biological replicates (the default for "is gene X DE between treatment and control?") | Raw counts, pseudobulked | `dx.pp.pseudobulk` → `dx.tl.nb_fit` + `dx.tl.nb_test` (or one-shot `dx.tl.nb_de`) |
+| Same, per cell type | Raw counts, pseudobulked by sample × cell type | `dx.tl.grouped(dx.tl.nb_de, pb, group_key="cell_type", ...)` |
+| Cluster / cell-type markers (1-vs-all) | Non-negative: counts or log-normalized (not scaled / z-scored) | `dx.tl.rank_de(adata, condition_key="cell_type")` |
+| Cell-level DE with covariates, log-normalized data | Log-normalized / scaled | `dx.tl.de(...)` (`method="lr"` default, `"anova"` for continuous contrasts; rule 3) |
+| Binary data (e.g. ATAC peaks) | 0/1 | `dx.tl.de(method="binomial")` |
+| Many comparisons (1-vs-all, pairwise, all-vs-reference) with joint FDR | Any `de`-compatible | `dx.tl.compare(dx.tl.de, adata, condition_key=..., mode=...)` |
+| Effect sizes | Any | `dx.tl.log2fc` / `dx.tl.auroc` with `mode="all_vs_ref", reference=...` (the default `all_vs_all` ignores `reference` and can flip the sign) |
+| Enrichment of a gene list | Gene symbols | `dx.tl.gsea(genes, background=...)` |
+
+Rules that matter most:
+
+1. **Replicates, not cells, are the unit for condition DE.** Testing conditions on single cells treats cells as independent and inflates significance. Pseudobulk by the biological replicate (`sample_key`) first, then use NB. `sample_key` must identify one replicate in one condition (e.g. a donor×condition column for paired designs): obs columns that vary within a pseudobulk sample are dropped, so `condition` disappears if it does. After pseudobulking, `pb.X` holds the summed counts — don't pass `layer=` to `nb_fit` again. Cell-level `de` is fine for markers and exploration, not for condition claims.
+2. **NB needs raw integer counts.** `nb_fit`/`nb_de`/`pseudobulk` read `adata.X` unless `layer=` is given — pass `layer="counts"` when X is log-normalized. Never pass log-transformed data to NB.
+3. **`de` expects log-normalized or scaled data**, not counts. `method="lr"` (default) is a logistic-regression likelihood-ratio test: it needs a 0/1 contrast column (a categorical level; continuous contrasts raise) and is slower. `method="anova"` (partial F-test) is faster and also takes continuous contrasts (`contrast="age"`). `lr` with a non-binary contrast, or a contrast collinear with the design, raises `ValueError`. For all three linear methods `coef` is the OLS coefficient of the contrast in expression ~ design (log-scale mean difference for log1p data), so `log2fc` is a log2 fold change on the log1p scale, identical across `lr`/`anova`/`anova_residual` (on scaled / z-scored input it is in SD units, not a fold change).
+4. **Fit once, test many**: with several contrasts on the same design, call `nb_fit` once and `nb_test` per contrast.
+5. **Always pass `contrast` explicitly when the design has covariates** — `None` means the *last* coefficient, which is then a covariate, not your condition.
+
+## Designs and contrasts
+
+- `condition_key="treatment", reference="control"` builds `~ treatment` with treatment coding (`reference` becomes the intercept; default: the first category of a categorical column, otherwise the alphabetically first level).
+- **`reference` only works with `condition_key`.** With `formula=` it is silently ignored and the reference is the first category — set it via `adata.obs["treatment"] = pd.Categorical(..., categories=["control", ...])`, or use `condition_key` + `covariate_keys`.
+- Covariates: `covariate_keys=["batch"]` with `condition_key`, or a formula: `formula="~ treatment + batch"` (patsy; `*` for interactions, continuous columns allowed). `condition_key` and `formula` are mutually exclusive.
+- Coefficient names follow patsy: `["Intercept", "treatment[T.drugA]", "batch[T.b2]"]`. Inspect with `fit.design_column_names` or `dx.tl.build_design(adata.obs, formula=...)`.
+- `contrast` accepts the full name `"treatment[T.drugA]"` (always works), the shorthand `"treatment[drugA]"`, the bare level `"drugA"` (when `condition_key` was used), an integer index, or `None` (last coefficient). Continuous covariates: `contrast="age"`. Interactions: `"treatment[T.drugA]:batch[T.b2]"`.
+- **Level differences** (e.g. drugA vs drugB with control as reference): `nb_test` accepts difference contrasts and numeric vectors and runs a Wald test on the shared fit — `contrast="treatment[T.drugA] - treatment[T.drugB]"` or a numeric vector with one weight per entry of `fit.design_column_names`, in that order (it is not alphabetical — print it first). If level names contain `+` or `-`, use a numeric vector for differences and the full name for single coefficients (difference strings are split on `+`/`-` even inside brackets). `de` only takes a single coefficient: refit with `reference="drugB"` instead.
+
+## Core recipes
+
+```python
+import delnx as dx
+
+# Pseudobulk: one sample per biological replicate x cell type, summed raw counts (sample_key: one replicate in one condition)
+pb = dx.pp.pseudobulk(adata, sample_key="sample_id", group_key="cell_type", layer="counts", mode="sum")
+# defaults drop samples with < 5 cells or < 5000 counts (min_cells, min_counts)
+
+# NB DE for one cell type
+sub = pb[pb.obs["cell_type"] == "T cell"].copy()
+fit = dx.tl.nb_fit(sub, condition_key="treatment", reference="control", covariate_keys=["sex"])
+res = dx.tl.nb_test(sub, fit, contrast="treatment[T.drugA]")
+
+# NB DE for every cell type; padj re-corrected across groups
+res = dx.tl.grouped(
+    dx.tl.nb_de,
+    pb,
+    group_key="cell_type",
+    condition_key="treatment",
+    reference="control",
+    contrast="treatment[T.drugA]",
+)
+
+# Markers
+markers = dx.tl.rank_de(adata, condition_key="leiden")
+
+# Cell-level DE with a covariate (log-normalized X)
+res = dx.tl.de(adata, condition_key="treatment", reference="control", covariate_keys=["batch"], contrast="treatment[T.drugA]")
+
+# Plot
+dx.pl.volcanoplot(res, pval_key="padj", pval_thresh=0.05, label_top=10)  # one comparison only; defaults use raw pval < 0.01
+```
+
+A tested end-to-end script on synthetic data is in `references/example_workflow.py`; full signatures and output columns are in `references/api.md`.
+
+## Outputs
+
+`nb_test`, `nb_de`, `de` return a DataFrame with `feature, log2fc, coef, stat, pval, padj` (`log2fc = coef / ln 2`, clipped to ±10; for NB `coef` is the natural-log fold change, for `de` the log-scale mean difference (rule 3), for `binomial` a log odds ratio). `grouped` adds `group`; `compare` adds `comparison` (1_vs_all) or `test`/`reference` (pairwise, all_vs_ref) and re-computes `padj` across all comparisons. `rank_de` returns `feature, condition, auroc, z_score, pval, padj` (AUROC > 0.5 = higher in that group). Filter significance on `padj`, not `pval`.
+
+## Performance
+
+- Runs on CPU; much faster on GPU when JAX sees one (`import jax; jax.devices()`).
+- `batch_size` (genes per batch) trades memory for speed — lower it on GPU out-of-memory errors.
+- The first call compiles JAX code (seconds); later calls with similar shapes are fast. Don't benchmark the first call.
+- NB on pseudobulk (tens–hundreds of samples) takes seconds to a minute for 20k genes; on 10k+ single cells it still works but prefer pseudobulk for condition DE anyway (rule 1).
+- Joint NB model with many conditions: fit once, test each contrast. Keep the joint model for pseudobulk (it pools dispersion across all samples). Only for single-cell-sized inputs with ~80+ groups can separate 2-group fits be faster — and they test a different hypothesis (group vs rest, not vs reference).
+
+## Common mistakes
+
+- Contrast not found (`ValueError` listing the available columns): print `fit.design_column_names` and copy the exact name.
+- Implausible NB results: check the input really is raw counts (`adata.X.max()`, integer values) and that `layer` points at them.
+- `pseudobulk` returns almost nothing: `min_cells`/`min_counts` filtered the samples — lower them for small datasets.
+- `compare` sets the per-comparison `condition_key`/`reference`/`contrast` itself (don't pass them or `formula` via kwargs; `reference=` is its own argument, required for `all_vs_ref`). Covariates go in `covariate_keys` and are safe in every mode. In `pairwise`, `test` is the alphabetically earlier level — read the sign from the `test`/`reference` columns. Failed comparisons are skipped with only a log message, so check which comparisons are present.
+- `volcanoplot` takes one comparison: subset `grouped` output by `group` and `compare` output by `comparison` or `test`/`reference` first.
+- Comparing `padj` from separate `de` calls: use `grouped`/`compare` to correct jointly.

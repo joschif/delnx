@@ -128,6 +128,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # a list of builtin themes.
 html_theme = "furo"
 html_static_path = ["_static"]
+html_extra_path = ["llms.txt"]  # served at the site root for AI agents
 html_css_files = [
     "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css",
     "css/custom.css",

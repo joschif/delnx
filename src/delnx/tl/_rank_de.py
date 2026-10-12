@@ -310,8 +310,9 @@ def rank_de(
         - "feature": Feature/gene names
         - "condition": Condition label (one-vs-all comparison)
         - "auroc": AUROC values (0.5=random, >0.5=upregulated, <0.5=downregulated)
+        - "z_score": Absolute Mann-Whitney U z-statistic (direction from "auroc"; tie-corrected if ``use_ties=True``)
         - "pval": Two-tailed p-values from Mann-Whitney U test
-        - "tie_corrected": Whether tie correction was applied
+        - "padj": Adjusted p-values (``multitest_method``)
 
     Examples
     --------
