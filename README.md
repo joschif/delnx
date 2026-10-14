@@ -123,7 +123,7 @@ delnx builds on the following methods. If you use the corresponding functions, p
 }
 ```
 
-**Rank-based markers** (`rank_de`) are based on and inspired by the fast Wilcoxon/AUROC approach in presto:
+**Rank-based markers** (`rank_de`) are inspired by the fast Wilcoxon/AUROC approach in presto:
 
 > Korsunsky I, Nathan A, Millard N, Raychaudhuri S. presto: Fast Functions for Differential Expression Using Wilcoxon and AUC. [github.com/immunogenomics/presto](https://github.com/immunogenomics/presto)
 
