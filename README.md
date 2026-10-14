@@ -87,10 +87,10 @@ results = dx.tl.rank_de(adata, condition_key="cell_type")
 ```
 
 ## 💎 Features
-- **Negative binomial GLMs**: GPU-accelerated glmGamPoi-style fitting with quasi-likelihood dispersion shrinkage for count data.
+- **Negative binomial GLMs**: GPU-accelerated fitting with quasi-likelihood dispersion shrinkage for count data, reimplementing the [glmGamPoi](https://bioconductor.org/packages/glmGamPoi/) approach (see [Citation](#-citation)).
 - **General-purpose DE**: Logistic regression, ANOVA, and binomial GLM for log-normalized, scaled, or binary data.
 - **Formula interface**: R-style formulas (`~ treatment + batch`) parsed by patsy, with treatment coding and reference levels.
-- **Rank-based markers**: Fast AUROC-based one-vs-all marker detection with Numba-optimized ranking.
+- **Rank-based markers**: Fast AUROC-based one-vs-all marker detection with Numba-optimized ranking, inspired by [presto](https://github.com/immunogenomics/presto) (see [Citation](#-citation)).
 - **Pseudobulking**: Perform DE on large multi-sample datasets by using pseudobulk aggregation.
 - **Effect sizes**: Log2 fold change and AUROC computation for pairwise condition comparisons.
 - **GPU acceleration**: Core methods are implemented in JAX, enabling GPU acceleration for scalable DE analysis on large datasets.
@@ -103,6 +103,29 @@ delnx ships an [agent skill](skills/delnx/SKILL.md) that teaches coding agents h
 - **Claude Code**: `/plugin marketplace add mlbelab/delnx`, then `/plugin install delnx@delnx`
 - **Other agents** that read [Agent Skills](https://agentskills.io): copy `skills/delnx/` into the agent's skills directory
 - **Docs for LLMs**: [`llms.txt`](https://delnx.readthedocs.io/en/latest/llms.txt)
+
+
+## 📝 Citation
+
+delnx builds on the following methods. If you use the corresponding functions, please also cite the original work.
+
+**Negative binomial GLMs** (`nb_fit`, `nb_test`, `nb_de`) reimplement the glmGamPoi method in Python/JAX:
+
+> Ahlmann-Eltze C, Huber W (2020). glmGamPoi: Fitting Gamma-Poisson Generalized Linear Models on Single Cell Count Data. *Bioinformatics*. [doi:10.1093/bioinformatics/btaa1009](https://doi.org/10.1093/bioinformatics/btaa1009)
+
+```bibtex
+@article{ahlmann-eltze2020glmgampoi,
+  title   = {glmGamPoi: Fitting Gamma-Poisson Generalized Linear Models on Single Cell Count Data},
+  author  = {Ahlmann-Eltze, Constantin and Huber, Wolfgang},
+  journal = {Bioinformatics},
+  year    = {2020},
+  doi     = {10.1093/bioinformatics/btaa1009}
+}
+```
+
+**Rank-based markers** (`rank_de`) are based on and inspired by the fast Wilcoxon/AUROC approach in presto:
+
+> Korsunsky I, Nathan A, Millard N, Raychaudhuri S. presto: Fast Functions for Differential Expression Using Wilcoxon and AUC. [github.com/immunogenomics/presto](https://github.com/immunogenomics/presto)
 
 
 ## 📖 Documentation
