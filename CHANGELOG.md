@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning][].
 - Formula interface for `de()`, `nb_fit()`, and `nb_de()` via `formula=` parameter.
 - `de()` now returns `log2fc` and `stat` columns alongside `coef`, `pval`, `padj`.
 - Agent skill (`skills/delnx/`) and Claude Code plugin marketplace (`.claude-plugin/marketplace.json`) so AI coding agents can discover and use delnx; `llms.txt` served at the docs root.
+- README citation section crediting glmGamPoi (negative binomial GLMs) and presto (rank-based markers).
 
 ### Changed
 
